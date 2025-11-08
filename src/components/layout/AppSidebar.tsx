@@ -17,53 +17,32 @@ import {
   Heart,
   Eye,
   Trash2,
-  Bot,
+  MessageSquare,
   BarChart3,
   Settings,
-  Sparkles,
+  Crown,
+  HelpCircle,
+  Calendar,
+  Sliders,
+  List,
   MessageCircle,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const menuItems = [
-  {
-    title: "Accueil",
-    url: "/dashboard",
-    icon: Home,
-  },
-  {
-    title: "Gestion Status",
-    url: "/dashboard/status",
-    icon: Heart,
-  },
-  {
-    title: "View Once",
-    url: "/dashboard/viewonce",
-    icon: Eye,
-    badge: "2/3",
-  },
-  {
-    title: "Messages Supprimés",
-    url: "/dashboard/deleted",
-    icon: Trash2,
-    badge: "1/3",
-  },
-  {
-    title: "Répondeur Auto",
-    url: "/dashboard/autoresponder",
-    icon: Bot,
-  },
-  {
-    title: "Analytics",
-    url: "/dashboard/analytics",
-    icon: BarChart3,
-    premium: true,
-  },
-  {
-    title: "Paramètres",
-    url: "/dashboard/settings",
-    icon: Settings,
-  },
+  { title: "Accueil", url: "/dashboard", icon: Home },
+  { title: "Gestion Status", url: "/dashboard/status", icon: Heart },
+  { title: "Liste Status", url: "/dashboard/status/list", icon: List },
+  { title: "Programmer Status", url: "/dashboard/status/schedule", icon: Calendar },
+  { title: "Config Status", url: "/dashboard/status/config", icon: Sliders },
+  { title: "View Once", url: "/dashboard/view-once", icon: Eye },
+  { title: "Messages Supprimés", url: "/dashboard/deleted-messages", icon: Trash2 },
+  { title: "Répondeur Auto", url: "/dashboard/autoresponder", icon: MessageSquare },
+  { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3, premium: true },
+  { title: "Paramètres", url: "/dashboard/settings", icon: Settings },
+  { title: "Upgrade Premium", url: "/dashboard/upgrade", icon: Crown },
+  { title: "Aide & Support", url: "/dashboard/help", icon: HelpCircle },
 ];
 
 export function AppSidebar() {
@@ -76,7 +55,6 @@ export function AppSidebar() {
   return (
     <Sidebar className={collapsed ? "w-14" : "w-64"} collapsible="icon">
       <SidebarContent>
-        {/* Logo */}
         <div className="px-4 py-6 border-b border-sidebar-border">
           {collapsed ? (
             <div className="flex justify-center">
@@ -92,7 +70,6 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Menu Items */}
         <SidebarGroup className="mt-4">
           {!collapsed && (
             <SidebarGroupLabel className="text-xs text-muted-foreground px-4 mb-2">
@@ -119,11 +96,6 @@ export function AppSidebar() {
                               Pro
                             </Badge>
                           )}
-                          {item.badge && (
-                            <Badge variant="secondary" className="text-xs">
-                              {item.badge}
-                            </Badge>
-                          )}
                         </>
                       )}
                     </NavLink>
@@ -134,7 +106,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Upgrade Banner */}
         {!collapsed && (
           <div className="mt-auto p-4 mb-4">
             <div className="bg-gradient-premium rounded-lg p-4 text-premium-foreground">
@@ -150,7 +121,6 @@ export function AppSidebar() {
           </div>
         )}
 
-        {/* Toggle Button */}
         <div className="p-2 border-t border-sidebar-border">
           <SidebarTrigger className="w-full" />
         </div>
