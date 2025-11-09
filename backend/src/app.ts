@@ -35,8 +35,21 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Rate limiting
 app.use('/api', apiLimiter);
 
+// Root route
+app.get('/', (_req, res) => {
+  res.json({
+    message: 'AMDA Backend API',
+    version: '1.0.0',
+    status: 'ok',
+    endpoints: {
+      health: '/health',
+      api: '/api',
+    },
+  });
+});
+
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -45,7 +58,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api', (req, res, next) => {
+app.use('/api', (req, _res, next) => {
   logger.info({
     method: req.method,
     path: req.path,

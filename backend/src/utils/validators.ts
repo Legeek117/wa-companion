@@ -1,39 +1,49 @@
 import { z } from 'zod';
+import { ValidationError } from './errors';
 
-// Auth schemas
+/**
+ * Register validation schema
+ */
 export const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  name: z.string().min(2, 'Name must be at least 2 characters').optional(),
+  email: z
+    .string()
+    .email('Invalid email format')
+    .min(1, 'Email is required')
+    .max(255, 'Email is too long'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters long')
+    .max(100, 'Password is too long')
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+      'Password must contain at least one lowercase letter, one uppercase letter, and one number'
+    ),
 });
 
+/**
+ * Login validation schema
+ */
 export const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(1, 'Password is required'),
+  email: z
+    .string()
+    .email('Invalid email format')
+    .min(1, 'Email is required'),
+  password: z
+    .string()
+    .min(1, 'Password is required'),
 });
 
-// Status schemas
-export const likeStatusSchema = z.object({
-  statusId: z.string().min(1, 'Status ID is required'),
-  emoji: z.string().min(1, 'Emoji is required'),
-});
-
-export const scheduleStatusSchema = z.object({
-  mediaUrl: z.string().url().optional(),
-  caption: z.string().max(700, 'Caption must be less than 700 characters').optional(),
-  scheduledAt: z.string().datetime('Invalid date format'),
-});
-
-// Autoresponder schemas
-export const autoresponderConfigSchema = z.object({
-  mode: z.enum(['offline', 'busy', 'meeting', 'vacation', 'custom']),
-  message: z.string().min(1, 'Message is required'),
-  enabled: z.boolean(),
-  filterContacts: z.array(z.string()).optional(),
-});
-
-// Subscription schemas
-export const createCheckoutSchema = z.object({
-  plan: z.enum(['monthly', 'yearly']),
-});
-
+/**
+ * Validate request body against a schema
+ */
+export const validate = <T>(schema: z.ZodSchema<T>, data: unknown): T => {
+  try {
+    return schema.parse(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const messages = error.errors.map((err) => err.message).join(', ');
+      throw new ValidationError(messages);
+    }
+    throw error;
+  }
+};

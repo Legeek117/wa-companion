@@ -1,0 +1,47 @@
+### AMDA Backend API Tests
+### Utilisez l'extension REST Client dans VS Code pour exécuter ces requêtes
+
+@baseUrl = http://localhost:8000
+@token = YOUR_JWT_TOKEN_HERE
+
+### 1. Health Check
+GET {{baseUrl}}/health
+
+### 2. Register - Créer un compte
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "Test1234"
+}
+
+### 3. Login - Se connecter
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "Test1234"
+}
+
+### 4. Get Me - Obtenir les infos utilisateur
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### 5. Logout - Se déconnecter
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+### 6. Get QR Code - Obtenir le QR code WhatsApp
+GET {{baseUrl}}/api/whatsapp/qr
+Authorization: Bearer {{token}}
+
+### 7. Get Status - Obtenir le statut WhatsApp
+GET {{baseUrl}}/api/whatsapp/status
+Authorization: Bearer {{token}}
+
+### 8. Disconnect - Déconnecter WhatsApp
+POST {{baseUrl}}/api/whatsapp/disconnect
+Authorization: Bearer {{token}}
+

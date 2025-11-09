@@ -1,14 +1,17 @@
 import { Router } from 'express';
-// import { whatsappController } from '../controllers/whatsapp.controller';
-// import { authenticateToken } from '../middleware/auth.middleware';
-// import { whatsappLimiter } from '../middleware/rateLimit.middleware';
+import * as whatsappController from '../controllers/whatsapp.controller';
+import { protect } from '../middleware/auth.middleware';
+import { apiLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
-// TODO: Implement routes
-// router.get('/qr', authenticateToken, whatsappLimiter, whatsappController.getQRCode);
-// router.get('/status', authenticateToken, whatsappController.getStatus);
-// router.post('/disconnect', authenticateToken, whatsappController.disconnect);
+// All routes require authentication
+router.use(protect);
+
+// Routes
+router.get('/qr', apiLimiter, whatsappController.getQRCode);
+router.get('/status', whatsappController.getStatus);
+router.post('/disconnect', whatsappController.disconnect);
 
 export default router;
 

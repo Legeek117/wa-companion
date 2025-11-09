@@ -1,14 +1,18 @@
 import { Router } from 'express';
-// import { authController } from '../controllers/auth.controller';
-// import { authLimiter } from '../middleware/rateLimit.middleware';
+import * as authController from '../controllers/auth.controller';
+import { protect } from '../middleware/auth.middleware';
+import { apiLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
-// TODO: Implement routes
-// router.post('/register', authLimiter, authController.register);
-// router.post('/login', authLimiter, authController.login);
-// router.post('/logout', authController.logout);
-// router.post('/refresh', authController.refreshToken);
+// Public routes with rate limiting
+router.post('/register', apiLimiter, authController.register);
+router.post('/login', apiLimiter, authController.login);
+
+// Protected routes
+router.get('/me', protect, authController.getMe);
+router.post('/logout', protect, authController.logout);
+router.post('/refresh', protect, authController.refreshToken);
 
 export default router;
 

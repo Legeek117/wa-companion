@@ -78,15 +78,15 @@ function getEnvNumber(key: string, defaultValue?: number): number {
 export const env: EnvConfig = {
   // Server
   NODE_ENV: getEnvVar('NODE_ENV', 'development'),
-  PORT: getEnvNumber('PORT', 3000),
+  PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : getEnvNumber('PORT', 3000),
   API_URL: getEnvVar('API_URL', 'http://localhost:3000'),
-  FRONTEND_URL: getEnvVar('FRONTEND_URL', 'http://localhost:5173'),
+  FRONTEND_URL: getEnvVar('FRONTEND_URL', 'http://localhost:8080'),
 
   // Database - Supabase
   SUPABASE_URL: getEnvVar('SUPABASE_URL'),
   SUPABASE_ANON_KEY: getEnvVar('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),
-  DATABASE_URL: getEnvVar('DATABASE_URL'),
+  DATABASE_URL: getEnvVar('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/amda'),
 
   // Redis
   REDIS_URL: getEnvVar('REDIS_URL', 'redis://localhost:6379'),
@@ -104,12 +104,12 @@ export const env: EnvConfig = {
   WHATSAPP_SESSION_PATH: getEnvVar('WHATSAPP_SESSION_PATH', './sessions'),
   WHATSAPP_SESSION_TIMEOUT: getEnvNumber('WHATSAPP_SESSION_TIMEOUT', 300000),
 
-  // Stripe
-  STRIPE_SECRET_KEY: getEnvVar('STRIPE_SECRET_KEY'),
-  STRIPE_PUBLISHABLE_KEY: getEnvVar('STRIPE_PUBLISHABLE_KEY'),
-  STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET'),
-  STRIPE_PRICE_ID_MONTHLY: getEnvVar('STRIPE_PRICE_ID_MONTHLY'),
-  STRIPE_PRICE_ID_YEARLY: getEnvVar('STRIPE_PRICE_ID_YEARLY'),
+  // Stripe (Optional for basic tests)
+  STRIPE_SECRET_KEY: getEnvVar('STRIPE_SECRET_KEY', 'sk_test_placeholder'),
+  STRIPE_PUBLISHABLE_KEY: getEnvVar('STRIPE_PUBLISHABLE_KEY', 'pk_test_placeholder'),
+  STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET', 'whsec_placeholder'),
+  STRIPE_PRICE_ID_MONTHLY: getEnvVar('STRIPE_PRICE_ID_MONTHLY', 'price_placeholder_monthly'),
+  STRIPE_PRICE_ID_YEARLY: getEnvVar('STRIPE_PRICE_ID_YEARLY', 'price_placeholder_yearly'),
 
   // Storage - Cloudinary
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,

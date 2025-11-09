@@ -7,10 +7,14 @@ const PORT = env.PORT;
 
 async function startServer(): Promise<void> {
   try {
-    // Initialize Redis connection
+    // Initialize Redis connection (optional for basic tests)
     if (env.NODE_ENV !== 'test') {
-      await getRedisClient();
-      logger.info('Redis connected');
+      const redisClient = await getRedisClient();
+      if (redisClient) {
+        logger.info('Redis connected');
+      } else {
+        logger.warn('Redis not available, continuing without Redis');
+      }
     }
 
     // Start Express server
