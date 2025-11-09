@@ -105,36 +105,36 @@ export function ControlPanel({ isOpen, onClose }: ControlPanelProps) {
           </div>
 
           {/* Grid of items - iOS style */}
-          <div className="grid grid-cols-3 gap-3 p-4 pb-6">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 p-3 sm:p-4 pb-5 sm:pb-6">
             {panelItems.map((item) => (
               <NavLink
                 key={item.title}
                 to={item.url}
                 onClick={onClose}
                 className={cn(
-                  "flex flex-col items-center gap-3 p-4 rounded-3xl transition-all duration-300 active:scale-95",
+                  "flex flex-col items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl sm:rounded-3xl transition-all duration-300 active:scale-95",
                   isActive(item.url)
                     ? "bg-primary/15 text-primary shadow-sm"
                     : "bg-muted/30 hover:bg-muted/50 text-foreground"
                 )}
               >
                 <div className={cn(
-                  "relative w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300",
+                  "relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all duration-300",
                   isActive(item.url)
                     ? "bg-primary/20 shadow-md"
                     : "bg-background/50"
                 )}>
                   <item.icon className={cn(
                     "transition-all duration-300",
-                    isActive(item.url) ? "w-7 h-7" : "w-6 h-6"
+                    isActive(item.url) ? "w-6 h-6 sm:w-7 sm:h-7" : "w-5 h-5 sm:w-6 sm:h-6"
                   )} />
                   {item.premium && (
-                    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gradient-premium flex items-center justify-center shadow-premium">
-                      <Crown className="w-3 h-3 text-premium-foreground" />
+                    <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-premium flex items-center justify-center shadow-premium">
+                      <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-premium-foreground" />
                     </div>
                   )}
                 </div>
-                <span className="text-xs text-center font-semibold leading-tight">
+                <span className="text-[10px] sm:text-xs text-center font-semibold leading-tight px-1">
                   {item.title}
                 </span>
               </NavLink>

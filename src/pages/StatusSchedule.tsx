@@ -23,16 +23,18 @@ const StatusSchedule = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Programmer un Status</h1>
-          <p className="text-muted-foreground">Planifiez vos publications à l'avance</p>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Programmer un Status</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Planifiez vos publications à l'avance</p>
         </div>
-        <PlanBadge isPremium={isPremium} />
+        <div className="flex-shrink-0">
+          <PlanBadge isPremium={isPremium} />
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Créer un Status</CardTitle>
@@ -68,27 +70,27 @@ const StatusSchedule = () => {
               <p className="text-xs text-muted-foreground text-right">0/700</p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
+                <Label htmlFor="date" className="text-sm">Date</Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <Input
                     id="date"
                     type="date"
-                    className="pl-10"
+                    className="pl-10 text-sm"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="time">Heure</Label>
+                <Label htmlFor="time" className="text-sm">Heure</Label>
                 <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <Input
                     id="time"
                     type="time"
-                    className="pl-10"
+                    className="pl-10 text-sm"
                   />
                 </div>
               </div>

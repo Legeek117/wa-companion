@@ -109,17 +109,17 @@ const Landing = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 md:py-32 overflow-hidden bg-gradient-primary">
+      <section className="relative py-12 sm:py-16 md:py-20 lg:py-32 overflow-hidden bg-gradient-primary">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00eiIvPjwvZz48L2c+PC9zdmc+')] opacity-20"></div>
-        <div className="container mx-auto px-4 md:px-6 relative">
+        <div className="container mx-auto px-4 sm:px-6 md:px-8 relative">
           <div className="max-w-3xl">
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-6 leading-tight">
               Prêt à transformer votre expérience WhatsApp ?
             </h1>
-            <p className="text-xl md:text-2xl text-white/90 mb-8">
+            <p className="text-lg sm:text-xl md:text-2xl text-white/90 mb-6 sm:mb-8">
               Rejoignez des milliers d'utilisateurs qui optimisent déjà leurs communications avec AMDA.
             </p>
-            <Button size="lg" variant="secondary" className="rounded-full shadow-lg text-base px-8" asChild>
+            <Button size="lg" variant="secondary" className="rounded-full shadow-lg text-sm sm:text-base px-6 sm:px-8 w-full sm:w-auto" asChild>
               <Link to="/auth">
                 Créer mon compte gratuit
               </Link>
@@ -129,38 +129,38 @@ const Landing = () => {
       </section>
 
       {/* Features Section */}
-      <section id="fonctionnalites" className="py-20 md:py-32">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="space-y-32">
+      <section id="fonctionnalites" className="py-12 sm:py-16 md:py-20 lg:py-32">
+        <div className="container mx-auto px-4 sm:px-6 md:px-8">
+          <div className="space-y-16 sm:space-y-24 md:space-y-32">
             {features.map((feature, index) => (
               <div 
                 key={index} 
-                className={`flex flex-col ${index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'} gap-12 items-center`}
+                className={`flex flex-col ${index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'} gap-8 sm:gap-12 items-center`}
               >
-                <div className="flex-1 space-y-6">
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+                <div className="flex-1 space-y-4 sm:space-y-6 w-full">
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs sm:text-sm">
                     {feature.subtitle}
                   </Badge>
-                  <h2 className="text-3xl md:text-5xl font-bold leading-tight">
+                  <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
                     {feature.title}
                   </h2>
-                  <p className="text-lg text-muted-foreground leading-relaxed">
+                  <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
                     {feature.description}
                   </p>
-                  <ul className="space-y-3">
+                  <ul className="space-y-2 sm:space-y-3">
                     {feature.benefits.map((benefit, bIndex) => (
-                      <li key={bIndex} className="flex items-start gap-3">
-                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <Check className="w-4 h-4 text-primary" />
+                      <li key={bIndex} className="flex items-start gap-2 sm:gap-3">
+                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Check className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
                         </div>
-                        <span className="text-foreground">{benefit}</span>
+                        <span className="text-sm sm:text-base text-foreground">{benefit}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
                 <div className="flex-1 w-full">
-                  <div className="aspect-video rounded-3xl bg-muted/50 border border-border/50 shadow-glass flex items-center justify-center">
-                    <feature.icon className="w-24 h-24 text-muted-foreground/30" />
+                  <div className="aspect-video rounded-2xl sm:rounded-3xl bg-muted/50 border border-border/50 shadow-glass flex items-center justify-center">
+                    <feature.icon className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 text-muted-foreground/30" />
                   </div>
                 </div>
               </div>
@@ -170,18 +170,18 @@ const Landing = () => {
       </section>
 
       {/* Pricing Section */}
-      <section id="tarifs" className="py-20 md:py-32 bg-muted/30">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">
+      <section id="tarifs" className="py-12 sm:py-16 md:py-20 lg:py-32 bg-muted/30">
+        <div className="container mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-8 sm:mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">
               Des plans AMDA adaptés à vos besoins
             </h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
               Commencez gratuitement et passez à la vitesse supérieure avec nos fonctionnalités Premium.
             </p>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-5xl mx-auto">
             {/* Plan Gratuit */}
             <Card className="border-border/50 hover:shadow-lg transition-all duration-300">
               <CardContent className="pt-8 pb-8">
@@ -292,29 +292,29 @@ const Landing = () => {
       </section>
 
       {/* FAQ Section */}
-      <section id="faq" className="py-20 md:py-32">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">
+      <section id="faq" className="py-12 sm:py-16 md:py-20 lg:py-32">
+        <div className="container mx-auto px-4 sm:px-6 md:px-8">
+          <div className="text-center mb-8 sm:mb-12 md:mb-16">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4">
               Questions Fréquentes
             </h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
               Trouvez des réponses rapides à vos interrogations courantes.
             </p>
           </div>
           
           <div className="max-w-3xl mx-auto">
-            <Accordion type="single" collapsible className="space-y-4">
+            <Accordion type="single" collapsible className="space-y-3 sm:space-y-4">
               {faqs.map((faq, index) => (
                 <AccordionItem 
                   key={index} 
                   value={`item-${index}`}
-                  className="border border-border/50 rounded-2xl px-6 bg-card"
+                  className="border border-border/50 rounded-xl sm:rounded-2xl px-4 sm:px-6 bg-card"
                 >
-                  <AccordionTrigger className="text-left font-semibold hover:no-underline py-5">
+                  <AccordionTrigger className="text-left font-semibold hover:no-underline py-4 sm:py-5 text-sm sm:text-base">
                     {faq.question}
                   </AccordionTrigger>
-                  <AccordionContent className="text-muted-foreground pb-5">
+                  <AccordionContent className="text-sm sm:text-base text-muted-foreground pb-4 sm:pb-5">
                     {faq.answer}
                   </AccordionContent>
                 </AccordionItem>
@@ -325,21 +325,21 @@ const Landing = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 md:py-32 bg-gradient-primary relative overflow-hidden">
+      <section className="py-12 sm:py-16 md:py-20 lg:py-32 bg-gradient-primary relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00eiIvPjwvZz48L2c+PC9zdmc+')] opacity-20"></div>
-        <div className="container mx-auto px-4 md:px-6 text-center relative">
+        <div className="container mx-auto px-4 sm:px-6 md:px-8 text-center relative">
           <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 sm:mb-6">
               AMDA. Votre Assistant WhatsApp Intelligent.
             </h2>
-            <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-white/90 mb-6 sm:mb-8 max-w-2xl mx-auto">
               Récupérez les messages supprimés, sauvegardez les 'view once' et gérez vos statuts automatiquement. Le tout depuis un seul dashboard.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" variant="secondary" className="rounded-full shadow-lg text-base px-8" asChild>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+              <Button size="lg" variant="secondary" className="rounded-full shadow-lg text-sm sm:text-base px-6 sm:px-8 w-full sm:w-auto" asChild>
                 <Link to="/auth">Commencer Gratuitement</Link>
               </Button>
-              <Button size="lg" variant="outline" className="rounded-full border-white text-white hover:bg-white/10 text-base px-8">
+              <Button size="lg" variant="outline" className="rounded-full border-white text-white hover:bg-white/10 text-sm sm:text-base px-6 sm:px-8 w-full sm:w-auto">
                 Voir les fonctionnalités
               </Button>
             </div>
@@ -348,9 +348,9 @@ const Landing = () => {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 border-t border-border/50 bg-card">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="grid md:grid-cols-3 gap-12 mb-8">
+      <footer className="py-8 sm:py-12 border-t border-border/50 bg-card">
+        <div className="container mx-auto px-4 sm:px-6 md:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 sm:gap-12 mb-6 sm:mb-8">
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2 mb-4">
@@ -405,19 +405,19 @@ const Landing = () => {
           </div>
 
           {/* Bottom */}
-          <div className="pt-8 border-t border-border/50 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-muted-foreground">
+          <div className="pt-6 sm:pt-8 border-t border-border/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
               © 2025 AMDA. Tous droits réservés.
             </p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                <Twitter className="w-5 h-5" />
+                <Twitter className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
               <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                <Linkedin className="w-5 h-5" />
+                <Linkedin className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
               <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                <Github className="w-5 h-5" />
+                <Github className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
             </div>
           </div>

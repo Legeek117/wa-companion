@@ -19,13 +19,13 @@ const Status = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Gestion des Status</h1>
-        <p className="text-muted-foreground">Gérez et automatisez vos interactions avec les status WhatsApp</p>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Gestion des Status</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Gérez et automatisez vos interactions avec les status WhatsApp</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Likés aujourd'hui"
           value="23"
@@ -58,10 +58,10 @@ const Status = () => {
           <CardDescription>Paramétrez le like automatique des status</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="auto-like">Activer Auto-Like</Label>
-              <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <div className="space-y-0.5 flex-1">
+              <Label htmlFor="auto-like" className="text-sm sm:text-base">Activer Auto-Like</Label>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Liker automatiquement tous les nouveaux status
               </p>
             </div>
@@ -76,15 +76,15 @@ const Status = () => {
           </div>
 
           <div className="space-y-3">
-            <Label>Emoji par défaut</Label>
-            <div className="grid grid-cols-8 gap-2">
+            <Label className="text-sm sm:text-base">Emoji par défaut</Label>
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
               {emojis.map((emoji) => (
                 <Button
                   key={emoji}
                   variant={selectedEmoji === emoji ? "default" : "outline"}
-                  size="lg"
+                  size="sm"
                   onClick={() => handleEmojiChange(emoji)}
-                  className="text-2xl h-14"
+                  className="text-xl sm:text-2xl h-10 sm:h-12 md:h-14 p-0 aspect-square"
                 >
                   {emoji}
                 </Button>

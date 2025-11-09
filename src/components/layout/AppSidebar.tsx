@@ -144,39 +144,39 @@ export function AppSidebar() {
 
       {/* Mobile Bottom Navigation - iOS Style */}
       <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
-        <div className="mx-3 mb-4 rounded-3xl bg-background/80 backdrop-blur-2xl border border-border/50 shadow-glass overflow-hidden">
-          <div className="flex items-center justify-around h-20 px-1">
+        <div className="mx-2 sm:mx-3 mb-2 sm:mb-4 pb-safe-area-inset-bottom rounded-2xl sm:rounded-3xl bg-background/80 backdrop-blur-2xl border border-border/50 shadow-glass overflow-hidden">
+          <div className="flex items-center justify-around h-16 sm:h-20 px-0.5 sm:px-1">
             {bottomNavItems.map((item) => (
               <NavLink
                 key={item.title}
                 to={item.url}
                 end
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1.5 px-3 py-2 rounded-2xl transition-all duration-300 relative group flex-1",
+                  "flex flex-col items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 md:px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl transition-all duration-300 relative group flex-1 min-w-0",
                   isActive(item.url)
                     ? "text-primary"
                     : "text-muted-foreground"
                 )}
               >
                 <div className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300",
+                  "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all duration-300 flex-shrink-0",
                   isActive(item.url)
-                    ? "bg-primary/15 shadow-sm scale-110"
+                    ? "bg-primary/15 shadow-sm scale-105 sm:scale-110"
                     : "group-hover:bg-muted/50"
                 )}>
                   <item.icon className={cn(
                     "transition-all duration-300",
-                    isActive(item.url) ? "w-6 h-6" : "w-5 h-5"
+                    isActive(item.url) ? "w-5 h-5 sm:w-6 sm:h-6" : "w-4 h-4 sm:w-5 sm:h-5"
                   )} />
                 </div>
                 <span className={cn(
-                  "text-[10px] font-semibold transition-all duration-300",
+                  "text-[9px] sm:text-[10px] font-semibold transition-all duration-300 text-center leading-tight px-0.5 truncate w-full",
                   isActive(item.url) ? "opacity-100" : "opacity-70"
                 )}>
                   {item.title.split(" ")[0]}
                 </span>
                 {isActive(item.url) && (
-                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                  <div className="absolute -bottom-0.5 sm:-bottom-1 left-1/2 -translate-x-1/2 w-0.5 h-0.5 sm:w-1 sm:h-1 rounded-full bg-primary" />
                 )}
               </NavLink>
             ))}

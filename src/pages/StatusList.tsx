@@ -52,13 +52,13 @@ const StatusList = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Liste des Status</h1>
-        <p className="text-muted-foreground">Tous les status disponibles (24h)</p>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Liste des Status</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Tous les status disponibles (24h)</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {statuses.map((status) => (
           <Card key={status.id} className="overflow-hidden hover:shadow-lg transition-shadow">
             <CardContent className="p-0">
@@ -68,18 +68,18 @@ const StatusList = () => {
                   <p className="text-sm text-muted-foreground">Prévisualisation</p>
                 </div>
               </div>
-              <div className="p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10">
+              <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Avatar className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
                     <AvatarImage src={status.avatar} />
-                    <AvatarFallback>{status.contact[0]}</AvatarFallback>
+                    <AvatarFallback className="text-xs">{status.contact[0]}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1">
-                    <p className="font-medium">{status.contact}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base truncate">{status.contact}</p>
                     <p className="text-xs text-muted-foreground">{status.timestamp}</p>
                   </div>
                   {status.liked && (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-xs flex-shrink-0">
                       <Heart className="w-3 h-3 mr-1 fill-current" />
                       Liké
                     </Badge>
@@ -87,11 +87,11 @@ const StatusList = () => {
                 </div>
                 {!status.liked && (
                   <Button
-                    className="w-full"
+                    className="w-full text-xs sm:text-sm"
                     size="sm"
                     onClick={() => handleLike(status.contact)}
                   >
-                    <Heart className="w-4 h-4 mr-2" />
+                    <Heart className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                     Liker maintenant
                   </Button>
                 )}

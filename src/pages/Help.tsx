@@ -37,47 +37,47 @@ const Help = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Aide & Support</h1>
-        <p className="text-muted-foreground">Trouvez de l'aide et contactez notre équipe</p>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Aide & Support</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Trouvez de l'aide et contactez notre équipe</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
         <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-          <CardHeader>
-            <BookOpen className="w-10 h-10 text-primary mb-2" />
-            <CardTitle>Documentation</CardTitle>
-            <CardDescription>Guides complets et tutoriels</CardDescription>
+          <CardHeader className="pb-3 sm:pb-4">
+            <BookOpen className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-2" />
+            <CardTitle className="text-base sm:text-lg">Documentation</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Guides complets et tutoriels</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full text-xs sm:text-sm">
               Consulter les docs
             </Button>
           </CardContent>
         </Card>
 
         <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-          <CardHeader>
-            <Video className="w-10 h-10 text-primary mb-2" />
-            <CardTitle>Tutoriels Vidéo</CardTitle>
-            <CardDescription>Apprenez visuellement</CardDescription>
+          <CardHeader className="pb-3 sm:pb-4">
+            <Video className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-2" />
+            <CardTitle className="text-base sm:text-lg">Tutoriels Vidéo</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Apprenez visuellement</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full text-xs sm:text-sm">
               Voir les vidéos
             </Button>
           </CardContent>
         </Card>
 
         <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-          <CardHeader>
-            <MessageSquare className="w-10 h-10 text-primary mb-2" />
-            <CardTitle>Chat en Direct</CardTitle>
-            <CardDescription>Support immédiat</CardDescription>
+          <CardHeader className="pb-3 sm:pb-4">
+            <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-primary mb-2" />
+            <CardTitle className="text-base sm:text-lg">Chat en Direct</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Support immédiat</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full">
+            <Button className="w-full text-xs sm:text-sm">
               Démarrer le chat
             </Button>
           </CardContent>
@@ -85,19 +85,19 @@ const Help = () => {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5" />
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5" />
             Questions Fréquentes
           </CardTitle>
-          <CardDescription>Réponses aux questions les plus courantes</CardDescription>
+          <CardDescription className="text-xs sm:text-sm">Réponses aux questions les plus courantes</CardDescription>
         </CardHeader>
         <CardContent>
           <Accordion type="single" collapsible className="w-full">
             {faqs.map((faq, index) => (
-              <AccordionItem key={index} value={`item-${index}`}>
-                <AccordionTrigger>{faq.question}</AccordionTrigger>
-                <AccordionContent>{faq.answer}</AccordionContent>
+              <AccordionItem key={index} value={`item-${index}`} className="border-b">
+                <AccordionTrigger className="text-sm sm:text-base py-3 sm:py-4">{faq.question}</AccordionTrigger>
+                <AccordionContent className="text-xs sm:text-sm text-muted-foreground pb-3 sm:pb-4">{faq.answer}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
@@ -105,29 +105,30 @@ const Help = () => {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Créer un Ticket Support</CardTitle>
-          <CardDescription>Notre équipe vous répondra sous 24h</CardDescription>
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="text-base sm:text-lg">Créer un Ticket Support</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Notre équipe vous répondra sous 24h</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="subject">Sujet</Label>
-              <Input id="subject" placeholder="Quel est votre problème ?" required />
+              <Label htmlFor="subject" className="text-sm">Sujet</Label>
+              <Input id="subject" placeholder="Quel est votre problème ?" required className="text-sm" />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="message">Message</Label>
+              <Label htmlFor="message" className="text-sm">Message</Label>
               <Textarea
                 id="message"
                 placeholder="Décrivez votre problème en détail..."
-                rows={6}
+                rows={5}
+                className="text-sm sm:min-h-[140px]"
                 required
               />
             </div>
 
-            <Button type="submit" className="w-full">
-              <Send className="w-4 h-4 mr-2" />
+            <Button type="submit" className="w-full text-xs sm:text-sm">
+              <Send className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
               Envoyer le ticket
             </Button>
           </form>

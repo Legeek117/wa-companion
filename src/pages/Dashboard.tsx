@@ -50,38 +50,39 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Tableau de bord</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Tableau de bord</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Bienvenue de retour ! Voici un aperçu de votre activité.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="text-sm py-1">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <Badge variant="outline" className="text-xs sm:text-sm py-1">
             Plan Gratuit
           </Badge>
-          <Button className="bg-gradient-premium">
-            <Sparkles className="w-4 h-4 mr-2" />
-            Passer à Premium
+          <Button className="bg-gradient-premium text-xs sm:text-sm px-3 sm:px-4">
+            <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+            <span className="hidden sm:inline">Passer à Premium</span>
+            <span className="sm:hidden">Premium</span>
           </Button>
         </div>
       </div>
 
       {/* Connection Status */}
       <Card className="border-border bg-gradient-to-r from-primary/5 to-primary/10">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 bg-primary rounded-full animate-pulse"></div>
-              <div>
-                <p className="font-semibold">WhatsApp Connecté</p>
-                <p className="text-sm text-muted-foreground">Dernière synchronisation : il y a 2 minutes</p>
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-primary rounded-full animate-pulse flex-shrink-0"></div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-sm sm:text-base">WhatsApp Connecté</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">Dernière synchronisation : il y a 2 minutes</p>
               </div>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
               Voir QR Code
             </Button>
           </div>
@@ -89,22 +90,22 @@ const Dashboard = () => {
       </Card>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {stats.map((stat, index) => (
           <Card key={index} className="border-border hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className={`p-3 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
+                <div className={`p-2 sm:p-3 rounded-lg ${stat.bgColor}`}>
+                  <stat.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${stat.color}`} />
                 </div>
-                <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
               </div>
               <div>
-                <p className="text-2xl font-bold mb-1">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{stat.title}</p>
+                <p className="text-xl sm:text-2xl font-bold mb-1">{stat.value}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">{stat.title}</p>
                 <p className="text-xs text-muted-foreground mt-1">{stat.subtitle}</p>
                 {stat.progress !== undefined && (
-                  <Progress value={stat.progress} className="mt-3 h-1" />
+                  <Progress value={stat.progress} className="mt-2 sm:mt-3 h-1" />
                 )}
               </div>
             </CardContent>
@@ -112,28 +113,28 @@ const Dashboard = () => {
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Recent Activity */}
         <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="w-5 h-5" />
+          <CardHeader className="pb-3 sm:pb-4">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
               Activité récente
             </CardTitle>
-            <CardDescription>Vos dernières interactions automatisées</CardDescription>
+            <CardDescription className="text-xs sm:text-sm">Vos dernières interactions automatisées</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-2 sm:space-y-4">
               {recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div className={`p-2 rounded-full bg-background`}>
-                    <activity.icon className={`w-4 h-4 ${activity.color}`} />
+                <div key={index} className="flex items-center gap-2 sm:gap-4 p-2 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                  <div className={`p-1.5 sm:p-2 rounded-full bg-background flex-shrink-0`}>
+                    <activity.icon className={`w-3 h-3 sm:w-4 sm:h-4 ${activity.color}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{activity.action}</p>
-                    <p className="text-xs text-muted-foreground">{activity.contact}</p>
+                    <p className="text-xs sm:text-sm font-medium truncate">{activity.action}</p>
+                    <p className="text-xs text-muted-foreground truncate">{activity.contact}</p>
                   </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{activity.time}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{activity.time}</span>
                 </div>
               ))}
             </div>
@@ -142,40 +143,40 @@ const Dashboard = () => {
 
         {/* Quick Actions */}
         <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
+          <CardHeader className="pb-3 sm:pb-4">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
               Actions rapides
             </CardTitle>
-            <CardDescription>Gérez vos fonctionnalités principales</CardDescription>
+            <CardDescription className="text-xs sm:text-sm">Gérez vos fonctionnalités principales</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Button variant="outline" className="w-full justify-start" size="lg">
-              <Heart className="w-4 h-4 mr-3" />
+          <CardContent className="space-y-2 sm:space-y-3">
+            <Button variant="outline" className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3">
+              <Heart className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
               <div className="text-left flex-1">
-                <div className="font-medium">Configurer Auto-Like</div>
-                <div className="text-xs text-muted-foreground">Choisir emoji et contacts</div>
+                <div className="font-medium text-xs sm:text-sm">Configurer Auto-Like</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">Choisir emoji et contacts</div>
               </div>
             </Button>
-            <Button variant="outline" className="w-full justify-start" size="lg">
-              <Calendar className="w-4 h-4 mr-3" />
+            <Button variant="outline" className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3">
+              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
               <div className="text-left flex-1">
-                <div className="font-medium">Programmer un Status</div>
-                <div className="text-xs text-muted-foreground">0/1 utilisé cette semaine</div>
+                <div className="font-medium text-xs sm:text-sm">Programmer un Status</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">0/1 utilisé cette semaine</div>
               </div>
             </Button>
-            <Button variant="outline" className="w-full justify-start" size="lg">
-              <Bot className="w-4 h-4 mr-3" />
+            <Button variant="outline" className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3">
+              <Bot className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
               <div className="text-left flex-1">
-                <div className="font-medium">Activer Répondeur</div>
-                <div className="text-xs text-muted-foreground">Mode Hors Ligne / Occupé</div>
+                <div className="font-medium text-xs sm:text-sm">Activer Répondeur</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">Mode Hors Ligne / Occupé</div>
               </div>
             </Button>
-            <Button variant="outline" className="w-full justify-start" size="lg">
-              <Eye className="w-4 h-4 mr-3" />
+            <Button variant="outline" className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3">
+              <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
               <div className="text-left flex-1">
-                <div className="font-medium">Voir View Once</div>
-                <div className="text-xs text-muted-foreground">2 captures disponibles</div>
+                <div className="font-medium text-xs sm:text-sm">Voir View Once</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">2 captures disponibles</div>
               </div>
             </Button>
           </CardContent>
@@ -184,23 +185,24 @@ const Dashboard = () => {
 
       {/* Premium Upsell */}
       <Card className="border-premium shadow-premium bg-gradient-to-r from-premium/5 to-premium/10">
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex-1">
-              <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-premium" />
-                Débloquez toute la puissance avec Premium
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-premium flex-shrink-0" />
+                <span className="text-sm sm:text-base md:text-lg">Débloquez toute la puissance avec Premium</span>
               </h3>
-              <ul className="text-sm text-muted-foreground space-y-1">
+              <ul className="text-xs sm:text-sm text-muted-foreground space-y-1">
                 <li>✓ View Once et Messages supprimés illimités</li>
                 <li>✓ Filtrage intelligent du répondeur automatique</li>
                 <li>✓ Analytics détaillés et statistiques avancées</li>
                 <li>✓ Support prioritaire et backup automatique</li>
               </ul>
             </div>
-            <Button className="bg-gradient-premium whitespace-nowrap">
-              Essayer 30 jours
-              <Sparkles className="w-4 h-4 ml-2" />
+            <Button className="bg-gradient-premium whitespace-nowrap text-xs sm:text-sm w-full sm:w-auto">
+              <span className="hidden sm:inline">Essayer 30 jours</span>
+              <span className="sm:hidden">Essayer</span>
+              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
             </Button>
           </div>
         </CardContent>

@@ -32,13 +32,15 @@ const ViewOnce = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">View Once Capturés</h1>
-          <p className="text-muted-foreground">Messages éphémères sauvegardés automatiquement</p>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">View Once Capturés</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Messages éphémères sauvegardés automatiquement</p>
         </div>
-        <PlanBadge isPremium={isPremium} />
+        <div className="flex-shrink-0">
+          <PlanBadge isPremium={isPremium} />
+        </div>
       </div>
 
       {!isPremium && (
@@ -78,38 +80,39 @@ const ViewOnce = () => {
               <p className="text-sm">Les view once reçus seront automatiquement sauvegardés ici</p>
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {captures.map((capture) => (
                 <Card key={capture.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <CardContent className="p-0">
                     <div className="aspect-square bg-muted flex items-center justify-center relative">
-                      <Image className="w-12 h-12 text-muted-foreground" />
+                      <Image className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground" />
                       <Badge
                         variant="secondary"
-                        className="absolute top-2 right-2"
+                        className="absolute top-2 right-2 text-xs"
                       >
                         {capture.type}
                       </Badge>
                     </div>
-                    <div className="p-4 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
+                    <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <Avatar className="h-8 w-8 sm:h-10 sm:w-10">
                           <AvatarImage src={capture.avatar} />
-                          <AvatarFallback>{capture.sender[0]}</AvatarFallback>
+                          <AvatarFallback className="text-xs">{capture.sender[0]}</AvatarFallback>
                         </Avatar>
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{capture.sender}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-xs sm:text-sm truncate">{capture.sender}</p>
                           <p className="text-xs text-muted-foreground">{capture.timestamp}</p>
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="flex-1">
-                          <Eye className="w-4 h-4 mr-2" />
+                        <Button size="sm" variant="outline" className="flex-1 text-xs">
+                          <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                           Voir
                         </Button>
-                        <Button size="sm" variant="outline" className="flex-1">
-                          <Download className="w-4 h-4 mr-2" />
-                          Télécharger
+                        <Button size="sm" variant="outline" className="flex-1 text-xs">
+                          <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                          <span className="hidden sm:inline">Télécharger</span>
+                          <span className="sm:hidden">DL</span>
                         </Button>
                       </div>
                     </div>

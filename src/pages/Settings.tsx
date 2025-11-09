@@ -15,77 +15,77 @@ const Settings = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Paramètres</h1>
-        <p className="text-muted-foreground">Gérez votre compte et vos préférences</p>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Paramètres</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Gérez votre compte et vos préférences</p>
       </div>
 
-      <Tabs defaultValue="account" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="account" className="gap-2">
-            <User className="w-4 h-4" />
+      <Tabs defaultValue="account" className="space-y-4 sm:space-y-6">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-2 h-auto">
+          <TabsTrigger value="account" className="gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-3">
+            <User className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Compte</span>
           </TabsTrigger>
-          <TabsTrigger value="bot" className="gap-2">
-            <Bot className="w-4 h-4" />
+          <TabsTrigger value="bot" className="gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-3">
+            <Bot className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Bot</span>
           </TabsTrigger>
-          <TabsTrigger value="whatsapp" className="gap-2">
-            <Smartphone className="w-4 h-4" />
+          <TabsTrigger value="whatsapp" className="gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-3">
+            <Smartphone className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">WhatsApp</span>
           </TabsTrigger>
-          <TabsTrigger value="subscription" className="gap-2">
-            <CreditCard className="w-4 h-4" />
+          <TabsTrigger value="subscription" className="gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-3">
+            <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Abonnement</span>
           </TabsTrigger>
-          <TabsTrigger value="preferences" className="gap-2">
-            <SettingsIcon className="w-4 h-4" />
+          <TabsTrigger value="preferences" className="gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-3">
+            <SettingsIcon className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Préférences</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="gap-2">
-            <Shield className="w-4 h-4" />
+          <TabsTrigger value="security" className="gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-3">
+            <Shield className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Sécurité</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="account" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Informations Personnelles</CardTitle>
-              <CardDescription>Gérez vos informations de compte</CardDescription>
+            <CardHeader className="pb-3 sm:pb-4">
+              <CardTitle className="text-lg sm:text-xl">Informations Personnelles</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Gérez vos informations de compte</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
                   <AvatarImage src="/placeholder.svg" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarFallback className="text-sm sm:text-base">JD</AvatarFallback>
                 </Avatar>
-                <Button variant="outline">Changer la photo</Button>
+                <Button variant="outline" size="sm" className="text-xs sm:text-sm">Changer la photo</Button>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="firstname">Prénom</Label>
-                  <Input id="firstname" defaultValue="Jean" />
+                  <Label htmlFor="firstname" className="text-sm">Prénom</Label>
+                  <Input id="firstname" defaultValue="Jean" className="text-sm" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastname">Nom</Label>
-                  <Input id="lastname" defaultValue="Dupont" />
+                  <Label htmlFor="lastname" className="text-sm">Nom</Label>
+                  <Input id="lastname" defaultValue="Dupont" className="text-sm" />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="jean@example.com" />
+                <Label htmlFor="email" className="text-sm">Email</Label>
+                <Input id="email" type="email" defaultValue="jean@example.com" className="text-sm" />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Téléphone</Label>
-                <Input id="phone" type="tel" defaultValue="+226 XX XX XX XX" />
+                <Label htmlFor="phone" className="text-sm">Téléphone</Label>
+                <Input id="phone" type="tel" defaultValue="+226 XX XX XX XX" className="text-sm" />
               </div>
 
-              <Button onClick={handleSave}>Enregistrer les modifications</Button>
+              <Button onClick={handleSave} className="w-full sm:w-auto text-xs sm:text-sm">Enregistrer les modifications</Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -107,10 +107,10 @@ const Settings = () => {
                 <Input id="botbio" defaultValue="Bot multifonctions automatisé" />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Notifications Push</Label>
-                  <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                <div className="space-y-0.5 flex-1">
+                  <Label className="text-sm">Notifications Push</Label>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Recevoir des notifications pour les événements importants
                   </p>
                 </div>
@@ -129,12 +129,12 @@ const Settings = () => {
               <CardDescription>Gérez la connexion de votre compte WhatsApp</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <div>
-                  <p className="font-medium text-green-600">✓ Connecté</p>
-                  <p className="text-sm text-muted-foreground">Dernière activité : Il y a 5 min</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm sm:text-base text-green-600">✓ Connecté</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Dernière activité : Il y a 5 min</p>
                 </div>
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse flex-shrink-0" />
               </div>
 
               <div className="space-y-2">
@@ -195,10 +195,10 @@ const Settings = () => {
                 <Input defaultValue="GMT+0 (Ouagadougou)" />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Thème Sombre</Label>
-                  <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                <div className="space-y-0.5 flex-1">
+                  <Label className="text-sm">Thème Sombre</Label>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Activer le mode sombre
                   </p>
                 </div>

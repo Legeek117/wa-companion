@@ -30,15 +30,15 @@ const Upgrade = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold">Passez à Premium</h1>
-        <p className="text-xl text-muted-foreground">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="text-center space-y-2 px-4">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">Passez à Premium</h1>
+        <p className="text-base sm:text-lg md:text-xl text-muted-foreground">
           Débloquez toutes les fonctionnalités avancées
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2 max-w-5xl mx-auto">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2 max-w-5xl mx-auto px-4 sm:px-0">
         <Card>
           <CardHeader>
             <Badge variant="outline" className="w-fit">Actuel</Badge>
@@ -50,11 +50,11 @@ const Upgrade = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3">
+            <ul className="space-y-2 sm:space-y-3">
               {features.free.map((feature, index) => (
                 <li key={index} className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <span className="text-sm">{feature}</span>
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">{feature}</span>
                 </li>
               ))}
             </ul>
@@ -91,11 +91,11 @@ const Upgrade = () => {
               S'abonner maintenant
             </Button>
 
-            <ul className="space-y-3">
+            <ul className="space-y-2 sm:space-y-3">
               {features.premium.map((feature, index) => (
                 <li key={index} className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-premium mt-0.5 flex-shrink-0" />
-                  <span className="text-sm">{feature}</span>
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5 text-premium mt-0.5 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">{feature}</span>
                 </li>
               ))}
             </ul>
@@ -111,25 +111,25 @@ const Upgrade = () => {
       </div>
 
       <Card className="max-w-3xl mx-auto">
-        <CardHeader>
-          <CardTitle>Questions Fréquentes</CardTitle>
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="text-lg sm:text-xl">Questions Fréquentes</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4">
           <div>
-            <h3 className="font-medium mb-1">Puis-je annuler à tout moment ?</h3>
-            <p className="text-sm text-muted-foreground">
+            <h3 className="font-medium mb-1 text-sm sm:text-base">Puis-je annuler à tout moment ?</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Oui, vous pouvez annuler votre abonnement à tout moment sans frais.
             </p>
           </div>
           <div>
-            <h3 className="font-medium mb-1">Comment fonctionne la garantie ?</h3>
-            <p className="text-sm text-muted-foreground">
+            <h3 className="font-medium mb-1 text-sm sm:text-base">Comment fonctionne la garantie ?</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Si vous n'êtes pas satisfait dans les 30 premiers jours, nous vous remboursons intégralement.
             </p>
           </div>
           <div>
-            <h3 className="font-medium mb-1">Mes données sont-elles sécurisées ?</h3>
-            <p className="text-sm text-muted-foreground">
+            <h3 className="font-medium mb-1 text-sm sm:text-base">Mes données sont-elles sécurisées ?</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Toutes vos données sont chiffrées et sécurisées. Nous ne partageons jamais vos informations.
             </p>
           </div>

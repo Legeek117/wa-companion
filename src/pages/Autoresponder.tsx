@@ -36,16 +36,18 @@ Merci de patienter !`;
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Répondeur Automatique</h1>
-          <p className="text-muted-foreground">Gérez vos réponses automatiques intelligentes</p>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Répondeur Automatique</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Gérez vos réponses automatiques intelligentes</p>
         </div>
-        <PlanBadge isPremium={isPremium} />
+        <div className="flex-shrink-0">
+          <PlanBadge isPremium={isPremium} />
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
         <StatsCard
           title="Messages reçus"
           value="47"
@@ -66,40 +68,40 @@ Merci de patienter !`;
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>🔴 Mode Hors Ligne</CardTitle>
-            <CardDescription>Active automatiquement quand déconnecté</CardDescription>
+          <CardHeader className="pb-3 sm:pb-4">
+            <CardTitle className="text-base sm:text-lg">🔴 Mode Hors Ligne</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Active automatiquement quand déconnecté</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="offline">État</Label>
-              <span className={`text-sm font-medium ${offlineMode ? "text-primary" : "text-muted-foreground"}`}>
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+              <Label htmlFor="offline" className="text-sm">État</Label>
+              <span className={`text-xs sm:text-sm font-medium ${offlineMode ? "text-primary" : "text-muted-foreground"}`}>
                 {offlineMode ? "Activé" : "Désactivé"}
               </span>
             </div>
 
             <div className="space-y-2">
-              <Label>Message {!isPremium && <span className="text-xs text-muted-foreground">🔒 Non modifiable</span>}</Label>
+              <Label className="text-sm">Message {!isPremium && <span className="text-xs text-muted-foreground">🔒 Non modifiable</span>}</Label>
               <Textarea
                 value={defaultOfflineMessage}
                 disabled={!isPremium}
-                rows={7}
-                className={!isPremium ? "bg-muted cursor-not-allowed" : ""}
+                rows={6}
+                className={`text-sm sm:min-h-[140px] ${!isPremium ? "bg-muted cursor-not-allowed" : ""}`}
               />
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>🟡 Mode Occupé</CardTitle>
-            <CardDescription>Activation manuelle via toggle</CardDescription>
+          <CardHeader className="pb-3 sm:pb-4">
+            <CardTitle className="text-base sm:text-lg">🟡 Mode Occupé</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Activation manuelle via toggle</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="busy">Activer Mode Occupé</Label>
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+              <Label htmlFor="busy" className="text-sm">Activer Mode Occupé</Label>
               <Switch
                 id="busy"
                 checked={busyMode}
@@ -111,12 +113,12 @@ Merci de patienter !`;
             </div>
 
             <div className="space-y-2">
-              <Label>Message {!isPremium && <span className="text-xs text-muted-foreground">🔒 Non modifiable</span>}</Label>
+              <Label className="text-sm">Message {!isPremium && <span className="text-xs text-muted-foreground">🔒 Non modifiable</span>}</Label>
               <Textarea
                 value={defaultBusyMessage}
                 disabled={!isPremium}
-                rows={7}
-                className={!isPremium ? "bg-muted cursor-not-allowed" : ""}
+                rows={6}
+                className={`text-sm sm:min-h-[140px] ${!isPremium ? "bg-muted cursor-not-allowed" : ""}`}
               />
             </div>
           </CardContent>

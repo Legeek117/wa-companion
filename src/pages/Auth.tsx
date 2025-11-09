@@ -71,19 +71,19 @@ const Auth = () => {
       </div>
 
       {/* Right Side - Auth Forms */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-background">
-        <div className="w-full max-w-md">
-          <div className="md:hidden mb-8 text-center">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-12 bg-background">
+        <div className="w-full max-w-md px-4 sm:px-0">
+          <div className="md:hidden mb-6 sm:mb-8 text-center">
             <Link to="/" className="inline-flex items-center gap-2">
-              <MessageCircle className="w-8 h-8 text-primary" />
-              <span className="text-2xl font-bold">WhatsApp Bot Pro</span>
+              <MessageCircle className="w-7 h-7 sm:w-8 sm:h-8 text-primary" />
+              <span className="text-xl sm:text-2xl font-bold">WhatsApp Bot Pro</span>
             </Link>
           </div>
 
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="login">Connexion</TabsTrigger>
-              <TabsTrigger value="signup">Inscription</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-6 sm:mb-8">
+              <TabsTrigger value="login" className="text-xs sm:text-sm">Connexion</TabsTrigger>
+              <TabsTrigger value="signup" className="text-xs sm:text-sm">Inscription</TabsTrigger>
             </TabsList>
 
             {/* Login Form */}

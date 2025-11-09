@@ -26,13 +26,15 @@ const DeletedMessages = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Messages Supprimés</h1>
-          <p className="text-muted-foreground">Récupérez les messages effacés automatiquement</p>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Messages Supprimés</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Récupérez les messages effacés automatiquement</p>
         </div>
-        <PlanBadge isPremium={isPremium} />
+        <div className="flex-shrink-0">
+          <PlanBadge isPremium={isPremium} />
+        </div>
       </div>
 
       {!isPremium && (
@@ -75,27 +77,27 @@ const DeletedMessages = () => {
             <div className="space-y-3">
               {messages.map((msg) => (
                 <Card key={msg.id} className="border-destructive/50">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-4">
-                      <Avatar className="h-12 w-12">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0">
                         <AvatarImage src={msg.avatar} />
-                        <AvatarFallback>{msg.sender[0]}</AvatarFallback>
+                        <AvatarFallback className="text-xs">{msg.sender[0]}</AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{msg.sender}</p>
+                      <div className="flex-1 space-y-2 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm sm:text-base truncate">{msg.sender}</p>
                             <p className="text-xs text-muted-foreground">{msg.date}</p>
                           </div>
-                          <Badge variant="destructive" className="gap-1">
+                          <Badge variant="destructive" className="gap-1 text-xs w-fit">
                             <Trash2 className="w-3 h-3" />
                             Supprimé
                           </Badge>
                         </div>
-                        <div className="bg-muted p-3 rounded-lg">
-                          <p className="text-sm">{msg.content}</p>
+                        <div className="bg-muted p-2 sm:p-3 rounded-lg">
+                          <p className="text-xs sm:text-sm break-words">{msg.content}</p>
                         </div>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
                           <span>📤 Envoyé : {msg.sentAt}</span>
                           <span>🗑️ Supprimé : {msg.deletedAt}</span>
                           <Badge variant="outline" className="text-xs">
