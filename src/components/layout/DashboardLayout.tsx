@@ -19,10 +19,34 @@ import { toast } from "sonner";
 const DashboardLayout = () => {
   const navigate = useNavigate();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const minSwipeDistance = 50;
 
   const handleLogout = () => {
     toast.success("Déconnexion réussie");
     navigate("/");
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientY);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientY);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchEnd - touchStart;
+    const isDownSwipe = distance > minSwipeDistance;
+    
+    if (isDownSwipe && !isPanelOpen && touchStart < 100) {
+      setIsPanelOpen(true);
+    }
   };
 
   return (
@@ -32,7 +56,12 @@ const DashboardLayout = () => {
         <ControlPanel isOpen={isPanelOpen} onClose={() => setIsPanelOpen(false)} />
         <div className="flex-1 flex flex-col">
           {/* Top Bar */}
-          <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <header 
+            className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          >
             <div className="flex h-16 items-center gap-4 px-4 md:px-6">
               {/* Mobile Menu Button */}
               <Button

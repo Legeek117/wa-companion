@@ -60,9 +60,11 @@ export function AppSidebar() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <MessageCircle className="w-8 h-8 text-primary" />
-                <span className="text-lg font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  WA Bot Pro
+                <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md">
+                  <MessageCircle className="w-6 h-6 text-primary-foreground" />
+                </div>
+                <span className="text-xl font-bold tracking-tight bg-gradient-primary bg-clip-text text-transparent">
+                  AMDA
                 </span>
               </div>
             )}
@@ -116,25 +118,45 @@ export function AppSidebar() {
         </SidebarContent>
       </Sidebar>
 
-      {/* Mobile Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-background border-t border-border">
-        <div className="flex items-center justify-around h-16 px-2">
-          {bottomNavItems.map((item) => (
-            <NavLink
-              key={item.title}
-              to={item.url}
-              end
-              className={cn(
-                "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all",
-                isActive(item.url)
-                  ? "text-primary bg-primary/10"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="text-[10px] font-medium">{item.title.split(" ")[0]}</span>
-            </NavLink>
-          ))}
+      {/* Mobile Bottom Navigation - iOS Style */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
+        <div className="mx-3 mb-4 rounded-3xl bg-background/80 backdrop-blur-2xl border border-border/50 shadow-glass overflow-hidden">
+          <div className="flex items-center justify-around h-20 px-1">
+            {bottomNavItems.map((item) => (
+              <NavLink
+                key={item.title}
+                to={item.url}
+                end
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1.5 px-3 py-2 rounded-2xl transition-all duration-300 relative group flex-1",
+                  isActive(item.url)
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                )}
+              >
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300",
+                  isActive(item.url)
+                    ? "bg-primary/15 shadow-sm scale-110"
+                    : "group-hover:bg-muted/50"
+                )}>
+                  <item.icon className={cn(
+                    "transition-all duration-300",
+                    isActive(item.url) ? "w-6 h-6" : "w-5 h-5"
+                  )} />
+                </div>
+                <span className={cn(
+                  "text-[10px] font-semibold transition-all duration-300",
+                  isActive(item.url) ? "opacity-100" : "opacity-70"
+                )}>
+                  {item.title.split(" ")[0]}
+                </span>
+                {isActive(item.url) && (
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                )}
+              </NavLink>
+            ))}
+          </div>
         </div>
       </div>
     </>

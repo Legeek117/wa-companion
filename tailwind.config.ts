@@ -73,6 +73,7 @@ export default {
         "md": "var(--shadow-md)",
         "lg": "var(--shadow-lg)",
         "premium": "var(--shadow-premium)",
+        "glass": "var(--shadow-glass)",
       },
       borderRadius: {
         lg: "var(--radius)",

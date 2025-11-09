@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -32,6 +32,31 @@ interface ControlPanelProps {
 export function ControlPanel({ isOpen, onClose }: ControlPanelProps) {
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path;
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  // Minimum swipe distance (in px)
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientY);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientY);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isUpSwipe = distance > minSwipeDistance;
+    
+    if (isUpSwipe && isOpen) {
+      onClose();
+    }
+  };
 
   return (
     <>
@@ -53,42 +78,63 @@ export function ControlPanel({ isOpen, onClose }: ControlPanelProps) {
         style={{
           animation: isOpen ? "slideDown 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)" : "none",
         }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
-        <div className="mx-4 mt-4 bg-background/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-border/50 overflow-hidden">
+        <div className="mx-4 mt-4 bg-background/80 backdrop-blur-3xl rounded-[2rem] shadow-glass border border-border/30 overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border/50">
-            <h3 className="text-lg font-semibold">Menu Principal</h3>
+          <div className="flex items-center justify-between p-5 border-b border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md">
+                <MessageSquare className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <h3 className="text-lg font-bold tracking-tight">Menu Principal</h3>
+            </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-muted rounded-full transition-colors"
+              className="w-10 h-10 flex items-center justify-center hover:bg-muted/50 rounded-2xl transition-all duration-200"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
+          
+          {/* Swipe indicator */}
+          <div className="flex justify-center pt-2">
+            <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
+          </div>
 
-          {/* Grid of items */}
-          <div className="grid grid-cols-3 gap-3 p-4">
+          {/* Grid of items - iOS style */}
+          <div className="grid grid-cols-3 gap-3 p-4 pb-6">
             {panelItems.map((item) => (
               <NavLink
                 key={item.title}
                 to={item.url}
                 onClick={onClose}
                 className={cn(
-                  "flex flex-col items-center gap-2 p-4 rounded-2xl transition-all hover:scale-105",
+                  "flex flex-col items-center gap-3 p-4 rounded-3xl transition-all duration-300 active:scale-95",
                   isActive(item.url)
-                    ? "bg-primary/10 text-primary"
-                    : "bg-muted/50 hover:bg-muted"
+                    ? "bg-primary/15 text-primary shadow-sm"
+                    : "bg-muted/30 hover:bg-muted/50 text-foreground"
                 )}
               >
-                <div className="relative">
-                  <item.icon className="w-6 h-6" />
+                <div className={cn(
+                  "relative w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300",
+                  isActive(item.url)
+                    ? "bg-primary/20 shadow-md"
+                    : "bg-background/50"
+                )}>
+                  <item.icon className={cn(
+                    "transition-all duration-300",
+                    isActive(item.url) ? "w-7 h-7" : "w-6 h-6"
+                  )} />
                   {item.premium && (
-                    <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center bg-premium text-premium-foreground text-[8px]">
-                      P
-                    </Badge>
+                    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-gradient-premium flex items-center justify-center shadow-premium">
+                      <Crown className="w-3 h-3 text-premium-foreground" />
+                    </div>
                   )}
                 </div>
-                <span className="text-xs text-center font-medium leading-tight">
+                <span className="text-xs text-center font-semibold leading-tight">
                   {item.title}
                 </span>
               </NavLink>
