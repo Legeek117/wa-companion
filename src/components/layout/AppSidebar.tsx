@@ -23,12 +23,29 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import {
+  List,
+  Calendar,
+  Sliders,
+  MessageSquare,
+  BarChart3,
+  Crown,
+  HelpCircle,
+} from "lucide-react";
+
 // Desktop menu items (all items)
 const desktopMenuItems = [
   { title: "Accueil", url: "/dashboard", icon: Home },
   { title: "Gestion Status", url: "/dashboard/status", icon: Heart },
+  { title: "Liste Status", url: "/dashboard/status/list", icon: List },
+  { title: "Programmer Status", url: "/dashboard/status/schedule", icon: Calendar },
+  { title: "Config Status", url: "/dashboard/status/config", icon: Sliders },
   { title: "View Once", url: "/dashboard/view-once", icon: Eye },
   { title: "Messages Supprimés", url: "/dashboard/deleted-messages", icon: Trash2 },
+  { title: "Répondeur Auto", url: "/dashboard/autoresponder", icon: MessageSquare },
+  { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3, premium: true },
+  { title: "Upgrade Premium", url: "/dashboard/upgrade", icon: Crown },
+  { title: "Aide & Support", url: "/dashboard/help", icon: HelpCircle },
   { title: "Paramètres", url: "/dashboard/settings", icon: Settings },
 ];
 
@@ -84,11 +101,18 @@ export function AppSidebar() {
                       <NavLink
                         to={item.url}
                         end
-                        className="flex items-center gap-3 px-4 py-2 rounded-lg transition-colors hover:bg-sidebar-accent"
+                        className="flex items-center gap-3 px-4 py-2 rounded-lg transition-colors hover:bg-sidebar-accent relative"
                         activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                       >
                         <item.icon className="w-5 h-5 flex-shrink-0" />
-                        {!collapsed && <span className="flex-1">{item.title}</span>}
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1">{item.title}</span>
+                            {item.premium && (
+                              <Crown className="w-4 h-4 text-premium" />
+                            )}
+                          </>
+                        )}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
