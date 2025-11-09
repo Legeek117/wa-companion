@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
+import { ControlPanel } from "./ControlPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, LogOut, Settings, User } from "lucide-react";
+import { Bell, LogOut, Settings, User, Menu } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +18,7 @@ import { toast } from "sonner";
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   const handleLogout = () => {
     toast.success("Déconnexion réussie");
@@ -26,10 +29,20 @@ const DashboardLayout = () => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
+        <ControlPanel isOpen={isPanelOpen} onClose={() => setIsPanelOpen(false)} />
         <div className="flex-1 flex flex-col">
           {/* Top Bar */}
           <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center gap-4 px-6">
+            <div className="flex h-16 items-center gap-4 px-4 md:px-6">
+              {/* Mobile Menu Button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setIsPanelOpen(true)}
+              >
+                <Menu className="w-5 h-5" />
+              </Button>
               <div className="flex-1" />
               <div className="flex items-center gap-3">
                 <Badge variant="outline" className="hidden sm:flex">
@@ -75,8 +88,8 @@ const DashboardLayout = () => {
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 overflow-auto">
-            <div className="container mx-auto p-6 max-w-7xl">
+          <main className="flex-1 overflow-auto pb-20 md:pb-0">
+            <div className="container mx-auto p-4 md:p-6 max-w-7xl">
               <Outlet />
             </div>
           </main>
