@@ -92,3 +92,10 @@ Si tout est correct, vous devriez voir :
 ### Port déjà utilisé
 - Changez `PORT=8000` à un autre port (ex: `PORT=8001`)
 
+
+
+
+
+
+
+

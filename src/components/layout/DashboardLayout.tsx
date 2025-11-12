@@ -15,9 +15,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { PlanBadge } from "@/components/PlanBadge";
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -25,8 +28,7 @@ const DashboardLayout = () => {
   const minSwipeDistance = 50;
 
   const handleLogout = () => {
-    toast.success("Déconnexion réussie");
-    navigate("/");
+    logout();
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
@@ -74,9 +76,11 @@ const DashboardLayout = () => {
               </Button>
               <div className="flex-1" />
               <div className="flex items-center gap-3">
-                <Badge variant="outline" className="hidden sm:flex">
-                  Plan Gratuit
-                </Badge>
+                {user && (
+                  <div className="hidden sm:flex">
+                    <PlanBadge plan={user.plan} />
+                  </div>
+                )}
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="w-5 h-5" />
                   <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full"></span>
@@ -92,16 +96,16 @@ const DashboardLayout = () => {
                   <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>
                       <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium">Jean Dupont</p>
-                        <p className="text-xs text-muted-foreground">jean@example.com</p>
+                        <p className="text-sm font-medium">{user?.email?.split('@')[0] || 'Utilisateur'}</p>
+                        <p className="text-xs text-muted-foreground">{user?.email || ''}</p>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
                       <User className="mr-2 h-4 w-4" />
                       <span>Mon profil</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Paramètres</span>
                     </DropdownMenuItem>

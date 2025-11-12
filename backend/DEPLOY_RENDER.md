@@ -208,3 +208,10 @@ Si vous utilisez Stripe, configurez le webhook :
 
 Votre backend est maintenant déployé sur Render ! 🚀
 
+
+
+
+
+
+
+

@@ -97,10 +97,50 @@ export default {
             height: "0",
           },
         },
+        "ios-fade-in": {
+          from: {
+            opacity: "0",
+            transform: "translateY(10px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+        },
+        "ios-slide-in": {
+          from: {
+            opacity: "0",
+            transform: "translateX(-20px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateX(0)",
+          },
+        },
+        "ios-bounce": {
+          "0%, 100%": {
+            transform: "translateY(0)",
+          },
+          "50%": {
+            transform: "translateY(-10px)",
+          },
+        },
+        "ios-shimmer": {
+          "0%": {
+            backgroundPosition: "-1000px 0",
+          },
+          "100%": {
+            backgroundPosition: "1000px 0",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "ios-fade-in": "ios-fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+        "ios-slide-in": "ios-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        "ios-bounce": "ios-bounce 0.6s ease-in-out",
+        "ios-shimmer": "ios-shimmer 2s infinite",
       },
     },
   },

@@ -1,5 +1,6 @@
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Sidebar,
   SidebarContent,
@@ -61,6 +62,8 @@ const bottomNavItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isPremium } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
   const collapsed = state === "collapsed";
@@ -121,7 +124,7 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
 
-          {!collapsed && (
+          {!collapsed && !isPremium && (
             <div className="mt-auto p-4 mb-4">
               <div className="bg-gradient-premium rounded-lg p-4 text-premium-foreground">
                 <Sparkles className="w-6 h-6 mb-2" />
@@ -129,7 +132,10 @@ export function AppSidebar() {
                 <p className="text-xs opacity-90 mb-3">
                   Débloquez toutes les fonctionnalités
                 </p>
-                <button className="w-full bg-background text-foreground px-3 py-2 rounded-md text-sm font-medium hover:opacity-90 transition-opacity">
+                <button 
+                  onClick={() => navigate('/dashboard/upgrade')}
+                  className="w-full bg-background text-foreground px-3 py-2 rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
+                >
                   Upgrade
                 </button>
               </div>

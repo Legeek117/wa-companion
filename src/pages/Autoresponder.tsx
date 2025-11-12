@@ -3,37 +3,173 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlanBadge } from "@/components/PlanBadge";
 import { StatsCard } from "@/components/StatsCard";
-import { MessageSquare, Send, Users, Crown } from "lucide-react";
-import { useState } from "react";
+import { MessageSquare, Send, Users, Crown, Search, RefreshCw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import { useAutoresponder } from "@/hooks/useAutoresponder";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useState, useEffect, useMemo } from "react";
 
 const Autoresponder = () => {
-  const [isPremium] = useState(false);
-  const [offlineMode, setOfflineMode] = useState(true);
-  const [busyMode, setBusyMode] = useState(false);
+  const { user } = useAuth();
+  const { config, activeMode, isLoading, updateConfig, updateContact, isUpdating, isPremium, refetchContacts } = useAutoresponder();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  
+  const offlineConfig = config?.configs.find((c) => c.mode === 'offline');
+  const busyConfig = config?.configs.find((c) => c.mode === 'busy');
+  
+  const [offlineMode, setOfflineMode] = useState(offlineConfig?.enabled || false);
+  const [busyMode, setBusyMode] = useState(busyConfig?.enabled || false);
+  const [offlineMessage, setOfflineMessage] = useState(offlineConfig?.message || '');
+  const [busyMessage, setBusyMessage] = useState(busyConfig?.message || '');
 
-  const defaultOfflineMessage = `🤖 Répondeur automatique
+  useEffect(() => {
+    if (offlineConfig) {
+      setOfflineMode(offlineConfig.enabled);
+      setOfflineMessage(offlineConfig.message);
+    }
+    if (busyConfig) {
+      setBusyMode(busyConfig.enabled);
+      setBusyMessage(busyConfig.message);
+    }
+  }, [offlineConfig, busyConfig]);
+
+  const defaultOfflineMessage = offlineConfig?.message || `🤖 Répondeur automatique
 
 Bonjour ! Je ne suis pas disponible pour le moment.
 Laissez-moi un message, je vous répondrai dès que possible.
 
 Merci de votre compréhension !`;
 
-  const defaultBusyMessage = `⏰ Mode Occupé
+  const defaultBusyMessage = busyConfig?.message || `⏰ Mode Occupé
 
 Je suis actuellement occupé(e) et ne peux pas répondre.
 Je reviendrai vers vous dès que possible.
 
 Merci de patienter !`;
 
-  const contacts = [
-    { id: 1, name: "Sarah", enabled: true },
-    { id: 2, name: "John", enabled: false },
-    { id: 3, name: "Marie", enabled: true },
-  ];
+    const contacts = config?.contacts || [];
+    const [searchQuery, setSearchQuery] = useState("");
+    const [localContacts, setLocalContacts] = useState(contacts);
+
+    // Update local contacts when config changes
+    useEffect(() => {
+      console.log('[Autoresponder] Config contacts changed:', {
+        contactsCount: config?.contacts?.length || 0,
+        isPremium: isPremium,
+        isLoading,
+        contacts: config?.contacts,
+      });
+      setLocalContacts(config?.contacts || []);
+    }, [config?.contacts, isPremium, isLoading]);
+
+  // Log contacts for debugging
+  useEffect(() => {
+    console.log('[Autoresponder] Contacts state:', {
+      contactsCount: contacts.length,
+      localContactsCount: localContacts.length,
+      isPremium,
+      isLoading,
+    });
+  }, [contacts, localContacts, isPremium, isLoading]);
+
+  // Filter contacts based on search
+  const filteredContacts = useMemo(() => {
+    if (!searchQuery.trim()) return localContacts;
+    const query = searchQuery.toLowerCase();
+    return localContacts.filter(
+      (contact) =>
+        contact.contact_name.toLowerCase().includes(query) ||
+        contact.contact_id.toLowerCase().includes(query)
+    );
+  }, [localContacts, searchQuery]);
+
+  const handleContactToggle = (contactId: string, enabled: boolean) => {
+    const contact = localContacts.find((c) => c.contact_id === contactId);
+    if (contact) {
+      updateContact({
+        contactId,
+        contactName: contact.contact_name,
+        enabled,
+      });
+      
+      // Update local state optimistically
+      setLocalContacts(
+        localContacts.map((c) =>
+          c.contact_id === contactId ? { ...c, enabled } : c
+        )
+      );
+    }
+  };
+
+  const handleEnableAll = () => {
+    localContacts.forEach((contact) => {
+      if (!contact.enabled) {
+        updateContact({
+          contactId: contact.contact_id,
+          contactName: contact.contact_name,
+    enabled: true,
+        });
+      }
+    });
+    
+    // Update local state optimistically
+    setLocalContacts(
+      localContacts.map((c) => ({ ...c, enabled: true }))
+    );
+    toast.success("Tous les contacts ont été activés");
+  };
+
+  const handleDisableAll = () => {
+    localContacts.forEach((contact) => {
+      if (contact.enabled) {
+        updateContact({
+          contactId: contact.contact_id,
+          contactName: contact.contact_name,
+          enabled: false,
+        });
+      }
+    });
+    
+    // Update local state optimistically
+    setLocalContacts(
+      localContacts.map((c) => ({ ...c, enabled: false }))
+    );
+    toast.success("Tous les contacts ont été désactivés");
+  };
+
+  const handleOfflineToggle = (enabled: boolean) => {
+    setOfflineMode(enabled);
+    updateConfig({ mode: 'offline', enabled, message: offlineMessage });
+    toast.success(enabled ? 'Mode Hors Ligne activé' : 'Mode Hors Ligne désactivé');
+  };
+
+  const handleBusyToggle = (enabled: boolean) => {
+    setBusyMode(enabled);
+    updateConfig({ mode: 'busy', enabled, message: busyMessage });
+    toast.success(enabled ? 'Mode Occupé activé' : 'Mode Occupé désactivé');
+  };
+
+  const handleMessageUpdate = (mode: string, message: string) => {
+    if (mode === 'offline') {
+      setOfflineMessage(message);
+      if (offlineMode) {
+        updateConfig({ mode: 'offline', enabled: true, message });
+      }
+    } else {
+      setBusyMessage(message);
+      if (busyMode) {
+        updateConfig({ mode: 'busy', enabled: true, message });
+      }
+    }
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -43,29 +179,37 @@ Merci de patienter !`;
           <p className="text-sm sm:text-base text-muted-foreground">Gérez vos réponses automatiques intelligentes</p>
         </div>
         <div className="flex-shrink-0">
-          <PlanBadge isPremium={isPremium} />
+          <PlanBadge plan={isPremium ? 'premium' : 'free'} />
         </div>
       </div>
 
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
-        <StatsCard
-          title="Messages reçus"
-          value="47"
-          icon={MessageSquare}
-          description="Aujourd'hui"
-        />
-        <StatsCard
-          title="Réponses envoyées"
-          value="47"
-          icon={Send}
-          description="Automatiques"
-        />
-        <StatsCard
-          title="Contacts uniques"
-          value="23"
-          icon={Users}
-          description="Cette semaine"
-        />
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="h-24" />
+          ))
+        ) : (
+          <>
+            <StatsCard
+              title="Mode actif"
+              value={activeMode ? activeMode.mode : 'Aucun'}
+              icon={MessageSquare}
+              description={activeMode ? 'Répondeur actif' : 'Aucun mode activé'}
+            />
+            <StatsCard
+              title="Contacts configurés"
+              value={contacts.length.toString()}
+              icon={Users}
+              description={isPremium ? 'Filtrage activé' : 'Tous les contacts'}
+            />
+            <StatsCard
+              title="Plan"
+              value={isPremium ? 'Premium' : 'Gratuit'}
+              icon={Send}
+              description={isPremium ? 'Fonctionnalités complètes' : 'Fonctionnalités limitées'}
+            />
+          </>
+        )}
       </div>
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
@@ -85,8 +229,9 @@ Merci de patienter !`;
             <div className="space-y-2">
               <Label className="text-sm">Message {!isPremium && <span className="text-xs text-muted-foreground">🔒 Non modifiable</span>}</Label>
               <Textarea
-                value={defaultOfflineMessage}
-                disabled={!isPremium}
+                value={offlineMessage || defaultOfflineMessage}
+                disabled={!isPremium || isUpdating}
+                onChange={(e) => handleMessageUpdate('offline', e.target.value)}
                 rows={6}
                 className={`text-sm sm:min-h-[140px] ${!isPremium ? "bg-muted cursor-not-allowed" : ""}`}
               />
@@ -105,18 +250,17 @@ Merci de patienter !`;
               <Switch
                 id="busy"
                 checked={busyMode}
-                onCheckedChange={(checked) => {
-                  setBusyMode(checked);
-                  toast.success(checked ? "Mode Occupé activé" : "Mode Occupé désactivé");
-                }}
+                disabled={isUpdating}
+                onCheckedChange={handleBusyToggle}
               />
             </div>
 
             <div className="space-y-2">
               <Label className="text-sm">Message {!isPremium && <span className="text-xs text-muted-foreground">🔒 Non modifiable</span>}</Label>
               <Textarea
-                value={defaultBusyMessage}
-                disabled={!isPremium}
+                value={busyMessage || defaultBusyMessage}
+                disabled={!isPremium || isUpdating}
+                onChange={(e) => handleMessageUpdate('busy', e.target.value)}
                 rows={6}
                 className={`text-sm sm:min-h-[140px] ${!isPremium ? "bg-muted cursor-not-allowed" : ""}`}
               />
@@ -125,7 +269,7 @@ Merci de patienter !`;
         </Card>
       </div>
 
-      {!isPremium && (
+      {!isLoading && !isPremium && (
         <Card className="border-premium bg-premium/5">
           <CardContent className="pt-6">
             <div className="flex items-start gap-4">
@@ -154,7 +298,7 @@ Merci de patienter !`;
                     📊 Statistiques détaillées et analytics
                   </li>
                 </ul>
-                <Button className="bg-premium mt-4">
+                <Button className="bg-premium mt-4" onClick={() => navigate('/dashboard/upgrade')}>
                   Passer à Premium
                 </Button>
               </div>
@@ -163,38 +307,107 @@ Merci de patienter !`;
         </Card>
       )}
 
-      {isPremium && (
+      {!isLoading && isPremium && (
         <Card>
           <CardHeader>
             <CardTitle>🎯 Filtrage des Destinataires</CardTitle>
             <CardDescription>Choisissez qui reçoit les réponses automatiques</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Rechercher un contact..."
+                  className="pl-10 text-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm">Activer Tout</Button>
-              <Button variant="outline" size="sm">Désactiver Tout</Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleEnableAll}
+                  disabled={isUpdating}
+                >
+                  Activer Tout
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleDisableAll}
+                  disabled={isUpdating}
+                >
+                  Désactiver Tout
+                </Button>
+              </div>
             </div>
 
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {isLoading ? (
             <div className="space-y-2">
-              {contacts.map((contact) => (
-                <div
-                  key={contact.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback>{contact.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{contact.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {contact.enabled ? "Réponse auto" : "Pas de réponse"}
-                      </p>
-                    </div>
-                  </div>
-                  <Switch checked={contact.enabled} />
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <Skeleton key={index} className="h-16 w-full" />
+                  ))}
                 </div>
-              ))}
+              ) : filteredContacts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium mb-2">Aucun contact trouvé</p>
+                  <p className="text-sm mb-4">
+                    {searchQuery 
+                      ? "Aucun contact ne correspond à votre recherche"
+                      : "Les contacts apparaîtront ici après avoir reçu des messages. Les contacts sont automatiquement ajoutés quand vous recevez un message."}
+                  </p>
+                     {!searchQuery && (
+                       <Button
+                         variant="outline"
+                         size="sm"
+                         onClick={() => {
+                           // Force refetch of contacts
+                           refetchContacts();
+                           queryClient.invalidateQueries({ queryKey: ['autoresponder', 'config', user?.id] });
+                         }}
+                       >
+                         <RefreshCw className="w-3 h-3 mr-1" />
+                         Actualiser
+                       </Button>
+                     )}
+                </div>
+              ) : (
+                filteredContacts.map((contact) => (
+                  <div
+                    key={contact.contact_id}
+                    className="flex items-center justify-between p-3 sm:p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0">
+                        <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${contact.contact_name}`} />
+                        <AvatarFallback className="text-xs sm:text-sm">
+                          {contact.contact_name[0]?.toUpperCase() || '?'}
+                        </AvatarFallback>
+                    </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm sm:text-base truncate">
+                          {contact.contact_name}
+                        </p>
+                        <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                          {contact.contact_id}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {contact.enabled ? "✅ Réponse automatique activée" : "❌ Pas de réponse automatique"}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch 
+                      checked={contact.enabled ?? true}
+                      onCheckedChange={(checked) => handleContactToggle(contact.contact_id, checked)}
+                      disabled={isUpdating}
+                    />
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

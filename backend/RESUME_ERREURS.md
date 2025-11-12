@@ -98,3 +98,10 @@ docker run -d -p 6379:6379 redis:alpine
 
 **Note** : Redis n'est **PAS nécessaire** pour tester l'authentification et WhatsApp.
 
+
+
+
+
+
+
+

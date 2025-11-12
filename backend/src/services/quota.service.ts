@@ -23,38 +23,65 @@ const QUOTA_LIMITS = {
  * Get or create quota record for a user
  */
 const getOrCreateQuota = async (userId: string) => {
-  const { data: existingQuota } = await supabase
-    .from('quotas')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
+  try {
+    const { data: existingQuota, error: findError } = await supabase
+      .from('quotas')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
 
-  if (existingQuota) {
-    return existingQuota;
+    // If error is not "not found", log it
+    if (findError && findError.code !== 'PGRST116') {
+      logger.warn('[Quota] Error finding quota:', {
+        error: findError,
+        message: findError.message,
+        code: findError.code,
+        userId,
+      });
+    }
+
+    if (existingQuota) {
+      return existingQuota;
+    }
+
+    // Create new quota record
+    const resetDate = new Date();
+    resetDate.setMonth(resetDate.getMonth() + 1);
+
+    const { data: newQuota, error: createError } = await supabase
+      .from('quotas')
+      .insert({
+        user_id: userId,
+        view_once_count: 0,
+        deleted_messages_count: 0,
+        scheduled_statuses_count: 0,
+        reset_date: resetDate.toISOString().split('T')[0], // Use DATE format, not TIMESTAMP
+      })
+      .select('*')
+      .single();
+
+    if (createError) {
+      logger.error('[Quota] Error creating quota:', {
+        error: createError,
+        message: createError.message,
+        details: createError.details,
+        hint: createError.hint,
+        code: createError.code,
+        userId,
+      });
+      throw new Error(`Failed to create quota record: ${createError.message || 'Unknown error'}`);
+    }
+
+    if (!newQuota) {
+      logger.error('[Quota] No quota data returned after insert');
+      throw new Error('Failed to create quota record: No data returned');
+    }
+
+    return newQuota;
+  } catch (error: any) {
+    logger.error('[Quota] Exception in getOrCreateQuota:', error);
+    throw error;
   }
-
-  // Create new quota record
-  const resetDate = new Date();
-  resetDate.setMonth(resetDate.getMonth() + 1);
-
-  const { data: newQuota, error: createError } = await supabase
-    .from('quotas')
-    .insert({
-      user_id: userId,
-      view_once_count: 0,
-      deleted_messages_count: 0,
-      scheduled_statuses_count: 0,
-      reset_date: resetDate.toISOString(),
-    })
-    .select('*')
-    .single();
-
-  if (createError || !newQuota) {
-    logger.error('Error creating quota:', createError);
-    throw new Error('Failed to create quota record');
-  }
-
-  return newQuota;
 };
 
 /**
@@ -256,3 +283,4 @@ export const quotaService = {
   getUserQuota,
   resetMonthlyQuotas,
 };
+// TODO: Implement quota service

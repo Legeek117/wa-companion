@@ -156,4 +156,149 @@ All colors MUST be HSL.
   .safe-area-inset-right {
     padding-right: env(safe-area-inset-right);
   }
+
+  /* iOS 26-style glassmorphism */
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .dark .glass {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+  }
+
+  .dark .glass-card {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  /* iOS-style smooth transitions */
+  .ios-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ios-transition-fast {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ios-transition-slow {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* iOS-style hover effects */
+  .ios-hover {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+                box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ios-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.15);
+  }
+
+  .ios-hover:active {
+    transform: translateY(0);
+    transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* iOS-style scale animation */
+  .ios-scale {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ios-scale:hover {
+    transform: scale(1.02);
+  }
+
+  .ios-scale:active {
+    transform: scale(0.98);
+  }
+
+  /* iOS-style fade in */
+  @keyframes ios-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .ios-fade-in {
+    animation: ios-fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* iOS-style slide in */
+  @keyframes ios-slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .ios-slide-in {
+    animation: ios-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* iOS-style bounce */
+  @keyframes ios-bounce {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  .ios-bounce {
+    animation: ios-bounce 0.6s ease-in-out;
+  }
+
+  /* iOS-style shimmer loading */
+  @keyframes ios-shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  .ios-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.2) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 1000px 100%;
+    animation: ios-shimmer 2s infinite;
+  }
+
+  .dark .ios-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
 }

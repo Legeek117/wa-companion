@@ -2,6 +2,7 @@ export interface WhatsAppSession {
   userId: string;
   sessionId: string;
   qrCode?: string;
+  pairingCode?: string;
   status: 'disconnected' | 'connecting' | 'connected';
   connectedAt?: Date;
   lastSeen?: Date;

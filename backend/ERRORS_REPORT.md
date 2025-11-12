@@ -190,3 +190,10 @@ Les routes suivantes sont commentées et non fonctionnelles :
 
 **Recommandation** : Le serveur est prêt pour tester l'authentification et WhatsApp. Les autres fonctionnalités peuvent être implémentées progressivement.
 
+
+
+
+
+
+
+

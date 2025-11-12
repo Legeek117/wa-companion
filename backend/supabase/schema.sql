@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_sessions (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   session_id VARCHAR(255) UNIQUE NOT NULL,
   qr_code TEXT,
+  pairing_code VARCHAR(20),
   status VARCHAR(50) NOT NULL DEFAULT 'disconnected' CHECK (status IN ('disconnected', 'connecting', 'connected')),
   connected_at TIMESTAMP WITH TIME ZONE,
   last_seen TIMESTAMP WITH TIME ZONE,
@@ -374,6 +375,10 @@ CREATE POLICY "Users can view own deleted messages"
 CREATE POLICY "Users can create own deleted messages"
   ON deleted_messages FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own deleted messages"
+  ON deleted_messages FOR DELETE
+  USING (auth.uid() = user_id);
 
 -- Autoresponder config policies
 CREATE POLICY "Users can manage own autoresponder"

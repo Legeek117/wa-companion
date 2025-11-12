@@ -23,6 +23,9 @@ yarn-error.log*
 sessions/
 *.data.json
 
+# Uploaded media files
+uploads/
+
 # IDE
 .vscode/
 .idea/
@@ -45,4 +48,8 @@ temp/
 
 # TypeScript
 *.tsbuildinfo
+
+
+
+
 

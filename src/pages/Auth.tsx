@@ -5,35 +5,25 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MessageCircle, Mail, Lock, User } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 const Auth = () => {
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const { register, login, isRegistering, isLoggingIn } = useAuth();
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Connexion réussie !");
-      navigate("/dashboard");
-      setIsLoading(false);
-    }, 1500);
+    login({ email: loginEmail, password: loginPassword });
   };
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Compte créé avec succès ! Bienvenue 🎉");
-      navigate("/dashboard");
-      setIsLoading(false);
-    }, 1500);
+    register({ email: signupEmail, password: signupPassword });
   };
 
   return (
@@ -45,7 +35,7 @@ const Auth = () => {
         <div className="relative">
           <Link to="/" className="flex items-center gap-2 mb-8">
             <MessageCircle className="w-10 h-10" />
-            <span className="text-2xl font-bold">WhatsApp Bot Pro</span>
+            <span className="text-2xl font-bold">AMDA</span>
           </Link>
           
           <div className="space-y-6">
@@ -76,7 +66,7 @@ const Auth = () => {
           <div className="md:hidden mb-6 sm:mb-8 text-center">
             <Link to="/" className="inline-flex items-center gap-2">
               <MessageCircle className="w-7 h-7 sm:w-8 sm:h-8 text-primary" />
-              <span className="text-xl sm:text-2xl font-bold">WhatsApp Bot Pro</span>
+              <span className="text-xl sm:text-2xl font-bold">AMDA</span>
             </Link>
           </div>
 
@@ -106,6 +96,8 @@ const Auth = () => {
                           type="email"
                           placeholder="votre@email.com"
                           className="pl-10"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
                           required
                         />
                       </div>
@@ -124,12 +116,14 @@ const Auth = () => {
                           type="password"
                           placeholder="••••••••"
                           className="pl-10"
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
                           required
                         />
                       </div>
                     </div>
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? "Connexion..." : "Se connecter"}
+                    <Button type="submit" className="w-full" disabled={isLoggingIn}>
+                      {isLoggingIn ? "Connexion..." : "Se connecter"}
                     </Button>
                   </form>
                 </CardContent>
@@ -156,6 +150,8 @@ const Auth = () => {
                           type="text"
                           placeholder="Jean Dupont"
                           className="pl-10"
+                          value={signupName}
+                          onChange={(e) => setSignupName(e.target.value)}
                           required
                         />
                       </div>
@@ -169,6 +165,8 @@ const Auth = () => {
                           type="email"
                           placeholder="votre@email.com"
                           className="pl-10"
+                          value={signupEmail}
+                          onChange={(e) => setSignupEmail(e.target.value)}
                           required
                         />
                       </div>
@@ -182,6 +180,8 @@ const Auth = () => {
                           type="password"
                           placeholder="••••••••"
                           className="pl-10"
+                          value={signupPassword}
+                          onChange={(e) => setSignupPassword(e.target.value)}
                           required
                         />
                       </div>
@@ -197,8 +197,8 @@ const Auth = () => {
                       </a>
                       .
                     </div>
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? "Création..." : "Créer mon compte"}
+                    <Button type="submit" className="w-full" disabled={isRegistering}>
+                      {isRegistering ? "Création..." : "Créer mon compte"}
                     </Button>
                   </form>
                 </CardContent>

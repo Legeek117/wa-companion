@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: amda-backend
+    env: node
+    region: oregon  # ou frankfurt, singapore selon votre localisation
+    plan: starter  # ou 'free' pour commencer (non recommandé pour production)
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Les autres variables d'environnement doivent être ajoutées manuellement
+      # dans le dashboard Render pour des raisons de sécurité
+    # Disk persistant (uniquement pour plan Starter+)
+    # disk:
+    #   name: amda-sessions
+    #   mountPath: /opt/render/project/src/backend/persistent-disk
+    #   sizeGB: 1
+

@@ -1,39 +1,32 @@
 import { Router } from 'express';
 import { protect } from '../middleware/auth.middleware';
-import { apiLimiter } from '../middleware/rateLimit.middleware';
+import { apiLimiter, looseLimiter } from '../middleware/rateLimit.middleware';
+import {
+  getStatusConfig,
+  updateStatusConfig,
+  getStatusLikes,
+  likeStatusController,
+  getStatusStats,
+  getStatusContacts,
+} from '../controllers/status.controller';
 
 const router = Router();
 
 // All routes require authentication
 router.use(protect);
 
-// Placeholder routes - will be implemented
-router.get('/', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Status routes not implemented yet',
-  });
-});
-
-router.post('/like', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Like status not implemented yet',
-  });
-});
-
-router.get('/config', (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Get status config not implemented yet',
-  });
-});
-
-router.put('/config', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Update status config not implemented yet',
-  });
-});
+// Status routes
+router.get('/', apiLimiter, getStatusLikes);
+router.get('/stats', apiLimiter, getStatusStats);
+router.get('/contacts', apiLimiter, getStatusContacts);
+router.post('/like', apiLimiter, likeStatusController);
+// /config is called frequently to sync state, use loose limiter
+router.get('/config', looseLimiter, getStatusConfig);
+router.put('/config', apiLimiter, updateStatusConfig);
 
 export default router;
+
+
+
+
+

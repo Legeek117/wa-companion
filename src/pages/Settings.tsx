@@ -8,10 +8,23 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlanBadge } from "@/components/PlanBadge";
 import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { useWhatsApp } from "@/hooks/useWhatsApp";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Settings = () => {
+  const { user, isPremium } = useAuth();
+  const { status: whatsappStatus, isConnected, isConnecting, getQR, getPairingCode, disconnect, isGettingQR, isGettingPairingCode, isDisconnecting, refetch: refetchWhatsAppStatus } = useWhatsApp();
+
   const handleSave = () => {
     toast.success("Paramètres enregistrés !");
+  };
+
+
+  const handleDisconnect = () => {
+    if (confirm("Êtes-vous sûr de vouloir déconnecter WhatsApp ?")) {
+      disconnect();
+    }
   };
 
   return (
@@ -59,7 +72,9 @@ const Settings = () => {
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
                 <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
                   <AvatarImage src="/placeholder.svg" />
-                  <AvatarFallback className="text-sm sm:text-base">JD</AvatarFallback>
+                  <AvatarFallback className="text-sm sm:text-base">
+                    {user?.email?.charAt(0).toUpperCase() || 'U'}
+                  </AvatarFallback>
                 </Avatar>
                 <Button variant="outline" size="sm" className="text-xs sm:text-sm">Changer la photo</Button>
               </div>
@@ -67,22 +82,22 @@ const Settings = () => {
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="firstname" className="text-sm">Prénom</Label>
-                  <Input id="firstname" defaultValue="Jean" className="text-sm" />
+                  <Input id="firstname" defaultValue={user?.email?.split('@')[0] || ''} className="text-sm" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastname" className="text-sm">Nom</Label>
-                  <Input id="lastname" defaultValue="Dupont" className="text-sm" />
+                  <Input id="lastname" defaultValue="" className="text-sm" />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-sm">Email</Label>
-                <Input id="email" type="email" defaultValue="jean@example.com" className="text-sm" />
+                <Input id="email" type="email" defaultValue={user?.email || ''} className="text-sm" disabled />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="phone" className="text-sm">Téléphone</Label>
-                <Input id="phone" type="tel" defaultValue="+226 XX XX XX XX" className="text-sm" />
+                <Input id="phone" type="tel" placeholder="+226 XX XX XX XX" className="text-sm" />
               </div>
 
               <Button onClick={handleSave} className="w-full sm:w-auto text-xs sm:text-sm">Enregistrer les modifications</Button>
@@ -129,24 +144,153 @@ const Settings = () => {
               <CardDescription>Gérez la connexion de votre compte WhatsApp</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm sm:text-base text-green-600">✓ Connecté</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Dernière activité : Il y a 5 min</p>
+              {isConnected ? (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base text-green-600">✓ Connecté</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                      {whatsappStatus?.lastSeen 
+                        ? `Dernière activité : ${new Date(whatsappStatus.lastSeen).toLocaleString('fr-FR')}`
+                        : 'Connecté'}
+                    </p>
+                  </div>
+                  <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse flex-shrink-0" />
                 </div>
-                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse flex-shrink-0" />
+              ) : isConnecting ? (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base text-yellow-600">Connexion en cours...</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">Génération du QR code...</p>
+                  </div>
+                  <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-yellow-500 rounded-full animate-pulse flex-shrink-0" />
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base text-red-600">Non connecté</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">Connectez votre WhatsApp pour commencer</p>
+                  </div>
+                  <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-red-500 rounded-full flex-shrink-0" />
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
+                  <p className="text-sm font-medium">Connexion WhatsApp</p>
+                  {!isConnected && (
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          console.log('[Settings] QR Code button clicked');
+                          try {
+                            await getQR();
+                            // Immediately refetch status to get the QR code
+                            setTimeout(() => {
+                              refetchWhatsAppStatus();
+                            }, 1000);
+                          } catch (error) {
+                            console.error('[Settings] Error getting QR code:', error);
+                          }
+                        }}
+                        disabled={isGettingQR || isGettingPairingCode}
+                        className="text-xs sm:text-sm"
+                      >
+                        {isGettingQR ? 'Génération...' : 'QR Code'}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          console.log('[Settings] Pairing Code button clicked');
+                          try {
+                            await getPairingCode();
+                            // Immediately refetch status to get the pairing code
+                            setTimeout(() => {
+                              refetchWhatsAppStatus();
+                            }, 1000);
+                          } catch (error) {
+                            console.error('[Settings] Error getting pairing code:', error);
+                          }
+                        }}
+                        disabled={isGettingQR || isGettingPairingCode}
+                        className="text-xs sm:text-sm"
+                      >
+                        {isGettingPairingCode ? 'Génération...' : 'Code de Couplage'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Pairing Code Display */}
+                {whatsappStatus?.pairingCode && (
+                  <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                    <p className="text-sm font-medium mb-2 text-center">Code de Couplage</p>
+                    <div className="text-center">
+                      <p className="text-2xl sm:text-3xl font-bold tracking-wider mb-2">
+                        {whatsappStatus.pairingCode}
+                      </p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        Entrez ce code dans WhatsApp → Paramètres → Appareils liés → Lier un appareil
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* QR Code Display */}
+                <div className="aspect-square max-w-xs mx-auto bg-muted rounded-lg flex items-center justify-center p-4">
+                  {(isGettingQR || isGettingPairingCode) || (isConnecting && !whatsappStatus?.qrCode && !whatsappStatus?.pairingCode) ? (
+                    <div className="text-center w-full">
+                      <Skeleton className="w-32 h-32 mx-auto mb-2" />
+                      <p className="text-muted-foreground text-sm">Génération en cours...</p>
+                    </div>
+                  ) : whatsappStatus?.qrCode ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center">
+                      {whatsappStatus.qrCode.startsWith('data:image') ? (
+                        <img 
+                          src={whatsappStatus.qrCode} 
+                          alt="QR Code WhatsApp" 
+                          className="w-full h-full object-contain rounded-lg"
+                          onError={(e) => {
+                            console.error('Error loading QR code image:', e);
+                            toast.error('Erreur lors du chargement du QR code');
+                          }}
+                          onLoad={() => {
+                            console.log('[Settings] QR code image loaded successfully');
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center p-4">
+                          <p className="text-sm text-muted-foreground mb-2">QR code invalide</p>
+                          <p className="text-xs text-muted-foreground">Format: {whatsappStatus.qrCode.substring(0, 50)}...</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-muted-foreground text-sm mb-2">Cliquez sur un bouton pour commencer</p>
+                      <p className="text-xs text-muted-foreground">QR Code ou Code de Couplage</p>
+                    </div>
+                  )}
+                </div>
+                {whatsappStatus?.qrCode && !whatsappStatus?.pairingCode && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    Scannez ce QR code avec votre application WhatsApp
+                  </p>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Scanner le QR Code</p>
-                <div className="aspect-square max-w-xs mx-auto bg-muted rounded-lg flex items-center justify-center">
-                  <p className="text-muted-foreground">QR Code ici</p>
-                </div>
-              </div>
-
-              <Button variant="destructive" className="w-full">
-                Déconnecter WhatsApp
-              </Button>
+              {isConnected && (
+                <Button 
+                  variant="destructive" 
+                  className="w-full"
+                  onClick={handleDisconnect}
+                  disabled={isDisconnecting}
+                >
+                  {isDisconnecting ? 'Déconnexion...' : 'Déconnecter WhatsApp'}
+                </Button>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -161,9 +305,9 @@ const Settings = () => {
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                   <p className="font-medium">Plan Actuel</p>
-                  <p className="text-sm text-muted-foreground">Gratuit</p>
+                  <p className="text-sm text-muted-foreground">{isPremium ? 'Premium' : 'Gratuit'}</p>
                 </div>
-                <PlanBadge isPremium={false} />
+                <PlanBadge plan={user?.plan} />
               </div>
 
               <Button className="w-full bg-premium">

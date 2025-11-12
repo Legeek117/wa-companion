@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { registerUser, loginUser, getUserById } from '../services/auth.service';
+import { registerUser, loginUser, getUserById, generateToken } from '../services/auth.service';
 import { AuthenticationError } from '../utils/errors';
 import { validate, registerSchema, loginSchema } from '../utils/validators';
 import { logger } from '../config/logger';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { UserPlan } from '../types/user.types';
 
 /**
  * Register a new user
@@ -52,19 +53,23 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 /**
  * Get current user
  * GET /api/auth/me
+ * Also returns a new token to automatically refresh it
  */
 export const getMe = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.userId) {
+    if (!req.userId || !req.userEmail || !req.userPlan) {
       throw new AuthenticationError('User not authenticated');
     }
 
-    // Get user from database
+    // Get user from database to get latest plan and subscription status
     const user = await getUserById(req.userId);
 
     if (!user) {
       throw new AuthenticationError('User not found');
     }
+
+    // Generate a new token with the latest user data (this automatically refreshes the token)
+    const newToken = generateToken(user.id, user.email, user.plan as UserPlan);
 
     res.status(200).json({
       success: true,
@@ -73,9 +78,10 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
         email: user.email,
         plan: user.plan,
         subscription_id: user.subscription_id,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
+        created_at: user.created_at.toISOString(),
+        updated_at: user.updated_at.toISOString(),
       },
+      token: newToken, // Return new token to refresh it automatically
     });
   } catch (error) {
     next(error);

@@ -1,32 +1,29 @@
 import { Router } from 'express';
 import { protect } from '../middleware/auth.middleware';
 import { apiLimiter } from '../middleware/rateLimit.middleware';
+import {
+  listDeletedMessages,
+  getDeletedMessageById,
+  exportDeletedMessages,
+  getDeletedMessagesStats,
+  deleteDeletedMessage,
+} from '../controllers/deletedMessages.controller';
 
 const router = Router();
 
 // All routes require authentication
 router.use(protect);
 
-// Placeholder routes - will be implemented
-router.get('/', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Deleted Messages routes not implemented yet',
-  });
-});
-
-router.get('/:id', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Get deleted message not implemented yet',
-  });
-});
-
-router.get('/export', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Export deleted messages not implemented yet',
-  });
-});
+// Deleted Messages routes
+router.get('/', apiLimiter, listDeletedMessages);
+router.get('/stats', apiLimiter, getDeletedMessagesStats);
+router.get('/export', apiLimiter, exportDeletedMessages);
+router.get('/:id', apiLimiter, getDeletedMessageById);
+router.delete('/:id', apiLimiter, deleteDeletedMessage);
 
 export default router;
+
+
+
+
+

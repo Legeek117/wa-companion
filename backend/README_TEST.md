@@ -156,3 +156,10 @@ curl -X GET http://localhost:8000/api/whatsapp/status \
 - `GET /api/whatsapp/status` - Statut de connexion (protégé)
 - `POST /api/whatsapp/disconnect` - Déconnexion WhatsApp (protégé)
 
+
+
+
+
+
+
+
