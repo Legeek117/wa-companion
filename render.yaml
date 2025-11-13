@@ -2,7 +2,7 @@ services:
   - type: web
     name: amda-backend
     env: node
-    plan: starter
+    plan: free  # Changez en 'starter' pour la production (plan payant)
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -37,16 +37,6 @@ services:
         value: ./sessions
       - key: WHATSAPP_SESSION_TIMEOUT
         value: 300000
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_PUBLISHABLE_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: STRIPE_PRICE_ID_MONTHLY
-        sync: false
-      - key: STRIPE_PRICE_ID_YEARLY
-        sync: false
       - key: LOG_LEVEL
         value: info
       # Redis (optional - can be empty if not using Redis)
