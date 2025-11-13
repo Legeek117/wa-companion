@@ -7,11 +7,19 @@ import {
   downloadViewOnceCapture,
   getViewOnceStats,
 } from '../controllers/viewOnce.controller';
+import {
+  getCommandConfig,
+  updateCommandConfig,
+} from '../controllers/viewOnceCommand.controller';
 
 const router = Router();
 
 // All routes require authentication
 router.use(protect);
+
+// View Once command configuration routes
+router.get('/command-config', apiLimiter, getCommandConfig);
+router.put('/command-config', apiLimiter, updateCommandConfig);
 
 // View Once routes
 router.get('/', apiLimiter, listViewOnceCaptures);

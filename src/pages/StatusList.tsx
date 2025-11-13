@@ -20,7 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://amda-backend-3aji.onrender.com';
 
 const buildMediaUrl = (mediaUrl: string) => {
   if (mediaUrl.startsWith('http')) {

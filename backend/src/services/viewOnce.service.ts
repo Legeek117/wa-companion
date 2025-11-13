@@ -475,7 +475,7 @@ export const captureViewOnceFromQuoted = async (
   chatJid: string,
   senderId: string,
   senderName: string,
-  commandType: 'vv' | 'dashboard' = 'vv'
+  commandType: 'vv' | 'dashboard' = 'dashboard'
 ): Promise<{
   success: boolean;
   message?: string;
@@ -611,40 +611,9 @@ export const captureViewOnceFromQuoted = async (
       logger.warn('[ViewOnce] Error incrementing quota:', err);
     });
 
-    // 8. Envoyer le média selon le type de commande (si nécessaire)
-    // Mode 'dashboard' : ne rien envoyer dans le chat, juste sauvegarder pour le dashboard
-    // Mode 'vv' : renvoyer dans le même chat
-    try {
-      if (commandType === 'vv') {
-        // Renvoyer dans le même chat
-        const caption = viewOnceData.caption || '👁️ View Once capturé';
-        
-        if (viewOnceData.type === 'image') {
-          await socket.sendMessage(chatJid, {
-            image: downloadResult.buffer,
-            caption,
-          });
-        } else if (viewOnceData.type === 'video') {
-          await socket.sendMessage(chatJid, {
-            video: downloadResult.buffer,
-            caption,
-          });
-        } else if (viewOnceData.type === 'audio') {
-          await socket.sendMessage(chatJid, {
-            audio: downloadResult.buffer,
-            mimetype: 'audio/mp4',
-            ptt: false,
-          });
-          if (caption) {
-            await socket.sendMessage(chatJid, { text: caption });
-          }
-        }
-      }
-      // Mode 'dashboard' : ne rien envoyer, juste sauvegarder silencieusement
-    } catch (sendError) {
-      logger.error('[ViewOnce] Error sending media:', sendError);
-      // On continue même si l'envoi échoue, le média est sauvegardé
-    }
+    // 8. Mode silencieux : ne rien envoyer dans le chat
+    // Le View Once est capturé et sauvegardé silencieusement pour le dashboard
+    // L'utilisateur peut le consulter dans le dashboard sans que l'expéditeur soit notifié
 
     logger.info(`[ViewOnce] ✅ View Once captured successfully: ${capture.id}`);
 

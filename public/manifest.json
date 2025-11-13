@@ -1,21 +1,26 @@
 {
-  "name": "AMDA Assistant",
+  "name": "AMDA - WhatsApp Assistant",
   "short_name": "AMDA",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#0f172a",
+  "theme_color": "#25D366",
   "description": "Assistant WhatsApp AMDA pour automatiser vos statuts, capturer les messages et gérer vos communications.",
+  "scope": "/",
+  "orientation": "portrait",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "/icon-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

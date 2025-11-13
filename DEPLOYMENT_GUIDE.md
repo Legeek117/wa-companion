@@ -54,13 +54,22 @@ Le projet est déjà configuré avec `netlify.toml`. Assurez-vous que :
 - ✅ `netlify.toml` est présent à la racine
 - ✅ Les icônes PWA sont dans `/public`
 
-### 2. Variables d'environnement Netlify
+### 2. Variables d'environnement Netlify ⚠️ IMPORTANT
 
 Dans Netlify → **Site settings** → **Environment variables**, ajoutez :
 
 ```
-VITE_API_URL=https://votre-backend.render.com
+VITE_API_URL=https://votre-backend.onrender.com
 ```
+
+⚠️ **CRUCIAL** : Remplacez `votre-backend.onrender.com` par l'URL réelle de votre backend Render.
+
+**Comment obtenir l'URL** :
+1. Allez sur [Render Dashboard](https://dashboard.render.com)
+2. Ouvrez votre service `amda-backend`
+3. Copiez l'URL affichée (ex: `https://amda-backend-xxxx.onrender.com`)
+
+**⚠️ Après avoir ajouté la variable, vous DEVEZ redéployer le site** car les variables Vite sont intégrées au moment du build.
 
 ### 3. Déployer
 

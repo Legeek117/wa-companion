@@ -2,7 +2,9 @@ import { WASocket, proto } from '@whiskeysockets/baileys';
 import { logger } from '../config/logger';
 import { getSupabaseClient } from '../config/database';
 import { captureViewOnceFromQuoted } from './viewOnce.service';
-import { getSocket } from './whatsapp.service';
+import { getSocket, getActiveSockets } from './whatsapp.service';
+import { matchesViewOnceCommand } from './viewOnceCommand.service';
+import { findUserIdBySocketJID } from './userIdentification.service';
 
 const supabase = getSupabaseClient();
 
@@ -101,18 +103,44 @@ export const handleIncomingMessage = async (
       return;
     }
 
-    // Détecter la commande .vv uniquement
-    const isVvCommand = normalizedText === '.vv' || normalizedText === '!vv';
+    // IMPORTANT: Identifier le bon utilisateur qui a envoyé la commande
+    // Si le message vient de quelqu'un qui a aussi le bot, on doit utiliser son userId
+    // et non celui du socket qui a reçu le message
+    let commandUserId = userId; // Par défaut, utiliser le userId du socket
+    
+    // Si le message n'est pas fromMe, vérifier si l'expéditeur a aussi le bot
+    if (!fromMe && senderId) {
+      try {
+        const activeSockets = getActiveSockets();
+        const senderUserId = findUserIdBySocketJID(senderId, activeSockets);
+        
+        if (senderUserId) {
+          // L'expéditeur a aussi le bot, utiliser son userId
+          commandUserId = senderUserId;
+          logger.info(`[ViewOnce] Command sent by user ${commandUserId} (JID: ${senderId}), not ${userId}`);
+        }
+      } catch (error) {
+        logger.warn('[ViewOnce] Error identifying command sender, using socket userId:', error);
+      }
+    }
 
-    if (!isVvCommand) {
+    // Détecter la commande View Once configurée par l'utilisateur qui a envoyé la commande
+    const isViewOnceCommand = await matchesViewOnceCommand(commandUserId, messageText);
+
+    if (!isViewOnceCommand) {
       // Aucune autre commande gérée pour l'instant
       return;
     }
 
-    const commandLabel = '.vv';
-    logger.info(`[ViewOnce] 📨 View Once command detected (${commandLabel}) from ${senderId}`, {
+    // Récupérer la config pour le label (utiliser le userId de celui qui a envoyé la commande)
+    const { getViewOnceCommandConfig } = await import('./viewOnceCommand.service');
+    const config = await getViewOnceCommandConfig(commandUserId);
+    const commandLabel = config.command_emoji || config.command_text;
+    logger.info(`[ViewOnce] 📨 View Once command detected (${commandLabel}) from ${senderId} by user ${commandUserId}`, {
       fromMe,
       hasQuotedMessage: !!quotedMessage,
+      socketUserId: userId,
+      commandUserId,
     });
     
     if (!quotedMessage) {
@@ -123,25 +151,25 @@ export const handleIncomingMessage = async (
       return;
     }
 
-    // Récupérer le socket actif - essayer plusieurs méthodes
-    let activeSocket = getSocket(userId);
+    // Récupérer le socket actif pour l'utilisateur qui a envoyé la commande
+    let activeSocket = getSocket(commandUserId);
     
-    // Si pas de socket via getSocket, utiliser le socket passé en paramètre
-    if (!activeSocket && socket) {
-      logger.info(`[ViewOnce] Using socket from message parameter for user ${userId}`);
+    // Si pas de socket via getSocket, utiliser le socket passé en paramètre (si c'est le bon utilisateur)
+    if (!activeSocket && socket && commandUserId === userId) {
+      logger.info(`[ViewOnce] Using socket from message parameter for user ${commandUserId}`);
       activeSocket = socket;
     }
     
     // Si toujours pas de socket, essayer de reconnecter
     if (!activeSocket) {
-      logger.warn(`[ViewOnce] No active socket for user ${userId}, attempting to reconnect...`);
+      logger.warn(`[ViewOnce] No active socket for user ${commandUserId}, attempting to reconnect...`);
       try {
         // Importer la fonction de reconnexion
         const { reconnectWhatsAppIfCredentialsExist } = await import('./whatsapp.service');
-        const reconnected = await reconnectWhatsAppIfCredentialsExist(userId);
+        const reconnected = await reconnectWhatsAppIfCredentialsExist(commandUserId);
         if (reconnected) {
-          activeSocket = getSocket(userId);
-          logger.info(`[ViewOnce] ✅ Socket reconnected for user ${userId}`);
+          activeSocket = getSocket(commandUserId);
+          logger.info(`[ViewOnce] ✅ Socket reconnected for user ${commandUserId}`);
         }
       } catch (error) {
         logger.error(`[ViewOnce] Error attempting to reconnect socket:`, error);
@@ -149,22 +177,26 @@ export const handleIncomingMessage = async (
     }
     
     if (!activeSocket) {
-      logger.error(`[ViewOnce] ❌ No active socket available for user ${userId} after reconnection attempt`);
+      logger.error(`[ViewOnce] ❌ No active socket available for user ${commandUserId} after reconnection attempt`);
       // Pas de message d'erreur - silencieux
       return;
     }
 
-    const captureMode: 'vv' | 'viewonce' | 'dashboard' = 'vv';
+    // Mode silencieux : sauvegarder pour le dashboard sans envoyer de message
+    const captureMode: 'vv' | 'dashboard' = 'dashboard';
 
     // Capturer le View Once depuis le quoted message
-    logger.info(`[ViewOnce] 📸 Capturing View Once from quoted message for user ${userId}`, {
+    // Utiliser commandUserId (celui qui a tapé la commande) au lieu de userId (propriétaire du socket)
+    logger.info(`[ViewOnce] 📸 Capturing View Once from quoted message for user ${commandUserId}`, {
       commandType: captureMode,
       senderId,
       chatJid,
+      socketUserId: userId,
+      commandUserId,
     });
     
     const result = await captureViewOnceFromQuoted(
-      userId,
+      commandUserId, // Utiliser commandUserId au lieu de userId
       activeSocket,
       quotedMessage,
       chatJid,

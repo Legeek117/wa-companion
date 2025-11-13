@@ -6,15 +6,65 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlanBadge } from "@/components/PlanBadge";
-import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield } from "lucide-react";
+import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
+import { useState, useEffect } from "react";
 
 const Settings = () => {
   const { user, isPremium } = useAuth();
   const { status: whatsappStatus, isConnected, isConnecting, getQR, getPairingCode, disconnect, isGettingQR, isGettingPairingCode, isDisconnecting, refetch: refetchWhatsAppStatus } = useWhatsApp();
+  
+  // View Once command config
+  const [viewOnceCommand, setViewOnceCommand] = useState('.vv');
+  const [viewOnceEmoji, setViewOnceEmoji] = useState<string>('');
+  const [viewOnceEnabled, setViewOnceEnabled] = useState(true);
+  const [isLoadingCommandConfig, setIsLoadingCommandConfig] = useState(true);
+  const [isSavingCommandConfig, setIsSavingCommandConfig] = useState(false);
+
+  useEffect(() => {
+    loadViewOnceCommandConfig();
+  }, []);
+
+  const loadViewOnceCommandConfig = async () => {
+    try {
+      setIsLoadingCommandConfig(true);
+      const response = await api.viewOnce.getCommandConfig();
+      if (response.success && response.data) {
+        setViewOnceCommand(response.data.command_text || '.vv');
+        setViewOnceEmoji(response.data.command_emoji || '');
+        setViewOnceEnabled(response.data.enabled !== false);
+      }
+    } catch (error) {
+      console.error('Error loading View Once command config:', error);
+    } finally {
+      setIsLoadingCommandConfig(false);
+    }
+  };
+
+  const handleSaveViewOnceCommand = async () => {
+    try {
+      setIsSavingCommandConfig(true);
+      const response = await api.viewOnce.updateCommandConfig({
+        command_text: viewOnceCommand.trim(),
+        command_emoji: viewOnceEmoji.trim() || null,
+        enabled: viewOnceEnabled,
+      });
+      if (response.success) {
+        toast.success('Configuration de la commande View Once enregistrée !');
+      } else {
+        toast.error('Erreur lors de l\'enregistrement');
+      }
+    } catch (error) {
+      console.error('Error saving View Once command config:', error);
+      toast.error('Erreur lors de l\'enregistrement');
+    } finally {
+      setIsSavingCommandConfig(false);
+    }
+  };
 
   const handleSave = () => {
     toast.success("Paramètres enregistrés !");
@@ -350,6 +400,78 @@ const Settings = () => {
               </div>
 
               <Button onClick={handleSave}>Enregistrer</Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="w-5 h-5" />
+                Commande View Once
+              </CardTitle>
+              <CardDescription>
+                Configurez la commande pour capturer les messages View Once
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingCommandConfig ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="viewOnceCommand">Commande texte (par défaut: .vv)</Label>
+                    <Input
+                      id="viewOnceCommand"
+                      value={viewOnceCommand}
+                      onChange={(e) => setViewOnceCommand(e.target.value)}
+                      placeholder=".vv"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Utilisez cette commande en répondant à un message View Once pour le capturer
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="viewOnceEmoji">Commande emoji (optionnel)</Label>
+                    <Input
+                      id="viewOnceEmoji"
+                      value={viewOnceEmoji}
+                      onChange={(e) => setViewOnceEmoji(e.target.value)}
+                      placeholder="👀"
+                      maxLength={10}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Vous pouvez aussi utiliser un emoji comme commande (ex: 👀)
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                    <div className="space-y-0.5 flex-1">
+                      <Label className="text-sm">Activer la capture View Once</Label>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        Désactiver pour arrêter la capture automatique
+                      </p>
+                    </div>
+                    <Switch
+                      checked={viewOnceEnabled}
+                      onCheckedChange={setViewOnceEnabled}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleSaveViewOnceCommand}
+                    disabled={isSavingCommandConfig}
+                    className="w-full sm:w-auto"
+                  >
+                    {isSavingCommandConfig ? 'Enregistrement...' : 'Enregistrer la configuration'}
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

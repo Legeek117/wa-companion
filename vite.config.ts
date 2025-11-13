@@ -39,7 +39,10 @@ export default defineConfig(({ mode }) => ({
             type: "image/png",
             purpose: "any maskable"
           }
-        ]
+        ],
+        categories: ["productivity", "utilities"],
+        screenshots: [],
+        shortcuts: []
       },
       injectRegister: "auto",
       strategies: "generateSW",

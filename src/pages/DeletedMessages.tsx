@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://amda-backend-3aji.onrender.com';
 
 // Helper function to build full media URL
 const buildMediaUrl = (mediaUrl: string | null): string | null => {

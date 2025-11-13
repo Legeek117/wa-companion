@@ -86,6 +86,13 @@ const supabase = getSupabaseClient();
 // Store active WhatsApp sockets by userId
 const activeSockets = new Map<string, WASocket>();
 
+/**
+ * Get all active sockets (for user identification)
+ */
+export const getActiveSockets = (): Map<string, WASocket> => {
+  return activeSockets;
+};
+
 // Store QR codes by userId (temporary, cleared after connection)
 const qrCodes = new Map<string, string>();
 

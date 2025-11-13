@@ -174,7 +174,24 @@ CREATE INDEX IF NOT EXISTS idx_autoresponder_config_mode ON autoresponder_config
 CREATE INDEX IF NOT EXISTS idx_autoresponder_config_enabled ON autoresponder_config(enabled);
 
 -- ============================================
--- 9. AUTORESPONDER CONTACTS TABLE (Premium)
+-- 9. VIEW ONCE COMMAND CONFIG TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS view_once_command_config (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  command_text VARCHAR(50) DEFAULT '.vv',
+  command_emoji VARCHAR(10),
+  enabled BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_view_once_command_config_user_id ON view_once_command_config(user_id);
+
+-- ============================================
+-- 10. AUTORESPONDER CONTACTS TABLE (Premium)
 -- ============================================
 CREATE TABLE IF NOT EXISTS autoresponder_contacts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -194,7 +211,7 @@ CREATE INDEX IF NOT EXISTS idx_autoresponder_contacts_contact_id ON autoresponde
 CREATE INDEX IF NOT EXISTS idx_autoresponder_contacts_enabled ON autoresponder_contacts(enabled);
 
 -- ============================================
--- 10. SCHEDULED STATUSES TABLE
+-- 11. SCHEDULED STATUSES TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS scheduled_statuses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -216,7 +233,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_statuses_status ON scheduled_statuses(s
 CREATE INDEX IF NOT EXISTS idx_scheduled_statuses_user_status ON scheduled_statuses(user_id, status);
 
 -- ============================================
--- 11. QUOTAS TABLE
+-- 12. QUOTAS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS quotas (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -235,7 +252,7 @@ CREATE INDEX IF NOT EXISTS idx_quotas_user_id ON quotas(user_id);
 CREATE INDEX IF NOT EXISTS idx_quotas_reset_date ON quotas(reset_date);
 
 -- ============================================
--- 12. ANALYTICS TABLE (Premium - Optional)
+-- 13. ANALYTICS TABLE (Premium - Optional)
 -- ============================================
 CREATE TABLE IF NOT EXISTS analytics (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -293,6 +310,10 @@ DROP TRIGGER IF EXISTS update_autoresponder_contacts_updated_at ON autoresponder
 CREATE TRIGGER update_autoresponder_contacts_updated_at BEFORE UPDATE ON autoresponder_contacts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_view_once_command_config_updated_at ON view_once_command_config;
+CREATE TRIGGER update_view_once_command_config_updated_at BEFORE UPDATE ON view_once_command_config
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 DROP TRIGGER IF EXISTS update_scheduled_statuses_updated_at ON scheduled_statuses;
 CREATE TRIGGER update_scheduled_statuses_updated_at BEFORE UPDATE ON scheduled_statuses
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -331,6 +352,7 @@ ALTER TABLE view_once_captures ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deleted_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE autoresponder_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE autoresponder_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE view_once_command_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scheduled_statuses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quotas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analytics ENABLE ROW LEVEL SECURITY;
@@ -412,6 +434,12 @@ CREATE POLICY "Users can manage own autoresponder"
 DROP POLICY IF EXISTS "Users can manage own contacts" ON autoresponder_contacts;
 CREATE POLICY "Users can manage own contacts"
   ON autoresponder_contacts FOR ALL
+  USING (auth.uid() = user_id);
+
+-- View Once command config policies
+DROP POLICY IF EXISTS "Users can manage own view once command" ON view_once_command_config;
+CREATE POLICY "Users can manage own view once command"
+  ON view_once_command_config FOR ALL
   USING (auth.uid() = user_id);
 
 -- Scheduled statuses policies

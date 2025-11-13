@@ -2,7 +2,7 @@
  * API Configuration and Client
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://amda-backend-3aji.onrender.com';
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -199,6 +199,9 @@ export const api = {
     getStats: () => apiClient.get('/api/view-once/stats'),
     get: (id: string) => apiClient.get(`/api/view-once/${id}`),
     download: (id: string) => apiClient.get(`/api/view-once/${id}/download`),
+    getCommandConfig: () => apiClient.get('/api/view-once/command-config'),
+    updateCommandConfig: (config: { command_text?: string; command_emoji?: string | null; enabled?: boolean }) =>
+      apiClient.put('/api/view-once/command-config', config),
   },
 
   // Deleted Messages
