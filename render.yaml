@@ -2,7 +2,7 @@ services:
   - type: web
     name: amda-backend
     env: node
-    plan: free  # Changez en 'starter' pour la production (plan payant)
+    plan: starter
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
