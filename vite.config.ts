@@ -41,6 +41,13 @@ export default defineConfig(({ mode }) => ({
           }
         ]
       },
+      injectRegister: "auto",
+      strategies: "generateSW",
+      filename: "sw.js",
+      devOptions: {
+        enabled: true,
+        type: "module"
+      },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
@@ -59,10 +66,6 @@ export default defineConfig(({ mode }) => ({
             }
           }
         ]
-      },
-      devOptions: {
-        enabled: true,
-        type: "module"
       }
     })
   ].filter(Boolean),

@@ -2,9 +2,6 @@ import { WASocket, downloadMediaMessage, proto } from '@whiskeysockets/baileys';
 import { getSupabaseClient } from '../config/database';
 import { logger } from '../config/logger';
 import { checkViewOnceQuota, incrementViewOnce } from './quota.service';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
 
 const supabase = getSupabaseClient();
 
@@ -243,7 +240,18 @@ const extractViewOnceFromQuoted = (quotedMessage: proto.IMessage | null | undefi
       return null;
     }
 
-    logger.info('[ViewOnce] 🔍 Extracting View Once from quoted message...');
+    let workingMessage: any = quotedMessage;
+
+    if (workingMessage.ephemeralMessage?.message) {
+      logger.info('[ViewOnce] 🔁 Unwrapping ephemeral quoted message', {
+        keys: Object.keys(workingMessage.ephemeralMessage.message || {}),
+      });
+      workingMessage = workingMessage.ephemeralMessage.message;
+    }
+
+    logger.info('[ViewOnce] 🔍 Extracting View Once from quoted message...', {
+      quotedKeys: Object.keys(workingMessage || {}),
+    });
 
     // Chercher la clé viewOnceMessage dans toutes ses variantes
     let viewOnceKey: string | null = null;
@@ -257,20 +265,34 @@ const extractViewOnceFromQuoted = (quotedMessage: proto.IMessage | null | undefi
     ];
 
     for (const key of possibleKeys) {
-      if ((quotedMessage as any)[key]) {
+      if (workingMessage[key]) {
         viewOnceKey = key;
-        innerMessage = (quotedMessage as any)[key].message || null;
+        innerMessage = workingMessage[key].message || null;
         break;
       }
     }
 
     // Méthode 2 : Recherche dans les clés
-    if (!viewOnceKey && quotedMessage) {
-      const keys = Object.keys(quotedMessage);
+    if (!viewOnceKey && workingMessage) {
+      const keys = Object.keys(workingMessage);
       viewOnceKey = keys.find(key => key.startsWith('viewOnce')) || null;
       
       if (viewOnceKey) {
-        innerMessage = (quotedMessage as any)[viewOnceKey]?.message || null;
+        innerMessage = workingMessage[viewOnceKey]?.message || null;
+      }
+    }
+
+    // Méthode 3 : Ancien format viewOnce directement sur image/video/audio
+    if (!innerMessage) {
+      if (workingMessage.imageMessage?.viewOnce) {
+        viewOnceKey = 'imageMessage.viewOnce';
+        innerMessage = { imageMessage: workingMessage.imageMessage } as proto.IMessage;
+      } else if (workingMessage.videoMessage?.viewOnce) {
+        viewOnceKey = 'videoMessage.viewOnce';
+        innerMessage = { videoMessage: workingMessage.videoMessage } as proto.IMessage;
+      } else if (workingMessage.audioMessage?.viewOnce) {
+        viewOnceKey = 'audioMessage.viewOnce';
+        innerMessage = { audioMessage: workingMessage.audioMessage } as proto.IMessage;
       }
     }
 
@@ -309,7 +331,11 @@ const extractViewOnceFromQuoted = (quotedMessage: proto.IMessage | null | undefi
       // On continue quand même car le flag peut ne pas être présent même pour un View Once valide
     }
 
-    logger.info(`[ViewOnce] ✅ Extracted View Once: ${type}`);
+    logger.info(`[ViewOnce] ✅ Extracted View Once: ${type}`, {
+      innerKeys: Object.keys(innerMessage || {}),
+      mediaHasUrl: !!mediaMessage?.url,
+      viewOnceKey,
+    });
     
     return {
       type,
@@ -333,16 +359,21 @@ const downloadViewOnceFromQuoted = async (
     type: 'image' | 'video' | 'audio';
     innerMessage: proto.IMessage;
   },
-  userId: string
+  userId: string,
+  chatJid: string,
+  senderId?: string
 ): Promise<{
-  success: boolean;
-  buffer?: Buffer;
-  filename?: string;
-  localPath?: string;
-  error?: string;
+      success: boolean;
+      buffer?: Buffer;
+      filename?: string;
+      error?: string;
 }> => {
   try {
-    logger.info('[ViewOnce] 📥 Downloading View Once media from quoted...');
+    logger.info('[ViewOnce] 📥 Downloading View Once media from quoted...', {
+      chatJid,
+      senderId,
+      hasUrl: !!(viewOnceData.innerMessage as any)?.imageMessage?.url || !!(viewOnceData.innerMessage as any)?.videoMessage?.url,
+    });
 
     // Créer un message formaté pour le téléchargement
     // Format requis par downloadMediaMessage de Baileys
@@ -350,8 +381,9 @@ const downloadViewOnceFromQuoted = async (
       message: viewOnceData.innerMessage,
       key: {
         id: Buffer.from(Date.now().toString() + Math.random().toString()).toString('base64'),
-        remoteJid: 'quoted',
+        remoteJid: chatJid,
         fromMe: false,
+        participant: chatJid.endsWith('@g.us') ? senderId : undefined,
       },
     };
 
@@ -411,24 +443,17 @@ const downloadViewOnceFromQuoted = async (
     const extension = viewOnceData.type === 'video' ? 'mp4' : (viewOnceData.type === 'audio' ? 'mp3' : 'jpg');
     const filename = `${userId}_${timestamp}_${random}.${extension}`;
 
-    // Créer le répertoire uploads/view-once si nécessaire
-    const uploadDir = join(process.cwd(), 'uploads', 'view-once');
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
-    }
-
-    // Sauvegarder localement
-    const filepath = join(uploadDir, filename);
-    await writeFile(filepath, buffer);
-
-    const localPath = `/uploads/view-once/${filename}`;
-    logger.info(`[ViewOnce] 💾 Saved locally: ${filepath}`);
+    // Upload vers Supabase Storage (ou local en fallback)
+    const { uploadMedia } = await import('./media.service');
+    const mimeType = viewOnceData.type === 'video' ? 'video/mp4' : (viewOnceData.type === 'audio' ? 'audio/mp3' : 'image/jpeg');
+    const mediaUrl = await uploadMedia(buffer, filename, mimeType, 'view-once', userId);
+    
+    logger.info(`[ViewOnce] 💾 Saved: ${mediaUrl}`);
 
     return {
       success: true,
       buffer,
       filename,
-      localPath,
     };
   } catch (error: any) {
     logger.error('[ViewOnce] ❌ Download error:', error);
@@ -450,7 +475,7 @@ export const captureViewOnceFromQuoted = async (
   chatJid: string,
   senderId: string,
   senderName: string,
-  commandType: 'vv' | 'viewonce' | 'dashboard' = 'dashboard'
+  commandType: 'vv' | 'dashboard' = 'vv'
 ): Promise<{
   success: boolean;
   message?: string;
@@ -480,7 +505,11 @@ export const captureViewOnceFromQuoted = async (
       };
     }
 
-    logger.info(`[ViewOnce] ✅ Found View Once: ${viewOnceData.type}`);
+    logger.info(`[ViewOnce] ✅ Found View Once: ${viewOnceData.type}`, {
+      captionLength: viewOnceData.caption?.length || 0,
+      hasUrl: !!viewOnceData.mediaMessage?.url,
+      viewOnceKey: viewOnceData.viewOnceKey,
+    });
 
     // 3. Vérifier les quotas
     try {
@@ -513,7 +542,9 @@ export const captureViewOnceFromQuoted = async (
         type: viewOnceData.type,
         innerMessage: viewOnceData.innerMessage!,
       },
-      userId
+      userId,
+      chatJid,
+      senderId,
     );
 
     if (!downloadResult.success || !downloadResult.buffer) {
@@ -539,13 +570,19 @@ export const captureViewOnceFromQuoted = async (
     
     logger.info(`[ViewOnce] ✅ Download successful: ${downloadResult.buffer.length} bytes`);
 
-    // 5. Upload vers le stockage local (pour un accès permanent)
-    // Note: On utilise le chemin local pour l'instant
-    // TODO: Implémenter upload vers Cloudinary/S3 si nécessaire
-    // Le buffer est déjà sauvegardé localement dans downloadViewOnceFromQuoted
-    const mediaUrl = downloadResult.localPath || '';
+    // 5. Upload vers Supabase Storage (ou local en fallback)
+    // Le buffer est déjà téléchargé, on l'upload maintenant
+    const { uploadMedia } = await import('./media.service');
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 10);
+    const extension = viewOnceData.type === 'video' ? 'mp4' : (viewOnceData.type === 'audio' ? 'mp3' : 'jpg');
+    const filename = `${userId}_${timestamp}_${random}.${extension}`;
+    const mimeType = viewOnceData.type === 'video' ? 'video/mp4' : (viewOnceData.type === 'audio' ? 'audio/mp3' : 'image/jpeg');
+    const mediaUrl = await uploadMedia(downloadResult.buffer, filename, mimeType, 'view-once', userId);
 
     // 6. Sauvegarder en base de données
+    const fileSize = downloadResult.buffer.length;
+
     const { data: capture, error: insertError } = await supabase
       .from('view_once_captures')
       .insert({
@@ -554,7 +591,7 @@ export const captureViewOnceFromQuoted = async (
         sender_name: senderName,
         media_url: mediaUrl,
         media_type: viewOnceData.type,
-        caption: viewOnceData.caption || '',
+        file_size: fileSize,
         captured_at: new Date().toISOString(),
       })
       .select()
@@ -577,37 +614,10 @@ export const captureViewOnceFromQuoted = async (
     // 8. Envoyer le média selon le type de commande (si nécessaire)
     // Mode 'dashboard' : ne rien envoyer dans le chat, juste sauvegarder pour le dashboard
     // Mode 'vv' : renvoyer dans le même chat
-    // Mode 'viewonce' : envoyer une notification (actuellement même comportement que 'vv')
     try {
       if (commandType === 'vv') {
         // Renvoyer dans le même chat
         const caption = viewOnceData.caption || '👁️ View Once capturé';
-        
-        if (viewOnceData.type === 'image') {
-          await socket.sendMessage(chatJid, {
-            image: downloadResult.buffer,
-            caption,
-          });
-        } else if (viewOnceData.type === 'video') {
-          await socket.sendMessage(chatJid, {
-            video: downloadResult.buffer,
-            caption,
-          });
-        } else if (viewOnceData.type === 'audio') {
-          await socket.sendMessage(chatJid, {
-            audio: downloadResult.buffer,
-            mimetype: 'audio/mp4',
-            ptt: false,
-          });
-          if (caption) {
-            await socket.sendMessage(chatJid, { text: caption });
-          }
-        }
-      } else if (commandType === 'viewonce') {
-        // Envoyer une notification à l'utilisateur
-        const caption = viewOnceData.caption 
-          ? `👁️ View Once capturé\n\n💬 "${viewOnceData.caption}"`
-          : '👁️ View Once capturé';
         
         if (viewOnceData.type === 'image') {
           await socket.sendMessage(chatJid, {

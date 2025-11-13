@@ -22,6 +22,8 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: JWT_EXPIRES_IN
@@ -53,6 +55,9 @@ services:
         value: ""
       - key: REDIS_PORT
         value: "6379"
+
+
+
 
 
 

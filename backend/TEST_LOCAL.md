@@ -126,3 +126,6 @@ Si vous avez des erreurs CORS, vérifiez que `FRONTEND_URL` dans le `.env` backe
 
 
 
+
+
+

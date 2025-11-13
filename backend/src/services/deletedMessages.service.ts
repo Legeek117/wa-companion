@@ -299,7 +299,7 @@ export const handleMessageDeletion = async (
       let finalMediaUrl = storedMessage.mediaUrl;
       if (storedMessage.mediaType && storedMessage.message) {
         try {
-          const uploadedUrl = await processAndUploadMedia(socket, storedMessage.message, userId);
+          const uploadedUrl = await processAndUploadMedia(socket, storedMessage.message, userId, 'deleted-messages');
           if (uploadedUrl) {
             finalMediaUrl = uploadedUrl;
             logger.info(`[DeletedMessages] Media uploaded for deleted message ${messageId}`);

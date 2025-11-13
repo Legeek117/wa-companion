@@ -18,6 +18,9 @@ git commit -m "Ready for deployment"
 git push origin main
 ```
 
+> ℹ️ **Personnalisez chaque valeur** : remplacez `amda-backend.onrender.com`, `amdabot.netlify.app`, `225000000000` ou n'importe quel identifiant par vos propres URLs, domaines et numéros.  
+> Pour `ALLOWED_ORIGINS`, vous pouvez fournir plusieurs domaines en les séparant par des virgules (ex. `https://amdabot.netlify.app,https://dashboard.mondomaine.com`).
+
 ### 2. Créer un Service Web sur Render
 
 1. Allez sur [render.com](https://render.com)
@@ -51,7 +54,10 @@ Ajoutez toutes les variables suivantes dans **Environment Variables** :
 NODE_ENV=production
 PORT=10000
 API_URL=https://amda-backend.onrender.com
-FRONTEND_URL=https://votre-frontend.vercel.app
+FRONTEND_URL=https://amdabot.netlify.app
+ALLOWED_ORIGINS=https://amdabot.netlify.app
+RENDER_KEEP_ALIVE_URL=https://amda-backend.onrender.com/health
+RENDER_KEEP_ALIVE_INTERVAL_MS=600000
 ```
 
 #### Supabase (REQUIRED)
@@ -74,6 +80,12 @@ JWT_REFRESH_EXPIRES_IN=30d
 ```
 WHATSAPP_SESSION_PATH=./sessions
 WHATSAPP_SESSION_TIMEOUT=300000
+WHATSAPP_PHONE_NUMBER=225000000000
+```
+
+#### Sessions Supabase (Recommandé)
+```
+SUPABASE_STORAGE_BUCKET=whatsapp-sessions
 ```
 
 #### Stripe (Optionnel - peut être placeholder)
@@ -96,6 +108,19 @@ REDIS_PORT=6379
 ```
 LOG_LEVEL=info
 ```
+
+> ℹ️ **Personnalisez chaque valeur** : remplacez `amda-backend.onrender.com`, `amdabot.netlify.app`, `225000000000` ou n'importe quel identifiant par vos propres URLs, domaines et numéros.  
+> Pour `ALLOWED_ORIGINS`, vous pouvez fournir plusieurs domaines en les séparant par des virgules (ex. `https://amdabot.netlify.app,https://dashboard.mondomaine.com`).
+
+#### Comment les ajouter sur Render ?
+1. Dans le dashboard Render, ouvrez votre service backend.
+2. Onglet **Environment** → bouton **Add Environment Variable**.
+3. Renseignez chaque clé/valeur (copier-coller depuis la liste ci-dessus).  
+   - Pour les valeurs longues (ex. clés Supabase), utilisez **Add Secret File** ou collez directement.
+4. Cliquez sur **Save Changes** puis redémarrez le service si Render ne le fait pas automatiquement.
+5. Répétez l’opération à chaque fois que vous ajoutez une nouvelle variable dans le code (par exemple `ALLOWED_ORIGINS`).
+
+> 🔒 Render chiffre automatiquement les variables. Elles ne sont pas exposées dans le code.
 
 ### 5. Configuration Avancée
 
@@ -207,6 +232,7 @@ Si vous utilisez Stripe, configurez le webhook :
 ## 🎉 Félicitations !
 
 Votre backend est maintenant déployé sur Render ! 🚀
+
 
 
 

@@ -27,6 +27,8 @@ const app: Application = express();
 app.use(
   cors({
     origin: (origin, callback) => {
+      const additionalOrigins = env.ALLOWED_ORIGINS || [];
+
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) {
         logger.info('[CORS] Allowing request with no origin');
@@ -49,6 +51,7 @@ app.use(
           'http://localhost:8081',
           'http://localhost:5173',
           env.FRONTEND_URL,
+          ...additionalOrigins,
         ].filter(Boolean); // Remove undefined values
         
         if (allowedOrigins.includes(origin)) {
@@ -58,9 +61,12 @@ app.use(
       }
       
       // In production, only allow the configured frontend URL
-      if (env.NODE_ENV === 'production' && origin === env.FRONTEND_URL) {
-        logger.info(`[CORS] ✅ Allowing production origin: ${origin}`);
-        return callback(null, true);
+      if (env.NODE_ENV === 'production') {
+        const allowedOrigins = [env.FRONTEND_URL, ...additionalOrigins].filter(Boolean);
+        if (allowedOrigins.includes(origin)) {
+          logger.info(`[CORS] ✅ Allowing production origin: ${origin}`);
+          return callback(null, true);
+        }
       }
       
       logger.warn(`[CORS] ❌ Blocking origin: ${origin}`);
@@ -147,6 +153,51 @@ app.use('/api/media/deleted-messages', (req, res, next): void => {
       '.rar': 'application/x-rar-compressed',
     };
     
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+  },
+}));
+
+// Serve static media files (view once captures)
+app.use('/api/media/view-once', (req, res, next): void => {
+  const origin = req.headers.origin;
+  if (origin && (
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:') ||
+    origin === env.FRONTEND_URL ||
+    (env.ALLOWED_ORIGINS || []).includes(origin)
+  )) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+}, express.static(path.join(process.cwd(), 'uploads', 'view-once'), {
+  setHeaders: (res, filePath) => {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.mp3': 'audio/mpeg',
+      '.ogg': 'audio/ogg',
+      '.wav': 'audio/wav',
+    };
+
     const contentType = mimeTypes[ext] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
   },

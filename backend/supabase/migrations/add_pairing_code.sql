@@ -15,3 +15,6 @@ COMMENT ON COLUMN whatsapp_sessions.pairing_code IS 'WhatsApp pairing code for d
 
 
 
+
+
+

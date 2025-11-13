@@ -2,6 +2,7 @@ import { WASocket, downloadMediaMessage } from '@whiskeysockets/baileys';
 import { logger } from '../config/logger';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { uploadMediaToSupabase } from './supabaseStorage.service';
 
 /**
  * Get file extension from mime type
@@ -35,31 +36,50 @@ export const getExtensionFromMimeType = (mimeType: string): string => {
 };
 
 /**
- * Upload media to local storage
- * Saves files to uploads/deleted-messages/ directory
- * TODO: In production, implement upload to Cloudinary/S3
+ * Upload media to Supabase Storage (preferred) or local storage (fallback)
  */
 export const uploadMedia = async (
   buffer: Buffer,
   filename: string,
   mimeType: string,
-  subdirectory: 'deleted-messages' | 'scheduled-status' = 'deleted-messages'
+  subdirectory: 'deleted-messages' | 'view-once' | 'scheduled-status' = 'deleted-messages',
+  userId?: string
 ): Promise<string> => {
   try {
-    logger.info(`[Media] Saving media locally: ${filename} (${mimeType}, ${buffer.length} bytes)`);
-    
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), 'uploads', subdirectory);
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true });
-      logger.info(`[Media] Created uploads directory: ${uploadsDir}`);
-    }
+    logger.info(`[Media] Uploading media: ${filename} (${mimeType}, ${buffer.length} bytes)`);
     
     // Get extension from mime type if not in filename
     let finalFilename = filename;
     if (!filename.includes('.')) {
       const extension = getExtensionFromMimeType(mimeType);
       finalFilename = `${filename}.${extension}`;
+    }
+    
+    // Try Supabase Storage first (if enabled)
+    const storagePath = userId 
+      ? `${subdirectory}/${userId}/${finalFilename}`
+      : `${subdirectory}/${finalFilename}`;
+    
+    const supabaseUrl = await uploadMediaToSupabase(
+      buffer,
+      storagePath,
+      mimeType,
+      { upsert: true, cacheControl: '3600' }
+    );
+    
+    if (supabaseUrl) {
+      logger.info(`[Media] Media uploaded to Supabase: ${supabaseUrl}`);
+      return supabaseUrl;
+    }
+    
+    // Fallback to local storage if Supabase is not available
+    logger.warn('[Media] Supabase Storage not available, falling back to local storage');
+    
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = join(process.cwd(), 'uploads', subdirectory);
+    if (!existsSync(uploadsDir)) {
+      mkdirSync(uploadsDir, { recursive: true });
+      logger.info(`[Media] Created uploads directory: ${uploadsDir}`);
     }
     
     // Ensure unique filename by adding timestamp if needed
@@ -71,7 +91,7 @@ export const uploadMedia = async (
     // Return URL path (will be served by Express static middleware)
     const mediaUrl = `/api/media/${subdirectory}/${finalFilename}`;
     
-    logger.info(`[Media] Media saved successfully: ${filePath} -> ${mediaUrl}`);
+    logger.info(`[Media] Media saved locally: ${filePath} -> ${mediaUrl}`);
     
     return mediaUrl;
   } catch (error) {
@@ -189,7 +209,8 @@ export const getMediaType = (message: any): {
 export const processAndUploadMedia = async (
   socket: WASocket,
   message: any,
-  userId: string
+  userId: string,
+  subdirectory: 'deleted-messages' | 'view-once' | 'scheduled-status' = 'deleted-messages'
 ): Promise<string | null> => {
   try {
     const mediaInfo = getMediaType(message);
@@ -218,8 +239,14 @@ export const processAndUploadMedia = async (
                       mediaInfo.type === 'document' ? 'bin' : 'webp');
     const filename = `${userId}_${timestamp}_${randomStr}.${extension}`;
     
-    // Save media locally
-    const mediaUrl = await uploadMedia(buffer, filename, mediaInfo.mimeType || 'application/octet-stream');
+    // Upload media (Supabase Storage or local fallback)
+    const mediaUrl = await uploadMedia(
+      buffer, 
+      filename, 
+      mediaInfo.mimeType || 'application/octet-stream',
+      subdirectory,
+      userId
+    );
     
     logger.info(`[Media] Media processed and uploaded: ${mediaUrl}`);
     
@@ -229,6 +256,8 @@ export const processAndUploadMedia = async (
     return null;
   }
 };
+
+
 
 
 

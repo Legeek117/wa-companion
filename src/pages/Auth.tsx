@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageCircle, Mail, Lock, User } from "lucide-react";
+import { Mail, Lock, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -33,8 +33,12 @@ const Auth = () => {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00eiIvPjwvZz48L2c+PC9zdmc+')] opacity-20"></div>
         
         <div className="relative">
-          <Link to="/" className="flex items-center gap-2 mb-8">
-            <MessageCircle className="w-10 h-10" />
+          <Link to="/" className="flex items-center gap-3 mb-8">
+            <img
+              src="/icon-192x192.png"
+              alt="AMDA logo"
+              className="w-10 h-10 rounded-2xl object-contain shadow-md"
+            />
             <span className="text-2xl font-bold">AMDA</span>
           </Link>
           
@@ -64,8 +68,12 @@ const Auth = () => {
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-12 bg-background">
         <div className="w-full max-w-md px-4 sm:px-0">
           <div className="md:hidden mb-6 sm:mb-8 text-center">
-            <Link to="/" className="inline-flex items-center gap-2">
-              <MessageCircle className="w-7 h-7 sm:w-8 sm:h-8 text-primary" />
+            <Link to="/" className="inline-flex items-center gap-3">
+              <img
+                src="/icon-192x192.png"
+                alt="AMDA logo"
+                className="w-8 h-8 rounded-2xl object-contain shadow-md"
+              />
               <span className="text-xl sm:text-2xl font-bold">AMDA</span>
             </Link>
           </div>

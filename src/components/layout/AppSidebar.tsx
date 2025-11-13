@@ -19,7 +19,6 @@ import {
   Eye,
   Trash2,
   Settings,
-  MessageCircle,
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -74,20 +73,21 @@ export function AppSidebar() {
       <Sidebar className={cn(collapsed ? "w-14" : "w-64", "hidden md:flex")} collapsible="icon">
         <SidebarContent>
           <div className="px-4 py-6 border-b border-sidebar-border">
-            {collapsed ? (
-              <div className="flex justify-center">
-                <MessageCircle className="w-6 h-6 text-primary" />
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md">
-                  <MessageCircle className="w-6 h-6 text-primary-foreground" />
-                </div>
+            <div className={cn("flex items-center", collapsed ? "justify-center" : "gap-3")}>
+              <img
+                src="/icon-192x192.png"
+                alt="AMDA logo"
+                className={cn(
+                  "rounded-2xl object-contain shadow-md",
+                  collapsed ? "w-8 h-8" : "w-10 h-10"
+                )}
+              />
+              {!collapsed && (
                 <span className="text-xl font-bold tracking-tight bg-gradient-primary bg-clip-text text-transparent">
                   AMDA
                 </span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <SidebarGroup className="mt-4">

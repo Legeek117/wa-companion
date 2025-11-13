@@ -1,10 +1,48 @@
-import { WASocket } from '@whiskeysockets/baileys';
+import { WASocket, proto } from '@whiskeysockets/baileys';
 import { logger } from '../config/logger';
 import { getSupabaseClient } from '../config/database';
 import { captureViewOnceFromQuoted } from './viewOnce.service';
 import { getSocket } from './whatsapp.service';
 
 const supabase = getSupabaseClient();
+
+const extractQuotedMessage = (message: any): proto.IMessage | null => {
+  if (!message?.message) {
+    return null;
+  }
+
+  const contexts = [
+    message.message?.extendedTextMessage?.contextInfo,
+    message.message?.imageMessage?.contextInfo,
+    message.message?.videoMessage?.contextInfo,
+    message.message?.buttonsResponseMessage?.contextInfo,
+    message.message?.listResponseMessage?.contextInfo,
+    message.message?.interactiveResponseMessage?.contextInfo,
+    message.message?.documentMessage?.contextInfo,
+    message.message?.audioMessage?.contextInfo,
+    message.message?.stickerMessage?.contextInfo,
+  ].filter(Boolean);
+
+  for (const context of contexts) {
+    if (context?.quotedMessage) {
+      const quoted = context.quotedMessage as proto.IMessage;
+      if (quoted?.ephemeralMessage?.message) {
+        return quoted.ephemeralMessage.message as proto.IMessage;
+      }
+      return quoted;
+    }
+  }
+
+  if (message.message?.contextInfo?.quotedMessage) {
+    const quoted = message.message.contextInfo.quotedMessage as proto.IMessage;
+    if (quoted?.ephemeralMessage?.message) {
+      return quoted.ephemeralMessage.message as proto.IMessage;
+    }
+    return quoted;
+  }
+
+  return null;
+};
 
 /**
  * Handle incoming messages for autoresponder and View Once commands
@@ -15,15 +53,20 @@ export const handleIncomingMessage = async (
   message: any
 ): Promise<void> => {
   try {
-    // Skip messages from self
-    if (message.key?.fromMe) {
-      return;
-    }
-
     // Skip if no message content
     if (!message.message) {
       return;
     }
+
+    const fromMe = !!message.key?.fromMe;
+    logger.info(`[Autoresponder] Incoming message`, {
+      userId,
+      messageId: message.key?.id,
+      chat: message.key?.remoteJid,
+      fromMe,
+      hasMessage: !!message.message,
+      messageKeys: message.message ? Object.keys(message.message) : [],
+    });
 
     // Extract message text
     const messageText = 
@@ -34,8 +77,21 @@ export const handleIncomingMessage = async (
       '';
 
     if (!messageText) {
+      logger.info('[Autoresponder] Message has no textual content', {
+        messageId: message.key?.id,
+        chat: message.key?.remoteJid,
+      });
       return;
     }
+
+    const normalizedText = messageText.trim().toLowerCase();
+    const quotedMessage = extractQuotedMessage(message);
+
+    logger.info(`[ViewOnce] 🔍 Incoming message text: "${messageText}"`, {
+      fromMe,
+      hasQuoted: !!quotedMessage,
+      messageType: Object.keys(message.message || {}),
+    });
 
     const senderId = message.key?.remoteJid;
     const senderName = message.pushName || senderId?.split('@')[0] || 'Unknown';
@@ -45,76 +101,88 @@ export const handleIncomingMessage = async (
       return;
     }
 
-    // Détecter l'emoji 👀 (peut être seul ou avec d'autres caractères)
-    const isViewOnceCommand = messageText.trim() === '👀' || 
-                              messageText.trim().includes('👀');
+    // Détecter la commande .vv uniquement
+    const isVvCommand = normalizedText === '.vv' || normalizedText === '!vv';
+
+    if (!isVvCommand) {
+      // Aucune autre commande gérée pour l'instant
+      return;
+    }
+
+    const commandLabel = '.vv';
+    logger.info(`[ViewOnce] 📨 View Once command detected (${commandLabel}) from ${senderId}`, {
+      fromMe,
+      hasQuotedMessage: !!quotedMessage,
+    });
     
-    if (isViewOnceCommand) {
-      logger.info(`[ViewOnce] 📨 View Once command detected (👀) from ${senderId}`);
-      
-      // Récupérer le quoted message (message répondu)
-      const quotedMessage = 
-        message.message.extendedTextMessage?.contextInfo?.quotedMessage ||
-        message.message.imageMessage?.contextInfo?.quotedMessage ||
-        message.message.videoMessage?.contextInfo?.quotedMessage ||
-        null;
+    if (!quotedMessage) {
+      logger.warn(`[ViewOnce] ⚠️ No quoted message found for View Once command from ${senderId}`, {
+        messageId: message.key?.id,
+        contextInfoKeys: Object.keys(message.message?.extendedTextMessage?.contextInfo || {}),
+      });
+      return;
+    }
 
-      if (!quotedMessage) {
-        logger.warn(`[ViewOnce] ⚠️ No quoted message found for View Once command from ${senderId}`);
-        // Pas de message d'erreur - silencieux
-        return;
-      }
-
-      // Récupérer le socket actif - essayer plusieurs méthodes
-      let activeSocket = getSocket(userId);
-      
-      // Si pas de socket via getSocket, utiliser le socket passé en paramètre
-      if (!activeSocket && socket) {
-        logger.info(`[ViewOnce] Using socket from message parameter for user ${userId}`);
-        activeSocket = socket;
-      }
-      
-      // Si toujours pas de socket, essayer de reconnecter
-      if (!activeSocket) {
-        logger.warn(`[ViewOnce] No active socket for user ${userId}, attempting to reconnect...`);
-        try {
-          // Importer la fonction de reconnexion
-          const { reconnectWhatsAppIfCredentialsExist } = await import('./whatsapp.service');
-          const reconnected = await reconnectWhatsAppIfCredentialsExist(userId);
-          if (reconnected) {
-            activeSocket = getSocket(userId);
-            logger.info(`[ViewOnce] ✅ Socket reconnected for user ${userId}`);
-          }
-        } catch (error) {
-          logger.error(`[ViewOnce] Error attempting to reconnect socket:`, error);
+    // Récupérer le socket actif - essayer plusieurs méthodes
+    let activeSocket = getSocket(userId);
+    
+    // Si pas de socket via getSocket, utiliser le socket passé en paramètre
+    if (!activeSocket && socket) {
+      logger.info(`[ViewOnce] Using socket from message parameter for user ${userId}`);
+      activeSocket = socket;
+    }
+    
+    // Si toujours pas de socket, essayer de reconnecter
+    if (!activeSocket) {
+      logger.warn(`[ViewOnce] No active socket for user ${userId}, attempting to reconnect...`);
+      try {
+        // Importer la fonction de reconnexion
+        const { reconnectWhatsAppIfCredentialsExist } = await import('./whatsapp.service');
+        const reconnected = await reconnectWhatsAppIfCredentialsExist(userId);
+        if (reconnected) {
+          activeSocket = getSocket(userId);
+          logger.info(`[ViewOnce] ✅ Socket reconnected for user ${userId}`);
         }
+      } catch (error) {
+        logger.error(`[ViewOnce] Error attempting to reconnect socket:`, error);
       }
-      
-      if (!activeSocket) {
-        logger.error(`[ViewOnce] ❌ No active socket available for user ${userId} after reconnection attempt`);
-        // Pas de message d'erreur - silencieux
-        return;
-      }
+    }
+    
+    if (!activeSocket) {
+      logger.error(`[ViewOnce] ❌ No active socket available for user ${userId} after reconnection attempt`);
+      // Pas de message d'erreur - silencieux
+      return;
+    }
 
-      // Capturer le View Once depuis le quoted message
-      logger.info(`[ViewOnce] 📸 Capturing View Once from quoted message for user ${userId}`);
-      
-      const result = await captureViewOnceFromQuoted(
-        userId,
-        activeSocket,
-        quotedMessage,
-        chatJid,
-        senderId || '',
-        senderName,
-        'dashboard' // Mode dashboard : sauvegarde silencieuse
-      );
+    const captureMode: 'vv' | 'viewonce' | 'dashboard' = 'vv';
 
-      if (result.success) {
-        logger.info(`[ViewOnce] ✅ View Once captured successfully: ${result.captureId}`);
-      } else {
-        logger.warn(`[ViewOnce] ⚠️ View Once capture failed: ${result.error} - ${result.message}`);
-        // Pas de message d'erreur dans le chat - silencieux
-      }
+    // Capturer le View Once depuis le quoted message
+    logger.info(`[ViewOnce] 📸 Capturing View Once from quoted message for user ${userId}`, {
+      commandType: captureMode,
+      senderId,
+      chatJid,
+    });
+    
+    const result = await captureViewOnceFromQuoted(
+      userId,
+      activeSocket,
+      quotedMessage,
+      chatJid,
+      senderId || '',
+      senderName,
+      captureMode
+    );
+
+    if (result.success) {
+      logger.info(`[ViewOnce] ✅ View Once captured successfully: ${result.captureId}`, {
+        fromMe,
+        commandType: captureMode,
+      });
+    } else {
+      logger.warn(`[ViewOnce] ⚠️ View Once capture failed: ${result.error} - ${result.message}`, {
+        fromMe,
+        commandType: captureMode,
+      });
     }
 
     // TODO: Ajouter la logique pour l'autoresponder (mode offline/busy)

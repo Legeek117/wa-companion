@@ -8,6 +8,7 @@ interface EnvConfig {
   PORT: number;
   API_URL: string;
   FRONTEND_URL: string;
+  ALLOWED_ORIGINS: string[];
   RENDER_KEEP_ALIVE_URL?: string;
   RENDER_KEEP_ALIVE_INTERVAL_MS: number;
 
@@ -100,6 +101,9 @@ export const env: EnvConfig = {
   PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : getEnvNumber('PORT', 3000),
   API_URL: getEnvVar('API_URL', 'http://localhost:3000'),
   FRONTEND_URL: getEnvVar('FRONTEND_URL', 'http://localhost:8081'),
+  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : [],
   RENDER_KEEP_ALIVE_URL: process.env.RENDER_KEEP_ALIVE_URL,
   RENDER_KEEP_ALIVE_INTERVAL_MS: getEnvNumber('RENDER_KEEP_ALIVE_INTERVAL_MS', 10 * 60 * 1000),
 

@@ -268,27 +268,36 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Triggers for updated_at
+-- Drop existing triggers if they exist (for idempotency)
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON subscriptions;
 CREATE TRIGGER update_subscriptions_updated_at BEFORE UPDATE ON subscriptions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_whatsapp_sessions_updated_at ON whatsapp_sessions;
 CREATE TRIGGER update_whatsapp_sessions_updated_at BEFORE UPDATE ON whatsapp_sessions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_status_auto_like_config_updated_at ON status_auto_like_config;
 CREATE TRIGGER update_status_auto_like_config_updated_at BEFORE UPDATE ON status_auto_like_config
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_autoresponder_config_updated_at ON autoresponder_config;
 CREATE TRIGGER update_autoresponder_config_updated_at BEFORE UPDATE ON autoresponder_config
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_autoresponder_contacts_updated_at ON autoresponder_contacts;
 CREATE TRIGGER update_autoresponder_contacts_updated_at BEFORE UPDATE ON autoresponder_contacts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_scheduled_statuses_updated_at ON scheduled_statuses;
 CREATE TRIGGER update_scheduled_statuses_updated_at BEFORE UPDATE ON scheduled_statuses
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_quotas_updated_at ON quotas;
 CREATE TRIGGER update_quotas_updated_at BEFORE UPDATE ON quotas
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -304,6 +313,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to create quota when user is created
+DROP TRIGGER IF EXISTS create_user_quota ON users;
 CREATE TRIGGER create_user_quota AFTER INSERT ON users
   FOR EACH ROW EXECUTE FUNCTION initialize_user_quota();
 
@@ -326,89 +336,108 @@ ALTER TABLE quotas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analytics ENABLE ROW LEVEL SECURITY;
 
 -- Users policies
+DROP POLICY IF EXISTS "Users can view own profile" ON users;
 CREATE POLICY "Users can view own profile"
   ON users FOR SELECT
   USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON users;
 CREATE POLICY "Users can update own profile"
   ON users FOR UPDATE
   USING (auth.uid() = id);
 
 -- Subscriptions policies
+DROP POLICY IF EXISTS "Users can view own subscriptions" ON subscriptions;
 CREATE POLICY "Users can view own subscriptions"
   ON subscriptions FOR SELECT
   USING (auth.uid() = user_id);
 
 -- WhatsApp sessions policies
+DROP POLICY IF EXISTS "Users can manage own sessions" ON whatsapp_sessions;
 CREATE POLICY "Users can manage own sessions"
   ON whatsapp_sessions FOR ALL
   USING (auth.uid() = user_id);
 
 -- Status likes policies
+DROP POLICY IF EXISTS "Users can view own status likes" ON status_likes;
 CREATE POLICY "Users can view own status likes"
   ON status_likes FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create own status likes" ON status_likes;
 CREATE POLICY "Users can create own status likes"
   ON status_likes FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Status auto-like config policies
+DROP POLICY IF EXISTS "Users can manage own status config" ON status_auto_like_config;
 CREATE POLICY "Users can manage own status config"
   ON status_auto_like_config FOR ALL
   USING (auth.uid() = user_id);
 
 -- View once captures policies
+DROP POLICY IF EXISTS "Users can view own captures" ON view_once_captures;
 CREATE POLICY "Users can view own captures"
   ON view_once_captures FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create own captures" ON view_once_captures;
 CREATE POLICY "Users can create own captures"
   ON view_once_captures FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Deleted messages policies
+DROP POLICY IF EXISTS "Users can view own deleted messages" ON deleted_messages;
 CREATE POLICY "Users can view own deleted messages"
   ON deleted_messages FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create own deleted messages" ON deleted_messages;
 CREATE POLICY "Users can create own deleted messages"
   ON deleted_messages FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own deleted messages" ON deleted_messages;
 CREATE POLICY "Users can delete own deleted messages"
   ON deleted_messages FOR DELETE
   USING (auth.uid() = user_id);
 
 -- Autoresponder config policies
+DROP POLICY IF EXISTS "Users can manage own autoresponder" ON autoresponder_config;
 CREATE POLICY "Users can manage own autoresponder"
   ON autoresponder_config FOR ALL
   USING (auth.uid() = user_id);
 
 -- Autoresponder contacts policies
+DROP POLICY IF EXISTS "Users can manage own contacts" ON autoresponder_contacts;
 CREATE POLICY "Users can manage own contacts"
   ON autoresponder_contacts FOR ALL
   USING (auth.uid() = user_id);
 
 -- Scheduled statuses policies
+DROP POLICY IF EXISTS "Users can manage own scheduled statuses" ON scheduled_statuses;
 CREATE POLICY "Users can manage own scheduled statuses"
   ON scheduled_statuses FOR ALL
   USING (auth.uid() = user_id);
 
 -- Quotas policies
+DROP POLICY IF EXISTS "Users can view own quotas" ON quotas;
 CREATE POLICY "Users can view own quotas"
   ON quotas FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own quotas" ON quotas;
 CREATE POLICY "Users can update own quotas"
   ON quotas FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Analytics policies
+DROP POLICY IF EXISTS "Users can view own analytics" ON analytics;
 CREATE POLICY "Users can view own analytics"
   ON analytics FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create own analytics" ON analytics;
 CREATE POLICY "Users can create own analytics"
   ON analytics FOR INSERT
   WITH CHECK (auth.uid() = user_id);

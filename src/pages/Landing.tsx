@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, MessageCircle, Heart, Eye, Trash2, Calendar, MessageSquare, Sparkles, ChevronDown, Twitter, Linkedin, Github } from "lucide-react";
+import { Check, Heart, Eye, Trash2, Calendar, MessageSquare, Sparkles, ChevronDown, Twitter, Linkedin, Github } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   Accordion,
@@ -75,10 +75,12 @@ const Landing = () => {
       {/* Header */}
       <header className="border-b border-border/50 sticky top-0 bg-background/80 backdrop-blur-2xl z-50">
         <div className="container mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md">
-              <MessageCircle className="w-6 h-6 text-primary-foreground" />
-            </div>
+          <div className="flex items-center gap-3">
+            <img
+              src="/icon-192x192.png"
+              alt="AMDA logo"
+              className="w-10 h-10 rounded-2xl object-contain shadow-md"
+            />
             <span className="text-2xl font-bold tracking-tight text-primary">
               AMDA
             </span>
@@ -353,10 +355,12 @@ const Landing = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 sm:gap-12 mb-6 sm:mb-8">
             {/* Brand */}
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md">
-                  <MessageCircle className="w-6 h-6 text-primary-foreground" />
-                </div>
+              <div className="flex items-center gap-3 mb-4">
+                <img
+                  src="/icon-192x192.png"
+                  alt="AMDA logo"
+                  className="w-10 h-10 rounded-2xl object-contain shadow-md"
+                />
                 <span className="text-xl font-bold text-primary">AMDA</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
