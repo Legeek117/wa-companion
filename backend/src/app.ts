@@ -26,7 +26,7 @@ const app: Application = express();
 // CORS MUST be before Helmet to avoid blocking CORS headers
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       const additionalOrigins = env.ALLOWED_ORIGINS || [];
 
       // Allow requests with no origin (like mobile apps or curl requests)

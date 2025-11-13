@@ -27,7 +27,7 @@ export const uploadMediaToSupabase = async (
   }
 
   try {
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(STORAGE_BUCKET as string)
       .upload(path, buffer, {
         upsert: options?.upsert ?? true,
