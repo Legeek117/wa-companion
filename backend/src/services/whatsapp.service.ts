@@ -2082,8 +2082,6 @@ export const likeStatus = async (
     throw error;
   }
 };
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-grep
 
 // Track if listeners are already set up for a socket to avoid duplicates
 const listenersSetup = new WeakSet<WASocket>();
