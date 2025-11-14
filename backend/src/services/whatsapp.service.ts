@@ -972,22 +972,25 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
 
     // Create socket - WhatsApp will generate pairing code automatically in certain conditions
     // We listen for pairing code in connection.update event
+    // Inspired by reference code: Baileys generates pairing code automatically, we just need to detect it
     let socket: WASocket;
     try {
       const socketConfig: any = {
-      auth: state,
+        auth: state,
         logger: createBaileysLogger(), // Use filtered logger to suppress non-critical decryption errors
-      getMessage: async (_key: any) => {
+        getMessage: async (_key: any) => {
           // Return undefined properly as a Promise
-        return undefined;
-      },
-        // printQRInTerminal removed - deprecated, we handle QR code via connection.update event
+          return undefined;
+        },
         // Additional options to prevent connection errors
         connectTimeoutMs: 60000, // 60 seconds timeout
         defaultQueryTimeoutMs: 60000, // 60 seconds for queries
         keepAliveIntervalMs: 10000, // Keep alive every 10 seconds
         retryRequestDelayMs: 250, // Retry delay
         browser: ['Ubuntu', 'Chrome', '22.04.4'], // Browser info
+        // Options that might help with pairing code generation
+        markOnlineOnConnect: false, // Don't mark online immediately
+        syncFullHistory: false, // Don't sync full history
       };
       
       // Add version if available (like in reference implementation)
@@ -996,7 +999,9 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
         logger.info(`[WhatsApp] Using explicit Baileys version ${baileysVersion.join('.')} for pairing code, user ${userId}`);
       }
       
+      logger.info(`[WhatsApp] Creating socket for pairing code generation, user ${userId}`);
       socket = makeWASocket(socketConfig);
+      logger.info(`[WhatsApp] Socket created for pairing code, user ${userId}`);
     } catch (error) {
       logger.error(`[WhatsApp] Error creating socket for pairing code for user ${userId}:`, error);
       await updateSessionStatus(userId, { status: 'disconnected' });
@@ -1008,36 +1013,83 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
 
     // Handle connection updates for pairing code - Set IMMEDIATELY after socket creation
     pairingCodeHandler = async (update: any) => {
-      const { connection, lastDisconnect, qr, pairingCode } = update;
+      const { connection, lastDisconnect, qr } = update;
 
+      // DEBUG: Log all update keys to detect pairing code (inspired by reference code)
+      const updateKeys = Object.keys(update);
       logger.info(`[WhatsApp] Pairing code connection update for user ${userId}:`, {
         connection,
         hasQR: !!qr,
-        hasPairingCode: !!pairingCode,
-        pairingCode: pairingCode || null,
-        lastDisconnect: lastDisconnect ? {
-          error: lastDisconnect.error?.message || 'Unknown error',
-          statusCode: (lastDisconnect.error as any)?.output?.statusCode,
-        } : null,
+        updateKeys: updateKeys.join(', '),
+        updateKeysCount: updateKeys.length,
       });
 
-      // Handle pairing code - Baileys generates it automatically in certain conditions
-      if (pairingCode) {
-        logger.info(`[WhatsApp] ✅ Pairing code received for user: ${userId}, code: ${pairingCode}`);
+      // Check for pairing code in multiple possible keys (inspired by reference code)
+      const possiblePairCodeKeys = [
+        'pairingCode',
+        'pairingCodeNumber',
+        'pairCode',
+        'pair_code',
+        'numericCode',
+        'numeric_code',
+        'devicePairingCode',
+        'device_pairing_code',
+        'pairing_code',
+      ];
+
+      let detectedPairingCode: string | null = null;
+      let detectedKey: string | null = null;
+
+      // First, check the standard pairingCode property
+      if (update.pairingCode) {
+        detectedPairingCode = update.pairingCode;
+        detectedKey = 'pairingCode';
+      } else {
+        // Check all possible keys
+        for (const key of possiblePairCodeKeys) {
+          if (update[key]) {
+            detectedPairingCode = update[key];
+            detectedKey = key;
+            logger.info(`[WhatsApp] 🔍 Pairing code found in key '${key}' for user ${userId}`);
+            break;
+          }
+        }
+      }
+
+      // Also check nested objects
+      if (!detectedPairingCode && update.pairing) {
+        if (typeof update.pairing === 'object') {
+          for (const key of possiblePairCodeKeys) {
+            if (update.pairing[key]) {
+              detectedPairingCode = update.pairing[key];
+              detectedKey = `pairing.${key}`;
+              logger.info(`[WhatsApp] 🔍 Pairing code found in nested 'pairing.${key}' for user ${userId}`);
+              break;
+            }
+          }
+        } else if (typeof update.pairing === 'string') {
+          detectedPairingCode = update.pairing;
+          detectedKey = 'pairing';
+        }
+      }
+
+      // Handle pairing code if detected
+      if (detectedPairingCode) {
+        logger.info(`[WhatsApp] ✅ Pairing code detected for user: ${userId}, code: ${detectedPairingCode}, found in: ${detectedKey}`);
         try {
-          pairingCodes.set(userId, pairingCode);
-          logger.info(`[WhatsApp] Pairing code stored in memory for user: ${userId}, code: ${pairingCode}`);
+          pairingCodes.set(userId, detectedPairingCode);
+          logger.info(`[WhatsApp] Pairing code stored in memory for user: ${userId}, code: ${detectedPairingCode}`);
           
           await updateSessionStatus(userId, {
             status: 'connecting',
-            pairingCode: pairingCode,
+            pairingCode: detectedPairingCode,
             qrCode: null, // Clear QR code when using pairing code
           });
-          logger.info(`[WhatsApp] Pairing code saved to database for user: ${userId}, code: ${pairingCode}`);
+          logger.info(`[WhatsApp] Pairing code saved to database for user: ${userId}, code: ${detectedPairingCode}`);
           
           // Resolve the promise with pairing code
           if (pairingCodeResolve) {
-            pairingCodeResolve(pairingCode);
+            pairingCodeResolve(detectedPairingCode);
             pairingCodeResolve = null;
           }
         } catch (error) {
@@ -1047,14 +1099,30 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
             pairingCodeReject = null;
           }
         }
+        return; // Exit early if pairing code found
       }
 
-      // If QR code is received but we want pairing code, try to request pairing code
-      // Baileys may generate pairing code after QR code if we wait
-      if (qr && !pairingCode) {
-        logger.info(`[WhatsApp] QR code received in pairing code mode, will wait for pairing code for user: ${userId}`);
-        // Don't ignore - wait a bit, Baileys might generate pairing code after QR
-        // Set a timeout to check for pairing code
+      // If QR code is received but we want pairing code, log debug info
+      if (qr && !detectedPairingCode) {
+        logger.info(`[WhatsApp] QR code received in pairing code mode for user: ${userId}`);
+        logger.info(`[WhatsApp] 🔍 DEBUG: Checking all update fields for pairing code...`);
+        logger.info(`[WhatsApp] 🔍 Update keys: ${updateKeys.join(', ')}`);
+        
+        // Log all non-standard fields that might contain pairing code
+        updateKeys.forEach(key => {
+          if (!['connection', 'lastDisconnect', 'qr', 'isNewLogin'].includes(key)) {
+            const value = update[key];
+            if (value !== undefined && value !== null) {
+              if (typeof value === 'string' && value.length > 0 && value.length < 20) {
+                logger.info(`[WhatsApp] 🔍 Potential pairing code in '${key}': ${value}`);
+              } else if (typeof value === 'number' && value > 0 && value < 1000000) {
+                logger.info(`[WhatsApp] 🔍 Potential pairing code (number) in '${key}': ${value}`);
+              }
+            }
+          }
+        });
+        
+        // Wait a bit, Baileys might generate pairing code after QR
         setTimeout(async () => {
           const storedPairingCode = pairingCodes.get(userId);
           if (!storedPairingCode) {
@@ -1235,7 +1303,38 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
     };
     
     // Attach handler IMMEDIATELY - use 'on' to catch all events
+    logger.info(`[WhatsApp] Attaching connection.update handler for pairing code, user ${userId}`);
     socket.ev.on('connection.update', pairingCodeHandler);
+
+    // Also add debug logging for first few connection updates (inspired by reference code)
+    let debugUpdateCount = 0;
+    socket.ev.on('connection.update', (update: any) => {
+      if (debugUpdateCount < 3) {
+        debugUpdateCount++;
+        const updateKeys = Object.keys(update);
+        logger.info(`[WhatsApp] 🔍 DEBUG connection.update #${debugUpdateCount} for pairing code, user ${userId}:`, {
+          connection: update.connection,
+          hasQR: !!update.qr,
+          updateKeys: updateKeys.join(', '),
+          updateKeysCount: updateKeys.length,
+        });
+        
+        // Log any potential pairing code values
+        updateKeys.forEach(key => {
+          if (!['connection', 'lastDisconnect', 'qr', 'isNewLogin'].includes(key)) {
+            const value = update[key];
+            if (value !== undefined && value !== null) {
+              // Check for numeric strings (pairing codes are usually numeric)
+              if (typeof value === 'string' && /^\d{4,8}$/.test(value)) {
+                logger.info(`[WhatsApp] 🔍 Potential pairing code in '${key}': ${value}`);
+              } else if (typeof value === 'number' && value > 1000 && value < 100000000) {
+                logger.info(`[WhatsApp] 🔍 Potential pairing code (number) in '${key}': ${value}`);
+              }
+            }
+          }
+        });
+      }
+    });
 
     // Also listen for 'creds.update' to save credentials and detect pairing success
     socket.ev.on('creds.update', async () => {

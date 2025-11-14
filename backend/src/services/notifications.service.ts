@@ -60,26 +60,68 @@ export const initializeFirebaseAdmin = (): void => {
  */
 export const saveFCMToken = async (userId: string, token: string, deviceInfo?: any): Promise<void> => {
   try {
-    const { error } = await supabase
+    // Check if table exists by trying a simple query first
+    const { error: checkError } = await supabase
       .from('fcm_tokens')
-      .upsert(
-        {
-          user_id: userId,
-          token,
-          device_info: deviceInfo || {},
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'token',
-        }
-      );
+      .select('id')
+      .limit(1);
 
-    if (error) {
-      logger.error('[NotificationsService] Error saving FCM token:', error);
-      throw error;
+    if (checkError) {
+      if (checkError.code === '42P01') { // Table does not exist
+        logger.error('[NotificationsService] Table fcm_tokens does not exist. Please run the SQL schema.');
+        throw new Error('Table fcm_tokens does not exist. Please run the database migration.');
+      }
+      // If it's another error, continue (might be empty table)
     }
 
-    logger.info(`[NotificationsService] FCM token saved for user ${userId}`);
+    // First, try to delete any existing token for this user to avoid conflicts
+    const { error: deleteError } = await supabase
+      .from('fcm_tokens')
+      .delete()
+      .eq('user_id', userId);
+
+    if (deleteError && deleteError.code !== '42P01') {
+      logger.warn('[NotificationsService] Error deleting existing FCM token (non-critical):', deleteError);
+    }
+
+    // Then insert the new token
+    const { error } = await supabase
+      .from('fcm_tokens')
+      .insert({
+        user_id: userId,
+        token,
+        device_info: deviceInfo || {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      // If insert fails due to unique constraint on token, try update
+      if (error.code === '23505') { // Unique violation
+        const { error: updateError } = await supabase
+          .from('fcm_tokens')
+          .update({
+            user_id: userId,
+            device_info: deviceInfo || {},
+            updated_at: new Date().toISOString(),
+          })
+          .eq('token', token);
+
+        if (updateError) {
+          logger.error('[NotificationsService] Error updating FCM token:', updateError);
+          throw updateError;
+        }
+        logger.info(`[NotificationsService] FCM token updated for user ${userId}`);
+      } else if (error.code === '42P01') {
+        logger.error('[NotificationsService] Table fcm_tokens does not exist. Please run the SQL schema.');
+        throw new Error('Table fcm_tokens does not exist. Please run the database migration.');
+      } else {
+        logger.error('[NotificationsService] Error saving FCM token:', error);
+        throw error;
+      }
+    } else {
+      logger.info(`[NotificationsService] FCM token saved for user ${userId}`);
+    }
   } catch (error) {
     logger.error('[NotificationsService] Error saving FCM token:', error);
     throw error;
