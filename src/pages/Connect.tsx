@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 const Connect = () => {
   const navigate = useNavigate();
-  const { status, getQR, getPairingCode, isGettingQR, isGettingPairingCode } = useWhatsApp();
+  const { status, getQR, getPairingCode, isGettingQR, isGettingPairingCode, refetch } = useWhatsApp();
   const [activeMethod, setActiveMethod] = useState<'qr' | 'pairing' | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
@@ -29,6 +29,38 @@ const Connect = () => {
       setPairingCode(status.pairingCode);
     }
   }, [activeMethod, status?.qrCode, status?.pairingCode]);
+
+  // Poll for pairing code if active but not received yet
+  useEffect(() => {
+    if (activeMethod === 'pairing' && !pairingCode) {
+      let pollCount = 0;
+      const maxPolls = 30; // 30 * 2s = 60 seconds max
+      
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+        try {
+          const result = await refetch();
+          if (result.data?.pairingCode) {
+            setPairingCode(result.data.pairingCode);
+            toast.success('Code de couplage généré !');
+            clearInterval(pollInterval);
+          } else if (pollCount >= maxPolls) {
+            clearInterval(pollInterval);
+            toast.error('Le code de couplage n\'a pas pu être généré. Veuillez réessayer ou utiliser le QR Code.');
+          }
+        } catch (error) {
+          console.error('Error polling for pairing code:', error);
+          if (pollCount >= maxPolls) {
+            clearInterval(pollInterval);
+          }
+        }
+      }, 2000); // Poll every 2 seconds
+
+      return () => {
+        clearInterval(pollInterval);
+      };
+    }
+  }, [activeMethod, pairingCode, refetch]);
 
   const handleQRCode = () => {
     if (activeMethod === 'pairing') {

@@ -1021,12 +1021,12 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
         } : null,
       });
 
-      // Handle pairing code ONLY (ignore QR code in pairing code mode)
+      // Handle pairing code - Baileys generates it automatically in certain conditions
       if (pairingCode) {
-        logger.info(`[WhatsApp] Pairing code received for user: ${userId}, code: ${pairingCode}`);
+        logger.info(`[WhatsApp] ✅ Pairing code received for user: ${userId}, code: ${pairingCode}`);
         try {
           pairingCodes.set(userId, pairingCode);
-          logger.info(`[WhatsApp] Pairing code stored for user: ${userId}, code: ${pairingCode}`);
+          logger.info(`[WhatsApp] Pairing code stored in memory for user: ${userId}, code: ${pairingCode}`);
           
           await updateSessionStatus(userId, {
             status: 'connecting',
@@ -1049,9 +1049,29 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
         }
       }
 
-      // Ignore QR code in pairing code mode
-      if (qr) {
-        logger.info(`[WhatsApp] QR code received in pairing code mode, ignoring for user: ${userId}`);
+      // If QR code is received but we want pairing code, try to request pairing code
+      // Baileys may generate pairing code after QR code if we wait
+      if (qr && !pairingCode) {
+        logger.info(`[WhatsApp] QR code received in pairing code mode, will wait for pairing code for user: ${userId}`);
+        // Don't ignore - wait a bit, Baileys might generate pairing code after QR
+        // Set a timeout to check for pairing code
+        setTimeout(async () => {
+          const storedPairingCode = pairingCodes.get(userId);
+          if (!storedPairingCode) {
+            logger.info(`[WhatsApp] No pairing code generated after QR for user ${userId}, checking database...`);
+            const { data: sessionData } = await supabase
+              .from('whatsapp_sessions')
+              .select('pairing_code')
+              .eq('user_id', userId)
+              .single();
+            
+            if (sessionData?.pairing_code && pairingCodeResolve) {
+              logger.info(`[WhatsApp] Found pairing code in database for user ${userId}`);
+              pairingCodeResolve(sessionData.pairing_code);
+              pairingCodeResolve = null;
+            }
+          }
+        }, 5000); // Wait 5 seconds after QR to check for pairing code
       }
 
       if (connection === 'close') {
@@ -1250,23 +1270,25 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
       }
     }, 100); // Check after 100ms
 
-    // Wait for pairing code generation with timeout (30 seconds)
-    // Note: WhatsApp generates pairing code automatically in certain conditions
+    // Wait for pairing code generation with timeout (10 seconds initial, then return empty for polling)
+    // Note: WhatsApp generates pairing code automatically, but it may take time
+    // We return quickly and let the frontend poll for the pairing code
     logger.info(`[WhatsApp] Waiting for pairing code generation for user: ${userId}`);
     
     let finalPairingCode = '';
     try {
-      // Wait for pairing code with timeout
+      // Wait for pairing code with shorter timeout (10 seconds)
+      // If not received, return empty string and let frontend poll
       const timeoutPromise = new Promise<string>((_, reject) => {
         setTimeout(() => {
-          reject(new Error('Pairing code generation timeout'));
-        }, 30000); // 30 seconds timeout
+          reject(new Error('Pairing code generation timeout - will poll'));
+        }, 10000); // 10 seconds initial timeout
       });
 
       finalPairingCode = await Promise.race([pairingCodePromise, timeoutPromise]);
-      logger.info(`[WhatsApp] Pairing code received for user ${userId}, code: ${finalPairingCode}`);
+      logger.info(`[WhatsApp] Pairing code received immediately for user ${userId}, code: ${finalPairingCode}`);
     } catch (error) {
-      logger.warn(`[WhatsApp] Pairing code not generated within timeout for user ${userId}:`, error);
+      logger.info(`[WhatsApp] Pairing code not generated immediately for user ${userId}, will be available via polling`);
       
       // Check if pairing code was already stored in memory or database
       const storedPairingCode = pairingCodes.get(userId);
@@ -1276,17 +1298,18 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
       } else {
         // Check database as fallback
         const { data: sessionData } = await supabase
-      .from('whatsapp_sessions')
-      .select('pairing_code, status')
-      .eq('user_id', userId)
-      .single();
+          .from('whatsapp_sessions')
+          .select('pairing_code, status')
+          .eq('user_id', userId)
+          .single();
     
         if (sessionData?.pairing_code) {
           finalPairingCode = sessionData.pairing_code;
           logger.info(`[WhatsApp] Using stored pairing code from database for user ${userId}`);
         } else {
-          logger.warn(`[WhatsApp] No pairing code available for user ${userId}`);
-          logger.warn(`[WhatsApp] WhatsApp may not generate pairing code automatically. Try using QR code instead.`);
+          // Return empty string - frontend will poll for it
+          logger.info(`[WhatsApp] Pairing code not yet available for user ${userId}, frontend will poll`);
+          finalPairingCode = '';
         }
       }
     }
