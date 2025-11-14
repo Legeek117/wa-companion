@@ -5,6 +5,7 @@ import { getRedisClient } from './config/redis';
 import { getSupabaseClient } from './config/database';
 import { logEnvironmentStatus, checkEnvironmentVariables } from './config/check-env';
 import { reconnectWhatsAppIfCredentialsExist } from './services/whatsapp.service';
+import { initializeFirebaseAdmin } from './services/notifications.service';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { startRenderKeepAlive } from './utils/renderKeepAlive';
@@ -43,6 +44,15 @@ async function startServer(): Promise<void> {
         }
       }
       process.exit(1);
+    }
+
+    // Initialize Firebase Admin for push notifications
+    if (env.NODE_ENV !== 'test') {
+      try {
+        initializeFirebaseAdmin();
+      } catch (error) {
+        logger.warn('Firebase Admin initialization failed, push notifications will be disabled:', error);
+      }
     }
 
     // Initialize Redis connection (optional for basic tests)

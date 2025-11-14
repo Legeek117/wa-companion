@@ -242,7 +242,7 @@ export const getAutoresponderConfig = async (userId: string) => {
 
     // Get autoresponder configs
     const { data: configs } = await supabase
-      .from('autoresponder_configs')
+      .from('autoresponder_config')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: true });
@@ -277,7 +277,7 @@ export const activateMode = async (userId: string, mode: string, message?: strin
   try {
     // Check if config exists
     const { data: existing } = await supabase
-      .from('autoresponder_configs')
+      .from('autoresponder_config')
       .select('*')
       .eq('user_id', userId)
       .eq('mode', mode)
@@ -286,7 +286,7 @@ export const activateMode = async (userId: string, mode: string, message?: strin
     if (existing) {
       // Update existing config
       const { error } = await supabase
-        .from('autoresponder_configs')
+        .from('autoresponder_config')
         .update({
           enabled: true,
           message: message || existing.message,
@@ -303,7 +303,7 @@ export const activateMode = async (userId: string, mode: string, message?: strin
         : '⏰ Mode Occupé\n\nJe suis actuellement occupé(e) et ne peux pas répondre.\nJe reviendrai vers vous dès que possible.\n\nMerci de patienter !';
 
       const { error } = await supabase
-        .from('autoresponder_configs')
+        .from('autoresponder_config')
         .insert({
           user_id: userId,
           mode,
@@ -316,7 +316,7 @@ export const activateMode = async (userId: string, mode: string, message?: strin
 
     // Deactivate other modes
     await supabase
-      .from('autoresponder_configs')
+      .from('autoresponder_config')
       .update({
         enabled: false,
         updated_at: new Date().toISOString(),
@@ -337,7 +337,7 @@ export const activateMode = async (userId: string, mode: string, message?: strin
 export const deactivateMode = async (userId: string, mode: string) => {
   try {
     const { error } = await supabase
-      .from('autoresponder_configs')
+      .from('autoresponder_config')
       .update({
         enabled: false,
         updated_at: new Date().toISOString(),

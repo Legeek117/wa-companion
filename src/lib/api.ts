@@ -275,5 +275,14 @@ export const api = {
   quota: {
     get: () => apiClient.get('/api/quota'),
   },
+
+  // Notifications
+  notifications: {
+    saveToken: (data: { token: string }) => apiClient.post('/api/notifications/token', data),
+    deleteToken: () => apiClient.delete('/api/notifications/token'),
+    getSettings: () => apiClient.get('/api/notifications/settings'),
+    updateSettings: (settings: { enabled: boolean; viewOnce?: boolean; statusLiked?: boolean; deletedMessage?: boolean }) =>
+      apiClient.put('/api/notifications/settings', settings),
+  },
 };
 

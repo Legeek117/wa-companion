@@ -617,6 +617,24 @@ export const captureViewOnceFromQuoted = async (
 
     logger.info(`[ViewOnce] ✅ View Once captured successfully: ${capture.id}`);
 
+    // 9. Envoyer une notification push
+    try {
+      const { sendPushNotification } = await import('./notifications.service');
+      await sendPushNotification(userId, {
+        title: 'View Once capturé',
+        body: `Nouveau View Once de ${senderName}`,
+        image: mediaUrl || undefined,
+        data: {
+          type: 'view_once',
+          id: capture.id,
+          senderId,
+          senderName,
+        },
+      });
+    } catch (notifError) {
+      logger.warn('[ViewOnce] Failed to send push notification:', notifError);
+    }
+
     return {
       success: true,
       captureId: capture.id,

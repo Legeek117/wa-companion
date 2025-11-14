@@ -74,11 +74,11 @@ const Upgrade = () => {
             <CardDescription>Toutes les fonctionnalités</CardDescription>
             <div className="pt-4 space-y-2">
               <div>
-                <span className="text-4xl font-bold">7,99€</span>
+                <span className="text-4xl font-bold">3000f</span>
                 <span className="text-muted-foreground">/mois</span>
               </div>
               <div className="text-sm text-muted-foreground">
-                ou <span className="font-semibold text-foreground">79,99€/an</span>
+                ou <span className="font-semibold text-foreground">30000f/an</span>
                 <Badge variant="secondary" className="ml-2 text-xs">
                   Économisez 17%
                 </Badge>

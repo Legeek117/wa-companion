@@ -76,12 +76,12 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-4 md:space-y-6 px-2 sm:px-4 md:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Tableau de bord</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 md:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2">Tableau de bord</h1>
+          <p className="text-xs sm:text-sm md:text-base text-muted-foreground">
             Bienvenue de retour ! Voici un aperçu de votre activité.
           </p>
         </div>
@@ -95,7 +95,7 @@ const Dashboard = () => {
           )}
           {!isPremium && (
             <Button 
-              className="bg-gradient-premium text-xs sm:text-sm px-3 sm:px-4"
+              className="bg-gradient-premium text-xs sm:text-sm px-2 sm:px-3 md:px-4 h-8 sm:h-9 md:h-10"
               onClick={() => navigate('/dashboard/upgrade')}
             >
               <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
@@ -107,11 +107,11 @@ const Dashboard = () => {
       </div>
 
       {/* Connection Status */}
-      <Card className="border-border bg-gradient-to-r from-primary/5 to-primary/10">
-        <CardContent className="pt-4 sm:pt-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0 ${
+      <Card className="border-border bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/10 dark:to-primary/5">
+        <CardContent className="pt-3 sm:pt-4 md:pt-6 px-3 sm:px-4 md:px-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 md:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full flex-shrink-0 ${
                 isConnected 
                   ? 'bg-green-500 animate-pulse' 
                   : whatsappStatus?.status === 'connecting'
@@ -119,7 +119,7 @@ const Dashboard = () => {
                   : 'bg-red-500'
               }`}></div>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-sm sm:text-base">
+                <p className="font-semibold text-xs sm:text-sm md:text-base truncate">
                   {isConnected 
                     ? 'WhatsApp Connecté' 
                     : whatsappStatus?.status === 'connecting'
@@ -128,7 +128,7 @@ const Dashboard = () => {
                 </p>
                 <p className="text-xs sm:text-sm text-muted-foreground truncate">
                   {whatsappStatus?.lastSeen 
-                    ? `Dernière synchronisation : ${new Date(whatsappStatus.lastSeen).toLocaleString('fr-FR')}`
+                    ? `Dernière sync : ${new Date(whatsappStatus.lastSeen).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
                     : 'Connectez votre WhatsApp pour commencer'}
                 </p>
               </div>
@@ -136,15 +136,16 @@ const Dashboard = () => {
             <Button 
               variant="outline" 
               size="sm" 
-              className="w-full sm:w-auto text-xs sm:text-sm"
+              className="w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9 md:h-10 whitespace-nowrap"
               onClick={() => {
                 if (!isConnected) {
-                  getQR();
+                  navigate('/dashboard/connect');
+                } else {
+                  navigate('/dashboard/settings');
                 }
-                navigate('/dashboard/settings');
               }}
             >
-              {isConnected ? 'Paramètres' : 'Voir QR Code'}
+              {isConnected ? 'Paramètres' : 'Se connecter'}
             </Button>
           </div>
         </CardContent>
@@ -159,17 +160,17 @@ const Dashboard = () => {
         ) : (
           displayStats.map((stat, index) => (
           <Card key={index} className="border-border hover:shadow-md transition-shadow">
-            <CardContent className="pt-4 sm:pt-6">
+            <CardContent className="pt-4 sm:pt-5 md:pt-6 px-4 sm:px-5 md:px-6">
               <div className="flex items-start justify-between mb-3 sm:mb-4">
-                <div className={`p-2 sm:p-3 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${stat.color}`} />
+                <div className={`p-2 sm:p-2.5 md:p-3 rounded-lg ${stat.bgColor} flex-shrink-0`}>
+                  <stat.icon className={`w-4 h-4 sm:w-4.5 md:w-5 sm:h-4.5 md:h-5 ${stat.color}`} />
                 </div>
-                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground flex-shrink-0" />
+                <TrendingUp className="w-3 h-3 sm:w-3.5 md:w-4 sm:h-3.5 md:h-4 text-muted-foreground flex-shrink-0" />
               </div>
               <div>
-                <p className="text-xl sm:text-2xl font-bold mb-1">{stat.value}</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold mb-1">{stat.value}</p>
                 <p className="text-xs sm:text-sm text-muted-foreground">{stat.title}</p>
-                <p className="text-xs text-muted-foreground mt-1">{stat.subtitle}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 sm:mt-1">{stat.subtitle}</p>
                 {stat.progress !== undefined && (
                   <Progress value={stat.progress} className="mt-2 sm:mt-3 h-1" />
                 )}
@@ -180,28 +181,28 @@ const Dashboard = () => {
         )}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Recent Activity */}
         <Card className="border-border">
-          <CardHeader className="pb-3 sm:pb-4">
-            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
+          <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base md:text-lg">
+              <Activity className="w-4 h-4 sm:w-4.5 md:w-5 sm:h-4.5 md:h-5 flex-shrink-0" />
               Activité récente
             </CardTitle>
             <CardDescription className="text-xs sm:text-sm">Vos dernières interactions automatisées</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             {isLoading ? (
               <Loading text="Chargement de l'activité..." showLogo={true} size="sm" />
             ) : recentActivity.length > 0 ? (
-              <div className="space-y-2 sm:space-y-4">
+              <div className="space-y-2 sm:space-y-3 md:space-y-4">
                 {recentActivity.map((activity) => {
                   const Icon = activityIcons[activity.type];
                   const color = activityColors[activity.type];
                   return (
-                    <div key={activity.id} className="flex items-center gap-2 sm:gap-4 p-2 sm:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                    <div key={activity.id} className="flex items-center gap-2 sm:gap-3 md:gap-4 p-2 sm:p-2.5 md:p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                       <div className={`p-1.5 sm:p-2 rounded-full bg-background flex-shrink-0`}>
-                        <Icon className={`w-3 h-3 sm:w-4 sm:h-4 ${color}`} />
+                        <Icon className={`w-3 h-3 sm:w-3.5 md:w-4 sm:h-3.5 md:h-4 ${color}`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs sm:text-sm font-medium truncate">{activity.action}</p>
@@ -213,7 +214,7 @@ const Dashboard = () => {
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-sm text-muted-foreground">
+              <div className="text-center py-6 sm:py-8 text-xs sm:text-sm text-muted-foreground">
                 Aucune activité récente
               </div>
             )}
@@ -222,58 +223,58 @@ const Dashboard = () => {
 
         {/* Quick Actions */}
         <Card className="border-border">
-          <CardHeader className="pb-3 sm:pb-4">
-            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
+          <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base md:text-lg">
+              <Calendar className="w-4 h-4 sm:w-4.5 md:w-5 sm:h-4.5 md:h-5 flex-shrink-0" />
               Actions rapides
             </CardTitle>
             <CardDescription className="text-xs sm:text-sm">Gérez vos fonctionnalités principales</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 sm:space-y-3">
+          <CardContent className="space-y-2 sm:space-y-2.5 md:space-y-3 px-4 sm:px-6">
             <Button 
               variant="outline" 
-              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3"
+              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-2.5 md:py-3"
               onClick={() => navigate('/dashboard/status/config')}
             >
-              <Heart className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
-              <div className="text-left flex-1">
-                <div className="font-medium text-xs sm:text-sm">Configurer Auto-Like</div>
-                <div className="text-xs text-muted-foreground hidden sm:block">Choisir emoji et contacts</div>
+              <Heart className="w-3 h-3 sm:w-3.5 md:w-4 sm:h-3.5 md:h-4 mr-2 sm:mr-2.5 md:mr-3 flex-shrink-0" />
+              <div className="text-left flex-1 min-w-0">
+                <div className="font-medium text-xs sm:text-sm truncate">Configurer Auto-Like</div>
+                <div className="text-xs text-muted-foreground hidden sm:block truncate">Choisir emoji et contacts</div>
               </div>
             </Button>
             <Button 
               variant="outline" 
-              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3"
+              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-2.5 md:py-3"
               onClick={() => navigate('/dashboard/status/schedule')}
             >
-              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
-              <div className="text-left flex-1">
-                <div className="font-medium text-xs sm:text-sm">Programmer un Status</div>
-                <div className="text-xs text-muted-foreground hidden sm:block">
+              <Calendar className="w-3 h-3 sm:w-3.5 md:w-4 sm:h-3.5 md:h-4 mr-2 sm:mr-2.5 md:mr-3 flex-shrink-0" />
+              <div className="text-left flex-1 min-w-0">
+                <div className="font-medium text-xs sm:text-sm truncate">Programmer un Status</div>
+                <div className="text-xs text-muted-foreground hidden sm:block truncate">
                   {quota?.scheduledStatuses?.used || 0}/{quota?.scheduledStatuses?.limit === Infinity ? '∞' : quota?.scheduledStatuses?.limit || 5} utilisé ce mois
                 </div>
               </div>
             </Button>
             <Button 
               variant="outline" 
-              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3"
+              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-2.5 md:py-3"
               onClick={() => navigate('/dashboard/autoresponder')}
             >
-              <Bot className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
-              <div className="text-left flex-1">
-                <div className="font-medium text-xs sm:text-sm">Activer Répondeur</div>
-                <div className="text-xs text-muted-foreground hidden sm:block">Mode Hors Ligne / Occupé</div>
+              <Bot className="w-3 h-3 sm:w-3.5 md:w-4 sm:h-3.5 md:h-4 mr-2 sm:mr-2.5 md:mr-3 flex-shrink-0" />
+              <div className="text-left flex-1 min-w-0">
+                <div className="font-medium text-xs sm:text-sm truncate">Activer Répondeur</div>
+                <div className="text-xs text-muted-foreground hidden sm:block truncate">Mode Hors Ligne / Occupé</div>
               </div>
             </Button>
             <Button 
               variant="outline" 
-              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-3"
+              className="w-full justify-start text-xs sm:text-sm h-auto py-2 sm:py-2.5 md:py-3"
               onClick={() => navigate('/dashboard/view-once')}
             >
-              <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-2 sm:mr-3 flex-shrink-0" />
-              <div className="text-left flex-1">
-                <div className="font-medium text-xs sm:text-sm">Voir View Once</div>
-                <div className="text-xs text-muted-foreground hidden sm:block">
+              <Eye className="w-3 h-3 sm:w-3.5 md:w-4 sm:h-3.5 md:h-4 mr-2 sm:mr-2.5 md:mr-3 flex-shrink-0" />
+              <div className="text-left flex-1 min-w-0">
+                <div className="font-medium text-xs sm:text-sm truncate">Voir View Once</div>
+                <div className="text-xs text-muted-foreground hidden sm:block truncate">
                   {stats.viewOnceCount} capture{stats.viewOnceCount > 1 ? 's' : ''} disponible{stats.viewOnceCount > 1 ? 's' : ''}
                 </div>
               </div>
@@ -283,12 +284,12 @@ const Dashboard = () => {
       </div>
 
       {/* Premium Upsell */}
-      <Card className="border-premium shadow-premium bg-gradient-to-r from-premium/5 to-premium/10">
-        <CardContent className="pt-4 sm:pt-6">
+      <Card className="border-premium shadow-premium bg-gradient-to-r from-premium/5 to-premium/10 dark:from-premium/10 dark:to-premium/15">
+        <CardContent className="pt-4 sm:pt-5 md:pt-6 px-4 sm:px-5 md:px-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-premium flex-shrink-0" />
+              <h3 className="text-base sm:text-lg md:text-xl font-bold mb-2 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 sm:w-4.5 md:w-5 sm:h-4.5 md:h-5 text-premium flex-shrink-0" />
                 <span className="text-sm sm:text-base md:text-lg">Débloquez toute la puissance avec Premium</span>
               </h3>
               <ul className="text-xs sm:text-sm text-muted-foreground space-y-1">
@@ -298,10 +299,13 @@ const Dashboard = () => {
                 <li>✓ Support prioritaire et backup automatique</li>
               </ul>
             </div>
-            <Button className="bg-gradient-premium whitespace-nowrap text-xs sm:text-sm w-full sm:w-auto">
+            <Button 
+              className="bg-gradient-premium whitespace-nowrap text-xs sm:text-sm w-full sm:w-auto flex-shrink-0"
+              onClick={() => navigate('/dashboard/upgrade')}
+            >
               <span className="hidden sm:inline">Essayer 30 jours</span>
               <span className="sm:hidden">Essayer</span>
-              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
+              <Sparkles className="w-3 h-3 sm:w-3.5 md:w-4 sm:h-3.5 md:h-4 ml-1 sm:ml-2 flex-shrink-0" />
             </Button>
           </div>
         </CardContent>

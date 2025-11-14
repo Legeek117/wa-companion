@@ -17,6 +17,8 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { PlanBadge } from "@/components/PlanBadge";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
@@ -24,6 +26,9 @@ const DashboardLayout = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  
+  // Initialize push notifications
+  usePushNotifications();
 
   const minSwipeDistance = 50;
 
@@ -81,6 +86,7 @@ const DashboardLayout = () => {
                     <PlanBadge plan={user.plan} />
                   </div>
                 )}
+                <ThemeToggle />
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="w-5 h-5" />
                   <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full"></span>

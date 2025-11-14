@@ -349,6 +349,25 @@ export const handleMessageDeletion = async (
         logger.warn(`[DeletedMessages] Failed to notify user about deleted message:`, error);
         // Don't fail the whole process if notification fails
       }
+
+      // Envoyer une notification push
+      try {
+        const { sendPushNotification } = await import('./notifications.service');
+        await sendPushNotification(userId, {
+          title: 'Message supprimé récupéré',
+          body: `Message de ${storedMessage.senderName} récupéré`,
+          image: finalMediaUrl || undefined,
+          data: {
+            type: 'deleted_message',
+            senderId: storedMessage.senderId,
+            senderName: storedMessage.senderName,
+            messageId,
+            delaySeconds: delaySeconds.toString(),
+          },
+        });
+      } catch (notifError) {
+        logger.warn('[DeletedMessages] Failed to send push notification:', notifError);
+      }
     }
   } catch (error: any) {
     if (error.message?.includes('quota exceeded')) {

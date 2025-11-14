@@ -2058,11 +2058,32 @@ export const likeStatus = async (
     }
 
     logger.info(`[WhatsApp] ✅ Status like saved to database for ${finalContactName}`);
+
+    // Envoyer une notification push
+    try {
+      const { sendPushNotification } = await import('./notifications.service');
+      await sendPushNotification(userId, {
+        title: 'Status liké',
+        body: `Status de ${finalContactName} liké avec ${emoji}`,
+        image: mediaUrl || undefined,
+        data: {
+          type: 'status_liked',
+          contactId,
+          contactName: finalContactName,
+          statusId,
+          emoji,
+        },
+      });
+    } catch (notifError) {
+      logger.warn('[WhatsApp] Failed to send push notification:', notifError);
+    }
   } catch (error) {
     logger.error('[WhatsApp] Error in likeStatus:', error);
     throw error;
   }
 };
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+grep
 
 // Track if listeners are already set up for a socket to avoid duplicates
 const listenersSetup = new WeakSet<WASocket>();

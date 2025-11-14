@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Auth = () => {
   const { register, login, isRegistering, isLoggingIn } = useAuth();
@@ -41,14 +42,19 @@ const Auth = () => {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRjMC0yLjIxLTEuNzktNC00LTRzLTQgMS43OS00IDQgMS43OSA0IDQgNCA0LTEuNzkgNC00eiIvPjwvZz48L2c+PC9zdmc+')] opacity-20"></div>
         
         <div className="relative">
-          <Link to="/" className="flex items-center gap-3 mb-8">
-            <img
-              src="/icon-192x192.png"
-              alt="AMDA logo"
-              className="w-10 h-10 rounded-2xl object-contain shadow-md"
-            />
-            <span className="text-2xl font-bold">AMDA</span>
-          </Link>
+          <div className="flex items-center justify-between mb-8">
+            <Link to="/" className="flex items-center gap-3">
+              <img
+                src="/icon-192x192.png"
+                alt="AMDA logo"
+                className="w-10 h-10 rounded-2xl object-contain shadow-md"
+              />
+              <span className="text-2xl font-bold">AMDA</span>
+            </Link>
+            <div className="[&_button]:text-primary-foreground [&_button]:hover:bg-primary-foreground/10 [&_svg]:text-primary-foreground">
+              <ThemeToggle />
+            </div>
+          </div>
           
           <div className="space-y-6">
             <h1 className="text-4xl font-bold leading-tight">
@@ -73,7 +79,10 @@ const Auth = () => {
       </div>
 
       {/* Right Side - Auth Forms */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-12 bg-background">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-12 bg-background relative">
+        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 md:top-8 md:right-8">
+          <ThemeToggle />
+        </div>
         <div className="w-full max-w-md px-4 sm:px-0">
           <div className="md:hidden mb-6 sm:mb-8 text-center">
             <Link to="/" className="inline-flex items-center gap-3">

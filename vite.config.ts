@@ -68,7 +68,9 @@ export default defineConfig(({ mode }) => ({
               }
             }
           }
-        ]
+        ],
+        // Import Firebase messaging service worker
+        importScripts: ['/firebase-messaging-sw.js']
       }
     })
   ].filter(Boolean),

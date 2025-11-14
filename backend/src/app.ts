@@ -20,6 +20,7 @@ import subscriptionRoutes from './routes/subscription.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import quotaRoutes from './routes/quota.routes';
 import mediaRoutes from './routes/media.routes';
+import notificationsRoutes from './routes/notifications.routes';
 
 const app: Application = express();
 
@@ -305,6 +306,7 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/quota', quotaRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

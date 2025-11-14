@@ -13,10 +13,13 @@ import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
+import { useTheme } from "next-themes";
 
 const Settings = () => {
   const { user, isPremium } = useAuth();
   const { status: whatsappStatus, isConnected, isConnecting, getQR, getPairingCode, disconnect, isGettingQR, isGettingPairingCode, isDisconnecting, refetch: refetchWhatsAppStatus } = useWhatsApp();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   
   // View Once command config
   const [viewOnceCommand, setViewOnceCommand] = useState('.vv');
@@ -26,6 +29,7 @@ const Settings = () => {
   const [isSavingCommandConfig, setIsSavingCommandConfig] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     loadViewOnceCommandConfig();
   }, []);
 
@@ -361,7 +365,7 @@ const Settings = () => {
               </div>
 
               <Button className="w-full bg-premium">
-                Passer à Premium - 7,99€/mois
+                Passer à Premium - 3000f/mois
               </Button>
 
               <div className="pt-4 border-t">
@@ -396,7 +400,17 @@ const Settings = () => {
                     Activer le mode sombre
                   </p>
                 </div>
-                <Switch />
+                {mounted ? (
+                  <Switch 
+                    checked={theme === 'dark'} 
+                    onCheckedChange={(checked) => {
+                      setTheme(checked ? 'dark' : 'light');
+                      toast.success(checked ? 'Mode sombre activé' : 'Mode clair activé');
+                    }}
+                  />
+                ) : (
+                  <Switch disabled />
+                )}
               </div>
 
               <Button onClick={handleSave}>Enregistrer</Button>

@@ -14,6 +14,19 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://amda-backend-3aji.onrender.com';
+
+// Helper function to build full media URL
+const buildMediaUrl = (mediaUrl: string | null): string | null => {
+  if (!mediaUrl) return null;
+  // If already a full URL, return as is
+  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+    return mediaUrl;
+  }
+  // If relative URL, prepend API_URL
+  return `${API_URL}${mediaUrl}`;
+};
+
 const ViewOnce = () => {
   const { captures, isLoading, quota, isPremium } = useViewOnce();
   const navigate = useNavigate();
@@ -36,8 +49,14 @@ const ViewOnce = () => {
       ['image', 'sticker'].includes(capture.media_type) ? 'image' : 
       capture.media_type === 'video' ? 'video' : 'image';
     
+    const fullMediaUrl = buildMediaUrl(capture.media_url);
+    if (!fullMediaUrl) {
+      toast.error('URL du média invalide');
+      return;
+    }
+    
     setSelectedMedia({
-      url: capture.media_url,
+      url: fullMediaUrl,
       type: viewerType,
       title: `${capture.sender_name} - ${new Date(capture.captured_at).toLocaleString('fr-FR')}`,
     });
@@ -120,9 +139,13 @@ const ViewOnce = () => {
                     <div className="aspect-square bg-muted flex items-center justify-center relative">
                       {capture.media_url && capture.media_type === 'image' ? (
                         <img 
-                          src={capture.media_url} 
+                          src={buildMediaUrl(capture.media_url) || ''} 
                           alt={capture.media_type}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Error loading image:', capture.media_url);
+                            e.currentTarget.style.display = 'none';
+                          }}
                         />
                       ) : (
                         <Image className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground" />
