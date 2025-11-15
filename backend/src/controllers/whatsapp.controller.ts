@@ -70,7 +70,7 @@ export const getPairingCode = async (req: AuthRequest, res: Response, next: Next
       sessionId,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
         pairingCode: pairingCode || '',
