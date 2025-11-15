@@ -39,6 +39,45 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
 };
 
 /**
+ * Wait for service worker to be ready and check for pushManager
+ */
+const waitForServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
+  if (!("serviceWorker" in navigator)) {
+    return null;
+  }
+
+  try {
+    // Wait for service worker to be ready
+    let registration: ServiceWorkerRegistration | null = null;
+    
+    // Try to get existing registration first
+    registration = await navigator.serviceWorker.getRegistration();
+    
+    // If no registration, wait for ready
+    if (!registration) {
+      registration = await navigator.serviceWorker.ready;
+    }
+    
+    // Wait a bit more to ensure pushManager is available
+    if (registration && !registration.pushManager) {
+      console.log("Waiting for pushManager to be available...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Check again
+      if (!registration.pushManager) {
+        console.warn("pushManager still not available after wait");
+        return null;
+      }
+    }
+    
+    return registration;
+  } catch (error) {
+    console.warn("Service worker not ready:", error);
+    return null;
+  }
+};
+
+/**
  * Get FCM token for the current user
  */
 export const getFCMToken = async (): Promise<string | null> => {
@@ -53,8 +92,34 @@ export const getFCMToken = async (): Promise<string | null> => {
       return null;
     }
 
+    // Wait for service worker to be ready before getting token
+    const registration = await waitForServiceWorker();
+    if (!registration) {
+      console.warn("Service worker not available, cannot get FCM token");
+      return null;
+    }
+
+    // Check if pushManager is available
+    if (!registration || !registration.pushManager) {
+      console.warn("PushManager not available in service worker registration");
+      // Try without serviceWorkerRegistration parameter
+      try {
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+        });
+        if (token) {
+          console.log("FCM Token (without serviceWorkerRegistration):", token);
+          return token;
+        }
+      } catch (fallbackError) {
+        console.error("Failed to get token even without serviceWorkerRegistration:", fallbackError);
+      }
+      return null;
+    }
+
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: registration,
     });
 
     if (token) {
@@ -93,6 +158,17 @@ export const initializePushNotifications = async (): Promise<void> => {
   }
 
   try {
+    // Wait a bit for service worker to be registered
+    if ("serviceWorker" in navigator) {
+      try {
+        await navigator.serviceWorker.ready;
+      } catch (error) {
+        console.warn("Service worker not ready, waiting...", error);
+        // Wait a bit more
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
     // Request permission
     const hasPermission = await requestNotificationPermission();
     if (!hasPermission) {
@@ -100,10 +176,20 @@ export const initializePushNotifications = async (): Promise<void> => {
       return;
     }
 
-    // Get token
-    const token = await getFCMToken();
+    // Get token (with retry logic)
+    let token: string | null = null;
+    let retries = 3;
+    while (!token && retries > 0) {
+      token = await getFCMToken();
+      if (!token && retries > 1) {
+        console.log(`Retrying FCM token retrieval... (${retries - 1} attempts left)`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      retries--;
+    }
+
     if (!token) {
-      console.warn("Failed to get FCM token");
+      console.warn("Failed to get FCM token after retries");
       return;
     }
 

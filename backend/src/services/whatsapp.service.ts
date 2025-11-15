@@ -3,6 +3,7 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import { join } from 'path';
@@ -88,6 +89,17 @@ const activeSockets = new Map<string, WASocket>();
 
 // Store keep-alive intervals by userId
 const keepAliveIntervals = new Map<string, NodeJS.Timeout>();
+
+// Store statuses by userId (in-memory cache)
+const statusCache = new Map<string, Array<{
+  id: string;
+  contactId: string;
+  contactName: string;
+  timestamp: number;
+  type: 'image' | 'video' | 'text';
+  url?: string;
+  caption?: string;
+}>>();
 
 /**
  * Get all active sockets (for user identification)
@@ -974,7 +986,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     });
 
     // Create an event handler BEFORE creating the socket
-    let pairingCodeHandler: ((update: any) => void) | null = null;
+    let pairingCodeHandler: ((update: any) => Promise<void>) | null = null;
 
     // Create socket - WhatsApp will generate pairing code automatically in certain conditions
     // We listen for pairing code in connection.update event
@@ -1017,6 +1029,17 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     // Store socket immediately
     activeSockets.set(userId, socket);
 
+    // Check if already registered (inspired by reference code)
+    const socketAny = socket as any;
+    const isRegistered = socketAny.authState?.creds?.registered;
+    
+    if (isRegistered) {
+      logger.warn(`[WhatsApp] Account already registered for user ${userId}, cannot generate pairing code`);
+      await updateSessionStatus(userId, { status: 'disconnected' });
+      activeSockets.delete(userId);
+      throw new Error('Compte déjà connecté. Veuillez vous déconnecter d\'abord.');
+    }
+
     // If phone number is provided, request pairing code directly (inspired by reference code)
     if (phoneNumber) {
       try {
@@ -1030,6 +1053,9 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         logger.info(`[WhatsApp] Requesting pairing code for phone number: ${cleanPhoneNumber}, user: ${userId}`);
         
         // Request pairing code using Baileys method (inspired by reference code)
+        // Wait a bit for socket to be ready
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const pairingCode = await socket.requestPairingCode(cleanPhoneNumber);
         
         logger.info(`[WhatsApp] ✅ Pairing code generated via requestPairingCode for user ${userId}, code: ${pairingCode}`);
@@ -1050,20 +1076,58 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
           pairingCodeResolve = null;
         }
         
-        // Return immediately with pairing code
+        // Attach connection handler to wait for connection after pairing code is entered
+        // Define handler if not already defined
+        if (!pairingCodeHandler) {
+          pairingCodeHandler = async (update: any) => {
+            const { connection } = update;
+            if (connection === 'open') {
+              logger.info(`[WhatsApp] WhatsApp connected via pairing code for user: ${userId}`);
+              await updateSessionStatus(userId, {
+                status: 'connected',
+                pairingCode: null,
+                connectedAt: new Date(),
+                lastSeen: new Date(),
+              });
+              activeSockets.set(userId, socket);
+              pairingCodes.delete(userId);
+              
+              // Setup message listeners for connected socket
+              setupMessageListeners(userId, socket);
+              
+              // Setup keep-alive to maintain bot presence as "online"
+              setupKeepAlive(userId, socket);
+            }
+          };
+        }
+        
+        // Attach handler to wait for connection
+        socket.ev.on('connection.update', pairingCodeHandler);
+        
+        // Return pairing code immediately
         return {
           pairingCode: pairingCode,
           sessionId: session.sessionId,
         };
-      } catch (error) {
+      } catch (error: any) {
         logger.error(`[WhatsApp] Error requesting pairing code for user ${userId}:`, error);
+        
+        // If error is about already registered, throw it
+        if (error?.message?.includes('registered') || error?.message?.includes('déjà connecté')) {
+          await updateSessionStatus(userId, { status: 'disconnected' });
+          activeSockets.delete(userId);
+          throw new Error('Compte déjà connecté. Veuillez vous déconnecter d\'abord.');
+        }
+        
         // If requestPairingCode fails, fall back to waiting for automatic generation
         logger.warn(`[WhatsApp] Falling back to automatic pairing code detection for user ${userId}`);
       }
     }
 
-    // Handle connection updates for pairing code - Set IMMEDIATELY after socket creation
-    pairingCodeHandler = async (update: any) => {
+    // Handle connection updates for pairing code - Define BEFORE socket creation if phoneNumber provided
+    // Otherwise define here
+    if (!pairingCodeHandler) {
+      pairingCodeHandler = async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
 
       // DEBUG: Log all update keys to detect pairing code (inspired by reference code)
@@ -1355,10 +1419,13 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         }
       }
     };
+    }
     
     // Attach handler IMMEDIATELY - use 'on' to catch all events
     logger.info(`[WhatsApp] Attaching connection.update handler for pairing code, user ${userId}`);
-    socket.ev.on('connection.update', pairingCodeHandler);
+    if (pairingCodeHandler) {
+      socket.ev.on('connection.update', pairingCodeHandler);
+    }
 
     // Also add debug logging for first few connection updates (inspired by reference code)
     let debugUpdateCount = 0;
@@ -2330,6 +2397,161 @@ const stopKeepAlive = (userId: string): void => {
 };
 
 /**
+ * Process and store a status message (inspired by reference code)
+ */
+const processAndStoreStatus = async (userId: string, socket: WASocket, message: any): Promise<void> => {
+  try {
+    const statusId = message.key?.id;
+    if (!statusId) {
+      logger.warn(`[WhatsApp] Status message without ID for user ${userId}`);
+      return;
+    }
+
+    // Get contact ID from participant (the person who posted the status)
+    const contactId = message.key.participant || message.key.remoteJid;
+    if (!contactId || contactId === 'status@broadcast') {
+      logger.warn(`[WhatsApp] Status without valid contact ID for user ${userId}`);
+      return;
+    }
+
+    // Get contact name
+    let contactName = contactId.split('@')[0];
+    try {
+      const contactsResult = await socket.onWhatsApp(contactId);
+      if (contactsResult && Array.isArray(contactsResult) && contactsResult.length > 0) {
+        const contact = contactsResult[0];
+        if (contact && contact.exists) {
+          contactName = contact.jid.split('@')[0];
+          // Try to get the name from contacts
+          try {
+            // Try to get from store
+            const socketAny = socket as any;
+            if (socketAny.store?.contacts) {
+              const contacts = socketAny.store.contacts;
+              if (contacts && typeof contacts.get === 'function') {
+                const contactData = contacts.get(contactId);
+                if (contactData?.name || contactData?.notify) {
+                  contactName = contactData.name || contactData.notify || contactName;
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+      }
+    } catch (e) {
+      logger.debug(`[WhatsApp] Could not get contact name for ${contactId}:`, e);
+    }
+
+    const timestamp = message.messageTimestamp ? message.messageTimestamp * 1000 : Date.now();
+
+    // Determine status type and content
+    let type: 'image' | 'video' | 'text' = 'text';
+    let url: string | undefined;
+    let caption: string | undefined;
+
+    if (message.message?.imageMessage) {
+      type = 'image';
+      caption = message.message.imageMessage.caption;
+      
+      // Try to download and store media
+      try {
+        const buffer = await downloadMediaMessage(
+          message,
+          'buffer',
+          {},
+          {
+            logger,
+            reuploadRequest: socket.updateMediaMessage,
+          }
+        );
+
+        if (buffer && Buffer.isBuffer(buffer)) {
+          // Upload to Supabase Storage
+          const { uploadMediaToSupabase } = await import('./supabaseStorage.service');
+          const mediaPath = `statuses/${userId}/${statusId}.jpg`;
+          const mediaUrl = await uploadMediaToSupabase(buffer, mediaPath, 'image/jpeg');
+          if (mediaUrl) {
+            url = mediaUrl;
+          }
+        }
+      } catch (mediaError) {
+        logger.warn(`[WhatsApp] Could not download status image for user ${userId}:`, mediaError);
+        // Use direct URL if available
+        url = message.message.imageMessage.url || message.message.imageMessage.directPath;
+      }
+    } else if (message.message?.videoMessage) {
+      type = 'video';
+      caption = message.message.videoMessage.caption;
+      
+      // Try to download and store media
+      try {
+        const buffer = await downloadMediaMessage(
+          message,
+          'buffer',
+          {},
+          {
+            logger,
+            reuploadRequest: socket.updateMediaMessage,
+          }
+        );
+
+        if (buffer && Buffer.isBuffer(buffer)) {
+          // Upload to Supabase Storage
+          const { uploadMediaToSupabase } = await import('./supabaseStorage.service');
+          const mediaPath = `statuses/${userId}/${statusId}.mp4`;
+          const mediaUrl = await uploadMediaToSupabase(buffer, mediaPath, 'video/mp4');
+          if (mediaUrl) {
+            url = mediaUrl;
+          }
+        }
+      } catch (mediaError) {
+        logger.warn(`[WhatsApp] Could not download status video for user ${userId}:`, mediaError);
+        // Use direct URL if available
+        url = message.message.videoMessage.url || message.message.videoMessage.directPath;
+      }
+    } else if (message.message?.extendedTextMessage) {
+      type = 'text';
+      caption = message.message.extendedTextMessage.text;
+    } else if (message.message?.conversation) {
+      type = 'text';
+      caption = message.message.conversation;
+    }
+
+    // Get or create status list for this user
+    let userStatuses = statusCache.get(userId) || [];
+    
+    // Check if status already exists
+    const exists = userStatuses.find(s => s.id === statusId);
+    if (!exists) {
+      const statusData = {
+        id: statusId,
+        contactId,
+        contactName,
+        timestamp,
+        type,
+        url,
+        caption,
+      };
+
+      // Add to beginning of list
+      userStatuses.unshift(statusData);
+      
+      // Limit to 200 statuses per user
+      if (userStatuses.length > 200) {
+        userStatuses = userStatuses.slice(0, 200);
+      }
+
+      statusCache.set(userId, userStatuses);
+      logger.info(`[WhatsApp] ✅ Status stored: ${type} from ${contactName} for user ${userId}`);
+    }
+  } catch (error) {
+    logger.error(`[WhatsApp] Error processing status for user ${userId}:`, error);
+  }
+};
+
+/**
  * Setup message event listeners for a connected socket
  */
 const setupMessageListeners = (userId: string, socket: WASocket): void => {
@@ -2390,6 +2612,19 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         logger.error(`[WhatsApp] Error handling status update for user ${userId}:`, err);
       });
       logger.info(`[Status] ✅ handleStatusUpdate completed for user ${userId}`);
+
+      // 🔥 DÉTECTER ET STOCKER LES STATUS (inspiré du code de référence)
+      for (const message of update.messages) {
+        // Vérifier si c'est un status (remoteJid === 'status@broadcast')
+        if (message.key?.remoteJid === 'status@broadcast') {
+          try {
+            logger.info(`[WhatsApp] 📸 Status détecté dans messages.upsert pour user ${userId}`);
+            await processAndStoreStatus(userId, socket, message);
+          } catch (error) {
+            logger.error(`[WhatsApp] Error processing status from messages.upsert:`, error);
+          }
+        }
+      }
 
       for (const message of update.messages) {
         logger.info(`[WhatsApp] 📥 Processing message for user ${userId}:`, {
@@ -2841,8 +3076,11 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
       throw new Error('WhatsApp not connected');
     }
 
-    // Try to fetch all statuses from WhatsApp using Baileys
-    let contactsWithStatuses = new Map<string, {
+    // First, try to get statuses from cache (collected from messages.upsert)
+    const cachedStatuses = statusCache.get(userId) || [];
+    
+    // Group cached statuses by contact
+    const contactsWithStatuses = new Map<string, {
       contactId: string;
       contactName: string;
       lastStatusTime: number;
@@ -2851,92 +3089,120 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
       latestStatusId?: string;
     }>();
 
-    try {
-      // Get all contacts from the socket
-      const allContacts = await getAllContactsFromSocket(userId);
-      
-      // Fetch statuses for each contact
-      for (const contact of allContacts) {
-        const contactId = contact.contact_id;
-        if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
-          continue;
-        }
+    for (const status of cachedStatuses) {
+      if (!contactsWithStatuses.has(status.contactId)) {
+        contactsWithStatuses.set(status.contactId, {
+          contactId: status.contactId,
+          contactName: status.contactName,
+          lastStatusTime: status.timestamp,
+          statusCount: 0,
+          statusIds: new Set(),
+        });
+      }
 
-        try {
-          const statusList = await socket.fetchStatus(contactId);
-          
-          if (statusList && Array.isArray(statusList) && statusList.length > 0) {
-            let latestTime = 0;
-            let latestStatusId: string | undefined;
-            const statusIds = new Set<string>();
-
-            for (const status of statusList) {
-              const statusId = (status.key && typeof status.key === 'object' && 'id' in status.key) 
-                ? (status.key as any).id 
-                : `status_${Date.now()}_${Math.random()}`;
-              const timestamp = status.updateTimestamp && typeof status.updateTimestamp === 'number' 
-                ? status.updateTimestamp * 1000 
-                : Date.now();
-              
-              statusIds.add(statusId);
-              
-              if (timestamp > latestTime) {
-                latestTime = timestamp;
-                latestStatusId = statusId;
-              }
-            }
-
-            if (statusIds.size > 0) {
-              contactsWithStatuses.set(contactId, {
-                contactId,
-                contactName: contact.contact_name || contactId.split('@')[0],
-                lastStatusTime: latestTime,
-                statusCount: statusIds.size,
-                statusIds,
-                latestStatusId,
-              });
-            }
-          }
-        } catch (contactError: any) {
-          // Skip contacts that don't have statuses or have errors
-          logger.debug(`[WhatsApp] No statuses or error for contact ${contactId}:`, contactError?.message);
+      const contact = contactsWithStatuses.get(status.contactId)!;
+      if (!contact.statusIds.has(status.id)) {
+        contact.statusIds.add(status.id);
+        contact.statusCount++;
+        if (status.timestamp > contact.lastStatusTime) {
+          contact.lastStatusTime = status.timestamp;
+          contact.latestStatusId = status.id;
         }
       }
-    } catch (fetchError: any) {
-      logger.warn(`[WhatsApp] Could not fetch all statuses from WhatsApp:`, fetchError?.message || fetchError);
-      
-      // Fallback: Get from status_likes table
-      const { data: statusLikes } = await supabase
-        .from('status_likes')
-        .select('contact_id, contact_name, liked_at, status_id')
-        .eq('user_id', userId)
-        .order('liked_at', { ascending: false });
+    }
 
-      if (statusLikes && statusLikes.length > 0) {
-        for (const like of statusLikes) {
-          const contactId = like.contact_id;
+    // If we have cached statuses, use them
+    if (contactsWithStatuses.size > 0) {
+      logger.info(`[WhatsApp] Using ${contactsWithStatuses.size} contacts with cached statuses for user ${userId}`);
+    } else {
+      // Fallback: Try to fetch from WhatsApp using Baileys
+      try {
+        // Get all contacts from the socket
+        const allContacts = await getAllContactsFromSocket(userId);
+      
+        // Fetch statuses for each contact
+        for (const contact of allContacts) {
+          const contactId = contact.contact_id;
           if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
             continue;
           }
 
-          if (!contactsWithStatuses.has(contactId)) {
-            contactsWithStatuses.set(contactId, {
-              contactId,
-              contactName: like.contact_name || contactId.split('@')[0],
-              lastStatusTime: new Date(like.liked_at).getTime(),
-              statusCount: 0,
-              statusIds: new Set(),
-            });
-          }
+          try {
+            const statusList = await socket.fetchStatus(contactId);
+            
+            if (statusList && Array.isArray(statusList) && statusList.length > 0) {
+              let latestTime = 0;
+              let latestStatusId: string | undefined;
+              const statusIds = new Set<string>();
 
-          const contact = contactsWithStatuses.get(contactId)!;
-          if (!contact.statusIds.has(like.status_id)) {
-            contact.statusIds.add(like.status_id);
-            contact.statusCount++;
-            const statusTime = new Date(like.liked_at).getTime();
-            if (statusTime > contact.lastStatusTime) {
-              contact.lastStatusTime = statusTime;
-              contact.latestStatusId = like.status_id;
+              for (const status of statusList) {
+                const statusId = (status.key && typeof status.key === 'object' && 'id' in status.key) 
+                  ? (status.key as any).id 
+                  : `status_${Date.now()}_${Math.random()}`;
+                const timestamp = status.updateTimestamp && typeof status.updateTimestamp === 'number' 
+                  ? status.updateTimestamp * 1000 
+                  : Date.now();
+                
+                statusIds.add(statusId);
+                
+                if (timestamp > latestTime) {
+                  latestTime = timestamp;
+                  latestStatusId = statusId;
+                }
+              }
+
+              if (statusIds.size > 0) {
+                contactsWithStatuses.set(contactId, {
+                  contactId,
+                  contactName: contact.contact_name || contactId.split('@')[0],
+                  lastStatusTime: latestTime,
+                  statusCount: statusIds.size,
+                  statusIds,
+                  latestStatusId,
+                });
+              }
+            }
+          } catch (contactError: any) {
+            // Skip contacts that don't have statuses or have errors
+            logger.debug(`[WhatsApp] No statuses or error for contact ${contactId}:`, contactError?.message);
+          }
+        }
+      } catch (fetchError: any) {
+        logger.warn(`[WhatsApp] Could not fetch all statuses from WhatsApp:`, fetchError?.message || fetchError);
+        
+        // Fallback: Get from status_likes table
+        const { data: statusLikes } = await supabase
+          .from('status_likes')
+          .select('contact_id, contact_name, liked_at, status_id')
+          .eq('user_id', userId)
+          .order('liked_at', { ascending: false });
+
+        if (statusLikes && statusLikes.length > 0) {
+          for (const like of statusLikes) {
+            const contactId = like.contact_id;
+            if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
+              continue;
+            }
+
+            if (!contactsWithStatuses.has(contactId)) {
+              contactsWithStatuses.set(contactId, {
+                contactId,
+                contactName: like.contact_name || contactId.split('@')[0],
+                lastStatusTime: new Date(like.liked_at).getTime(),
+                statusCount: 0,
+                statusIds: new Set(),
+              });
+            }
+
+            const contact = contactsWithStatuses.get(contactId)!;
+            if (!contact.statusIds.has(like.status_id)) {
+              contact.statusIds.add(like.status_id);
+              contact.statusCount++;
+              const statusTime = new Date(like.liked_at).getTime();
+              if (statusTime > contact.lastStatusTime) {
+                contact.lastStatusTime = statusTime;
+                contact.latestStatusId = like.status_id;
+              }
             }
           }
         }
@@ -2995,80 +3261,83 @@ export const getContactStatuses = async (userId: string, contactId: string): Pro
       url?: string;
     }> = [];
 
-    // Try to fetch statuses directly from WhatsApp using Baileys
-    try {
-      // Use Baileys fetchStatus to get all available statuses for the contact
-      const statusList = await socket.fetchStatus(decodedContactId);
-      
-      if (statusList && Array.isArray(statusList) && statusList.length > 0) {
-        statuses = statusList.map((status: any) => {
-          const statusId = (status.key && typeof status.key === 'object' && 'id' in status.key) 
-            ? (status.key as any).id 
-            : `status_${Date.now()}_${Math.random()}`;
-          const timestamp = status.updateTimestamp ? status.updateTimestamp * 1000 : Date.now();
-          
-          // Determine status type and URL
-          let type: 'image' | 'video' | 'text' = 'text';
-          let url: string | undefined;
-          let caption: string | undefined;
-
-          if (status.message?.imageMessage) {
-            type = 'image';
-            // Try to get URL from directMessage or use a proxy endpoint
-            const imageMsg = status.message.imageMessage;
-            url = imageMsg.url || imageMsg.directPath || undefined;
-            // If no direct URL, we'll need to use a proxy endpoint
-            if (!url && status.key) {
-              // Create a proxy URL that will download and serve the media
-              url = `/api/whatsapp/media/${encodeURIComponent(decodedContactId)}/${encodeURIComponent(statusId)}`;
-            }
-            caption = imageMsg.caption;
-          } else if (status.message?.videoMessage) {
-            type = 'video';
-            const videoMsg = status.message.videoMessage;
-            url = videoMsg.url || videoMsg.directPath || undefined;
-            // If no direct URL, use proxy endpoint
-            if (!url && status.key) {
-              url = `/api/whatsapp/media/${encodeURIComponent(decodedContactId)}/${encodeURIComponent(statusId)}`;
-            }
-            caption = videoMsg.caption;
-          } else if (status.message?.extendedTextMessage) {
-            type = 'text';
-            caption = status.message.extendedTextMessage.text;
-          } else if (status.message?.conversation) {
-            type = 'text';
-            caption = status.message.conversation;
-          }
-
-          return {
-            id: statusId,
-            timestamp,
-            caption,
-            type,
-            url,
-          };
-        });
+    // First, try to get statuses from cache (collected from messages.upsert)
+    const cachedStatuses = statusCache.get(userId) || [];
+    const contactStatuses = cachedStatuses.filter(s => s.contactId === decodedContactId);
+    
+    if (contactStatuses.length > 0) {
+      statuses = contactStatuses.map(s => ({
+        id: s.id,
+        timestamp: s.timestamp,
+        caption: s.caption,
+        type: s.type,
+        url: s.url,
+      }));
+      logger.info(`[WhatsApp] Using ${statuses.length} cached statuses for contact ${decodedContactId}`);
+    } else {
+      // Fallback: Try to fetch from WhatsApp using Baileys
+      try {
+        const statusList = await socket.fetchStatus(decodedContactId);
         
-        logger.info(`[WhatsApp] Fetched ${statuses.length} statuses from WhatsApp for contact ${decodedContactId}`);
-      }
-    } catch (fetchError: any) {
-      logger.warn(`[WhatsApp] Could not fetch statuses from WhatsApp for contact ${decodedContactId}:`, fetchError?.message || fetchError);
-      
-      // Fallback: Get statuses from status_likes table
-      const { data: statusLikes } = await supabase
-        .from('status_likes')
-        .select('status_id, liked_at, emoji')
-        .eq('user_id', userId)
-        .eq('contact_id', decodedContactId)
-        .order('liked_at', { ascending: false });
+        if (statusList && Array.isArray(statusList) && statusList.length > 0) {
+          statuses = statusList.map((status: any) => {
+            const statusId = (status.key && typeof status.key === 'object' && 'id' in status.key) 
+              ? (status.key as any).id 
+              : `status_${Date.now()}_${Math.random()}`;
+            const timestamp = status.updateTimestamp ? status.updateTimestamp * 1000 : Date.now();
+            
+            let type: 'image' | 'video' | 'text' = 'text';
+            let url: string | undefined;
+            let caption: string | undefined;
 
-      if (statusLikes && statusLikes.length > 0) {
-        statuses = statusLikes.map((like: any) => ({
-          id: like.status_id || `status_${Date.now()}_${Math.random()}`,
-          timestamp: new Date(like.liked_at).getTime(),
-          type: 'text' as const,
-        }));
-        logger.info(`[WhatsApp] Using ${statuses.length} statuses from status_likes as fallback`);
+            if (status.message?.imageMessage) {
+              type = 'image';
+              const imageMsg = status.message.imageMessage;
+              url = imageMsg.url || imageMsg.directPath || undefined;
+              caption = imageMsg.caption;
+            } else if (status.message?.videoMessage) {
+              type = 'video';
+              const videoMsg = status.message.videoMessage;
+              url = videoMsg.url || videoMsg.directPath || undefined;
+              caption = videoMsg.caption;
+            } else if (status.message?.extendedTextMessage) {
+              type = 'text';
+              caption = status.message.extendedTextMessage.text;
+            } else if (status.message?.conversation) {
+              type = 'text';
+              caption = status.message.conversation;
+            }
+
+            return {
+              id: statusId,
+              timestamp,
+              caption,
+              type,
+              url,
+            };
+          });
+          
+          logger.info(`[WhatsApp] Fetched ${statuses.length} statuses from WhatsApp for contact ${decodedContactId}`);
+        }
+      } catch (fetchError: any) {
+        logger.warn(`[WhatsApp] Could not fetch statuses from WhatsApp for contact ${decodedContactId}:`, fetchError?.message || fetchError);
+        
+        // Final fallback: Get from status_likes table
+        const { data: statusLikes } = await supabase
+          .from('status_likes')
+          .select('status_id, liked_at, emoji')
+          .eq('user_id', userId)
+          .eq('contact_id', decodedContactId)
+          .order('liked_at', { ascending: false });
+
+        if (statusLikes && statusLikes.length > 0) {
+          statuses = statusLikes.map((like: any) => ({
+            id: like.status_id || `status_${Date.now()}_${Math.random()}`,
+            timestamp: new Date(like.liked_at).getTime(),
+            type: 'text' as const,
+          }));
+          logger.info(`[WhatsApp] Using ${statuses.length} statuses from status_likes as fallback`);
+        }
       }
     }
 

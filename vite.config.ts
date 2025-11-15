@@ -70,7 +70,11 @@ export default defineConfig(({ mode }) => ({
           }
         ],
         // Import Firebase messaging service worker
-        importScripts: ['/firebase-messaging-sw.js']
+        // Note: This will be loaded after the service worker is ready
+        importScripts: ['/firebase-messaging-sw.js'],
+        // Ensure service worker supports push notifications
+        skipWaiting: true,
+        clientsClaim: true,
       }
     })
   ].filter(Boolean),
