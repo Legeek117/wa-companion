@@ -7,6 +7,9 @@ services:
     startCommand: cd backend && npm start
     healthCheckPath: /health
     envVars:
+      # Node Version
+      - key: NODE_VERSION
+        value: 20
       - key: NODE_ENV
         value: production
       - key: PORT
