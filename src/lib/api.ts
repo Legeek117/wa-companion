@@ -176,7 +176,7 @@ export const api = {
   // WhatsApp
   whatsapp: {
     getQR: () => apiClient.get('/api/whatsapp/qr'),
-    getPairingCode: () => apiClient.get('/api/whatsapp/pairing-code'),
+    getPairingCode: (phoneNumber: string) => apiClient.post('/api/whatsapp/pairing-code', { phoneNumber }),
     getStatus: () => apiClient.get('/api/whatsapp/status'),
     disconnect: () => apiClient.post('/api/whatsapp/disconnect'),
   },
@@ -184,6 +184,7 @@ export const api = {
   // Status
   status: {
     list: () => apiClient.get('/api/status'),
+    getAvailable: () => apiClient.get('/api/status/available'),
     getStats: () => apiClient.get('/api/status/stats'),
     getContacts: () => apiClient.get('/api/status/contacts'),
     like: (contactId: string, statusId: string, emoji?: string) =>
@@ -199,6 +200,7 @@ export const api = {
     getStats: () => apiClient.get('/api/view-once/stats'),
     get: (id: string) => apiClient.get(`/api/view-once/${id}`),
     download: (id: string) => apiClient.get(`/api/view-once/${id}/download`),
+    delete: (id: string) => apiClient.delete(`/api/view-once/${id}`),
     getCommandConfig: () => apiClient.get('/api/view-once/command-config'),
     updateCommandConfig: (config: { command_text?: string; command_emoji?: string | null; enabled?: boolean }) =>
       apiClient.put('/api/view-once/command-config', config),

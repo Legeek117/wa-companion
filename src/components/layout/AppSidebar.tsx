@@ -170,10 +170,23 @@ export function AppSidebar() {
                     ? "bg-primary/15 shadow-sm scale-105 sm:scale-110"
                     : "group-hover:bg-muted/50"
                 )}>
-                  <item.icon className={cn(
-                    "transition-all duration-300",
-                    isActive(item.url) ? "w-5 h-5 sm:w-6 sm:h-6" : "w-4 h-4 sm:w-5 sm:h-5"
-                  )} />
+                  {item.url === "/dashboard" ? (
+                    <img
+                      src="/icon-192x192.png"
+                      alt="AMDA"
+                      className={cn(
+                        "rounded-xl sm:rounded-2xl object-contain transition-all duration-300",
+                        isActive(item.url) 
+                          ? "w-8 h-8 sm:w-10 sm:h-10 animate-pulse" 
+                          : "w-6 h-6 sm:w-8 sm:h-8 group-hover:scale-110"
+                      )}
+                    />
+                  ) : (
+                    <item.icon className={cn(
+                      "transition-all duration-300",
+                      isActive(item.url) ? "w-5 h-5 sm:w-6 sm:h-6" : "w-4 h-4 sm:w-5 sm:h-5"
+                    )} />
+                  )}
                 </div>
                 <span className={cn(
                   "text-[9px] sm:text-[10px] font-semibold transition-all duration-300 text-center leading-tight px-0.5 truncate w-full",

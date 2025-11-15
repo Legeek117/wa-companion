@@ -172,6 +172,32 @@ export const getViewOnceCapture = async (userId: string, captureId: string) => {
 };
 
 /**
+ * Delete a view once capture
+ */
+export const deleteViewOnceCapture = async (userId: string, captureId: string): Promise<void> => {
+  // First verify the capture belongs to the user
+  const capture = await getViewOnceCapture(userId, captureId);
+  
+  if (!capture) {
+    throw new Error('View once capture not found');
+  }
+
+  // Delete from database
+  const { error } = await supabase
+    .from('view_once_captures')
+    .delete()
+    .eq('id', captureId)
+    .eq('user_id', userId);
+
+  if (error) {
+    logger.error('[ViewOnce] Error deleting capture:', error);
+    throw new Error('Failed to delete view once capture');
+  }
+
+  logger.info(`[ViewOnce] Deleted view once capture ${captureId} for user ${userId}`);
+};
+
+/**
  * Get view once statistics
  */
 export const getViewOnceStats = async (userId: string) => {

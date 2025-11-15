@@ -3,8 +3,9 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import { getSupabaseClient } from '../config/database';
 import { logger } from '../config/logger';
 import * as statusService from '../services/status.service';
-import { likeStatus, getAllContactsFromSocket, getSocket, getWhatsAppStatus } from '../services/whatsapp.service';
+import { likeStatus, getAllContactsFromSocket, getSocket, getWhatsAppStatus, getAllAvailableStatuses } from '../services/whatsapp.service';
 import { invalidateStatusConfigCache } from '../services/status.service';
+import { checkStatusReactionQuota } from '../services/quota.service';
 
 const supabase = getSupabaseClient();
 
@@ -433,6 +434,25 @@ export const likeStatusController = async (req: AuthRequest, res: Response): Pro
 
     const reactionEmoji = emoji || '❤️';
 
+    // Check quota for status reactions (2/day for free, unlimited for premium)
+    try {
+      await checkStatusReactionQuota(userId);
+    } catch (quotaError: any) {
+      if (quotaError instanceof Error && quotaError.message.includes('Quota')) {
+        res.status(403).json({
+          success: false,
+          error: {
+            message: quotaError.message,
+            statusCode: 403,
+            isQuotaExceeded: true,
+          },
+        });
+        return;
+      }
+      // If it's not a quota error, continue
+      logger.warn(`[Status] Quota check failed but continuing:`, quotaError);
+    }
+
     // Check WhatsApp connection status first
     const whatsappStatus = await getWhatsAppStatus(userId);
     const isConnected = whatsappStatus.status === 'connected';
@@ -690,6 +710,47 @@ export const getStatusStats = async (req: AuthRequest, res: Response): Promise<v
     });
   } catch (error) {
     logger.error('[Status] Error getting stats:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error', statusCode: 500 },
+    });
+  }
+};
+
+/**
+ * Get available contacts from status likes (for premium users)
+ * GET /api/status/contacts
+ */
+/**
+ * Get all available statuses (for StatusList page)
+ * GET /api/status/available
+ */
+export const getAvailableStatuses = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Unauthorized', statusCode: 401 },
+      });
+      return;
+    }
+
+    const statuses = await getAllAvailableStatuses(userId);
+
+    res.json({
+      success: true,
+      data: statuses,
+    });
+  } catch (error: any) {
+    logger.error('[Status] Error getting available statuses:', error);
+    if (error.message?.includes('not connected')) {
+      res.status(400).json({
+        success: false,
+        error: { message: 'WhatsApp not connected', statusCode: 400 },
+      });
+      return;
+    }
     res.status(500).json({
       success: false,
       error: { message: 'Internal server error', statusCode: 500 },

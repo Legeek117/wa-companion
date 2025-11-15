@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { QrCode, Key, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { QrCode, Key, Loader2, CheckCircle2, XCircle, Phone } from "lucide-react";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { toast } from "sonner";
 
@@ -12,6 +14,8 @@ const Connect = () => {
   const [activeMethod, setActiveMethod] = useState<'qr' | 'pairing' | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [showPhoneInput, setShowPhoneInput] = useState<boolean>(false);
 
   // Check if already connected
   useEffect(() => {
@@ -79,15 +83,29 @@ const Connect = () => {
       return;
     }
 
+    // Show phone input if not already shown
+    if (!showPhoneInput) {
+      setShowPhoneInput(true);
+      return;
+    }
+
+    // Validate phone number
+    if (!phoneNumber || phoneNumber.trim().length < 8) {
+      toast.error('Veuillez entrer un numéro de téléphone valide');
+      return;
+    }
+
     setActiveMethod('pairing');
     setPairingCode(null);
-    getPairingCode();
+    getPairingCode(phoneNumber.trim());
   };
 
   const handleStop = () => {
     setActiveMethod(null);
     setQrCode(null);
     setPairingCode(null);
+    setShowPhoneInput(false);
+    setPhoneNumber('');
     toast.info('Génération arrêtée');
   };
 
@@ -181,25 +199,82 @@ const Connect = () => {
                 <div>
                   <h3 className="font-semibold">Code de couplage</h3>
                   <p className="text-sm text-muted-foreground">
-                    Entrez le code de couplage dans WhatsApp
+                    Entrez votre numéro pour générer le code
                   </p>
                 </div>
               </div>
               <Button
                 onClick={handlePairingCode}
                 disabled={activeMethod === 'qr' || isGettingQR || isGettingPairingCode}
-                variant={activeMethod === 'pairing' ? 'default' : 'outline'}
+                variant={activeMethod === 'pairing' || showPhoneInput ? 'default' : 'outline'}
               >
                 {(activeMethod === 'pairing' || isGettingPairingCode) ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     En cours...
                   </>
+                ) : showPhoneInput ? (
+                  'Générer Code'
                 ) : (
                   'Générer Code'
                 )}
               </Button>
             </div>
+
+            {/* Phone Number Input */}
+            {showPhoneInput && !pairingCode && (
+              <div className="p-4 border border-border rounded-lg bg-muted/50 space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="phoneNumber" className="text-sm font-medium">
+                    Numéro de téléphone
+                  </Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="phoneNumber"
+                        type="tel"
+                        placeholder="+229 67 00 11 22"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="pl-9"
+                        disabled={isGettingPairingCode}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && phoneNumber.trim().length >= 8) {
+                            handlePairingCode();
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button
+                      onClick={handlePairingCode}
+                      disabled={!phoneNumber || phoneNumber.trim().length < 8 || isGettingPairingCode}
+                      size="default"
+                    >
+                      {isGettingPairingCode ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Génération...
+                        </>
+                      ) : (
+                        'Générer'
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Format: +XX XXXX XXXX ou XXXXXXXXXX (sans espaces)
+                  </p>
+                </div>
+                {!isGettingPairingCode && (
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setShowPhoneInput(false);
+                    setPhoneNumber('');
+                  }}>
+                    Annuler
+                  </Button>
+                )}
+              </div>
+            )}
 
             {activeMethod === 'pairing' && pairingCode && (
               <div className="p-4 border border-border rounded-lg bg-muted/50">

@@ -131,6 +131,44 @@ export const getViewOnceStats = async (req: AuthRequest, res: Response): Promise
   }
 };
 
+/**
+ * Delete a view once capture
+ * DELETE /api/view-once/:id
+ */
+export const deleteViewOnceCapture = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Unauthorized', statusCode: 401 },
+      });
+      return;
+    }
+
+    const captureId = req.params.id;
+    await viewOnceService.deleteViewOnceCapture(userId, captureId);
+
+    res.json({
+      success: true,
+      message: 'View once capture deleted successfully',
+    });
+  } catch (error: any) {
+    logger.error('[ViewOnce] Error deleting capture:', error);
+    if (error.message?.includes('not found')) {
+      res.status(404).json({
+        success: false,
+        error: { message: 'View once capture not found', statusCode: 404 },
+      });
+      return;
+    }
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error', statusCode: 500 },
+    });
+  }
+};
+
 
 
 

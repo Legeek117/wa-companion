@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlanBadge } from "@/components/PlanBadge";
-import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield, Eye } from "lucide-react";
+import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield, Eye, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
@@ -18,6 +18,8 @@ import { useTheme } from "next-themes";
 const Settings = () => {
   const { user, isPremium } = useAuth();
   const { status: whatsappStatus, isConnected, isConnecting, getQR, getPairingCode, disconnect, isGettingQR, isGettingPairingCode, isDisconnecting, refetch: refetchWhatsAppStatus } = useWhatsApp();
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [showPhoneInput, setShowPhoneInput] = useState<boolean>(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   
@@ -78,6 +80,23 @@ const Settings = () => {
   const handleDisconnect = () => {
     if (confirm("Êtes-vous sûr de vouloir déconnecter WhatsApp ?")) {
       disconnect();
+    }
+  };
+
+  const handlePairingCode = async () => {
+    if (!phoneNumber || phoneNumber.trim().length < 8) {
+      toast.error('Veuillez entrer un numéro de téléphone valide');
+      return;
+    }
+    try {
+      console.log('[Settings] Pairing Code button clicked with phone:', phoneNumber);
+      await getPairingCode(phoneNumber.trim());
+      // Immediately refetch status to get the pairing code
+      setTimeout(async () => {
+        refetchWhatsAppStatus();
+      }, 1000);
+    } catch (error) {
+      console.error('[Settings] Error getting pairing code:', error);
     }
   };
 
@@ -232,47 +251,86 @@ const Settings = () => {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
                   <p className="text-sm font-medium">Connexion WhatsApp</p>
                   {!isConnected && (
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={async () => {
-                          console.log('[Settings] QR Code button clicked');
-                          try {
-                            await getQR();
-                            // Immediately refetch status to get the QR code
-                            setTimeout(() => {
-                              refetchWhatsAppStatus();
-                            }, 1000);
-                          } catch (error) {
-                            console.error('[Settings] Error getting QR code:', error);
-                          }
-                        }}
-                        disabled={isGettingQR || isGettingPairingCode}
-                        className="text-xs sm:text-sm"
-                      >
-                        {isGettingQR ? 'Génération...' : 'QR Code'}
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={async () => {
-                          console.log('[Settings] Pairing Code button clicked');
-                          try {
-                            await getPairingCode();
-                            // Immediately refetch status to get the pairing code
-                            setTimeout(() => {
-                              refetchWhatsAppStatus();
-                            }, 1000);
-                          } catch (error) {
-                            console.error('[Settings] Error getting pairing code:', error);
-                          }
-                        }}
-                        disabled={isGettingQR || isGettingPairingCode}
-                        className="text-xs sm:text-sm"
-                      >
-                        {isGettingPairingCode ? 'Génération...' : 'Code de Couplage'}
-                      </Button>
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={async () => {
+                            console.log('[Settings] QR Code button clicked');
+                            try {
+                              await getQR();
+                              // Immediately refetch status to get the QR code
+                              setTimeout(() => {
+                                refetchWhatsAppStatus();
+                              }, 1000);
+                            } catch (error) {
+                              console.error('[Settings] Error getting QR code:', error);
+                            }
+                          }}
+                          disabled={isGettingQR || isGettingPairingCode}
+                          className="text-xs sm:text-sm"
+                        >
+                          {isGettingQR ? 'Génération...' : 'QR Code'}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => {
+                            if (!showPhoneInput) {
+                              setShowPhoneInput(true);
+                              return;
+                            }
+                            handlePairingCode();
+                          }}
+                          disabled={isGettingQR || isGettingPairingCode}
+                          className="text-xs sm:text-sm"
+                        >
+                          {isGettingPairingCode ? 'Génération...' : 'Code de Couplage'}
+                        </Button>
+                      </div>
+                      {showPhoneInput && (
+                        <div className="space-y-2 p-3 border border-border rounded-lg bg-muted/50">
+                          <Label htmlFor="phoneNumber" className="text-xs">Numéro de téléphone</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="phoneNumber"
+                              type="tel"
+                              placeholder="+229 67 00 11 22"
+                              value={phoneNumber}
+                              onChange={(e) => setPhoneNumber(e.target.value)}
+                              className="text-sm"
+                              disabled={isGettingPairingCode}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && phoneNumber.trim().length >= 8) {
+                                  handlePairingCode();
+                                }
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              onClick={handlePairingCode}
+                              disabled={!phoneNumber || phoneNumber.trim().length < 8 || isGettingPairingCode}
+                            >
+                              {isGettingPairingCode ? 'Génération...' : 'Générer'}
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Format: +XX XXXX XXXX ou XXXXXXXXXX
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setShowPhoneInput(false);
+                              setPhoneNumber('');
+                            }}
+                            className="text-xs"
+                          >
+                            Annuler
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

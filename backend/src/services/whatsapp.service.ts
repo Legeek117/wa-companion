@@ -880,7 +880,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
  * This function waits for WhatsApp to generate a pairing code automatically
  * when QR code is not available or when certain conditions are met.
  */
-export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ pairingCode: string; sessionId: string }> => {
+export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber?: string): Promise<{ pairingCode: string; sessionId: string }> => {
   try {
     // Clear conflict status when user manually tries to connect
     conflictedSessions.delete(userId);
@@ -976,12 +976,12 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
     let socket: WASocket;
     try {
       const socketConfig: any = {
-        auth: state,
+      auth: state,
         logger: createBaileysLogger(), // Use filtered logger to suppress non-critical decryption errors
-        getMessage: async (_key: any) => {
+      getMessage: async (_key: any) => {
           // Return undefined properly as a Promise
-          return undefined;
-        },
+        return undefined;
+      },
         // Additional options to prevent connection errors
         connectTimeoutMs: 60000, // 60 seconds timeout
         defaultQueryTimeoutMs: 60000, // 60 seconds for queries
@@ -1010,6 +1010,51 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
 
     // Store socket immediately
     activeSockets.set(userId, socket);
+
+    // If phone number is provided, request pairing code directly (inspired by reference code)
+    if (phoneNumber) {
+      try {
+        // Clean phone number: remove +, spaces, and other non-numeric characters
+        const cleanPhoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+        
+        if (!cleanPhoneNumber || cleanPhoneNumber.length < 8) {
+          throw new Error('Numéro de téléphone invalide. Format attendu: +XX XXXX XXXX ou XXXXXXXXXX');
+        }
+
+        logger.info(`[WhatsApp] Requesting pairing code for phone number: ${cleanPhoneNumber}, user: ${userId}`);
+        
+        // Request pairing code using Baileys method (inspired by reference code)
+        const pairingCode = await socket.requestPairingCode(cleanPhoneNumber);
+        
+        logger.info(`[WhatsApp] ✅ Pairing code generated via requestPairingCode for user ${userId}, code: ${pairingCode}`);
+        
+        // Store pairing code immediately
+        pairingCodes.set(userId, pairingCode);
+        
+        // Save to database
+        await updateSessionStatus(userId, {
+          status: 'connecting',
+          pairingCode: pairingCode,
+          qrCode: null,
+        });
+        
+        // Resolve promise immediately
+        if (pairingCodeResolve) {
+          (pairingCodeResolve as (value: string) => void)(pairingCode);
+          pairingCodeResolve = null;
+        }
+        
+        // Return immediately with pairing code
+        return {
+          pairingCode: pairingCode,
+          sessionId: session.sessionId,
+        };
+      } catch (error) {
+        logger.error(`[WhatsApp] Error requesting pairing code for user ${userId}:`, error);
+        // If requestPairingCode fails, fall back to waiting for automatic generation
+        logger.warn(`[WhatsApp] Falling back to automatic pairing code detection for user ${userId}`);
+      }
+    }
 
     // Handle connection updates for pairing code - Set IMMEDIATELY after socket creation
     pairingCodeHandler = async (update: any) => {
@@ -1397,10 +1442,10 @@ export const connectWhatsAppWithPairingCode = async (userId: string): Promise<{ 
       } else {
         // Check database as fallback
         const { data: sessionData } = await supabase
-          .from('whatsapp_sessions')
-          .select('pairing_code, status')
-          .eq('user_id', userId)
-          .single();
+      .from('whatsapp_sessions')
+      .select('pairing_code, status')
+      .eq('user_id', userId)
+      .single();
     
         if (sessionData?.pairing_code) {
           finalPairingCode = sessionData.pairing_code;
@@ -2694,5 +2739,95 @@ export const sendMessage = async (
   } catch (error) {
     logger.error('Error sending message:', error);
     throw new Error('Failed to send message');
+  }
+};
+
+/**
+ * Get all available statuses from contacts
+ * Returns statuses in WhatsApp format (similar to status list view)
+ * Note: Baileys doesn't have a direct method to fetch all statuses.
+ * We use the contacts from status_likes and enrich them with available status info.
+ */
+export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
+  contactId: string;
+  contactName: string;
+  lastStatusTime: number;
+  statusCount: number;
+  hasUnviewed: boolean;
+  latestStatusId?: string;
+}>> => {
+  try {
+    const socket = activeSockets.get(userId);
+    if (!socket) {
+      throw new Error('WhatsApp not connected');
+    }
+
+    // Get all contacts that have statuses (from status_likes table)
+    const { data: statusLikes } = await supabase
+      .from('status_likes')
+      .select('contact_id, contact_name, liked_at, status_id')
+      .eq('user_id', userId)
+      .order('liked_at', { ascending: false });
+
+    if (!statusLikes || statusLikes.length === 0) {
+      logger.info(`[WhatsApp] No status likes found for user ${userId}`);
+      return [];
+    }
+
+    // Group by contact and get latest status info
+    const contactMap = new Map<string, {
+      contactId: string;
+      contactName: string;
+      lastStatusTime: number;
+      statusCount: number;
+      statusIds: Set<string>;
+      latestStatusId?: string;
+    }>();
+
+    for (const like of statusLikes) {
+      const contactId = like.contact_id;
+      if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
+        continue;
+      }
+
+      if (!contactMap.has(contactId)) {
+        contactMap.set(contactId, {
+          contactId,
+          contactName: like.contact_name || contactId.split('@')[0],
+          lastStatusTime: new Date(like.liked_at).getTime(),
+          statusCount: 0,
+          statusIds: new Set(),
+        });
+      }
+
+      const contact = contactMap.get(contactId)!;
+      if (!contact.statusIds.has(like.status_id)) {
+        contact.statusIds.add(like.status_id);
+        contact.statusCount++;
+        const statusTime = new Date(like.liked_at).getTime();
+        if (statusTime > contact.lastStatusTime) {
+          contact.lastStatusTime = statusTime;
+          contact.latestStatusId = like.status_id;
+        }
+      }
+    }
+
+    // Convert to array and sort by most recent status
+    const result = Array.from(contactMap.values())
+      .map(contact => ({
+        contactId: contact.contactId,
+        contactName: contact.contactName,
+        lastStatusTime: contact.lastStatusTime,
+        statusCount: contact.statusCount,
+        hasUnviewed: false, // TODO: Implement unviewed status detection
+        latestStatusId: contact.latestStatusId,
+      }))
+      .sort((a, b) => b.lastStatusTime - a.lastStatusTime);
+
+    logger.info(`[WhatsApp] Retrieved ${result.length} contacts with statuses for user ${userId}`);
+    return result;
+  } catch (error) {
+    logger.error(`[WhatsApp] Error fetching available statuses for user ${userId}:`, error);
+    throw new Error('Failed to fetch available statuses');
   }
 };

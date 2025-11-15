@@ -141,9 +141,9 @@ export function useWhatsApp() {
 
   // Get pairing code mutation
   const getPairingCodeMutation = useMutation({
-    mutationFn: async () => {
-      console.log('[WhatsApp] Requesting pairing code...');
-      const response = await api.whatsapp.getPairingCode();
+    mutationFn: async (phoneNumber: string) => {
+      console.log('[WhatsApp] Requesting pairing code for phone number:', phoneNumber);
+      const response = await api.whatsapp.getPairingCode(phoneNumber);
       console.log('[WhatsApp] Pairing code response:', {
         success: response.success,
         hasPairingCode: !!response.data?.pairingCode,
@@ -226,9 +226,9 @@ export function useWhatsApp() {
       console.log('[WhatsApp] getQR called');
       getQRMutation.mutate();
     },
-    getPairingCode: () => {
-      console.log('[WhatsApp] getPairingCode called');
-      getPairingCodeMutation.mutate();
+    getPairingCode: (phoneNumber: string) => {
+      console.log('[WhatsApp] getPairingCode called with phone number:', phoneNumber);
+      getPairingCodeMutation.mutate(phoneNumber);
     },
     disconnect: disconnectMutation.mutate,
     isGettingQR: getQRMutation.isPending,

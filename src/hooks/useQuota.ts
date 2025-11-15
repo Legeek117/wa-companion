@@ -19,6 +19,11 @@ export interface Quota {
     limit: number;
     remaining: number;
   };
+  statusReactions: {
+    used: number;
+    limit: number;
+    remaining: number;
+  };
   resetDate: Date;
 }
 
@@ -44,6 +49,7 @@ export function useQuota() {
         viewOnce: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
         deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
         scheduledStatuses: { used: 0, limit: userIsPremium ? Infinity : 5, remaining: userIsPremium ? Infinity : 5 },
+        statusReactions: { used: 0, limit: userIsPremium ? Infinity : 2, remaining: userIsPremium ? Infinity : 2 },
         resetDate: new Date(),
       };
     },
@@ -60,6 +66,7 @@ export function useQuota() {
       viewOnce: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
       deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
       scheduledStatuses: { used: 0, limit: userIsPremium ? Infinity : 5, remaining: userIsPremium ? Infinity : 5 },
+      statusReactions: { used: 0, limit: userIsPremium ? Infinity : 2, remaining: userIsPremium ? Infinity : 2 },
       resetDate: new Date(),
     },
     isLoading,

@@ -5,7 +5,7 @@ import { AppSidebar } from "./AppSidebar";
 import { ControlPanel } from "./ControlPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, LogOut, Settings, User, Menu } from "lucide-react";
+import { LogOut, Settings, User, Menu } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { PlanBadge } from "@/components/PlanBadge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { NotificationsDropdown } from "@/components/NotificationsDropdown";
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
@@ -87,10 +88,7 @@ const DashboardLayout = () => {
                   </div>
                 )}
                 <ThemeToggle />
-                <Button variant="ghost" size="icon" className="relative">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full"></span>
-                </Button>
+                <NotificationsDropdown />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="rounded-full">

@@ -22,6 +22,7 @@ import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import NotFound from "./pages/NotFound";
+import { PWAInstallBanner } from "./components/PWAInstallBanner";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <PWAInstallBanner />
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>

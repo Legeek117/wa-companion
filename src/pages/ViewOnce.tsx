@@ -6,13 +6,25 @@ import { PlanBadge } from "@/components/PlanBadge";
 import { QuotaCounter } from "@/components/QuotaCounter";
 import { Pagination } from "@/components/ui/pagination";
 import { MediaViewer } from "@/components/ui/media-viewer";
-import { Download, Eye, Image, Crown } from "lucide-react";
+import { Download, Eye, Image, Crown, Trash2 } from "lucide-react";
 import { useViewOnce } from "@/hooks/useViewOnce";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "@/components/Loading";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://amda-backend-3aji.onrender.com';
 
@@ -30,8 +42,10 @@ const buildMediaUrl = (mediaUrl: string | null): string | null => {
 const ViewOnce = () => {
   const { captures, isLoading, quota, isPremium } = useViewOnce();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; title: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const capturedCount = quota?.used || 0;
   const maxCaptures = quota?.limit || 3;
@@ -77,6 +91,28 @@ const ViewOnce = () => {
       }
     } catch (error) {
       toast.error('Erreur lors du téléchargement');
+    }
+  };
+
+  const handleDelete = async (captureId: string) => {
+    try {
+      setDeletingId(captureId);
+      const response = await api.viewOnce.delete(captureId);
+      if (response.success) {
+        toast.success('Capture supprimée avec succès');
+        // Invalidate and refetch the captures
+        await queryClient.invalidateQueries({ queryKey: ['view-once'] });
+        // If we're on the last page and it becomes empty, go to previous page
+        if (paginatedCaptures.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
+      } else {
+        toast.error('Impossible de supprimer la capture');
+      }
+    } catch (error) {
+      toast.error('Erreur lors de la suppression');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -189,6 +225,33 @@ const ViewOnce = () => {
                           <span className="hidden sm:inline">Télécharger</span>
                           <span className="sm:hidden">DL</span>
                         </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              size="sm" 
+                              variant="destructive" 
+                              className="text-xs ios-scale"
+                              disabled={deletingId === capture.id}
+                            >
+                              <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogTitle>Supprimer la capture</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Êtes-vous sûr de vouloir supprimer cette capture ? Cette action est irréversible.
+                            </AlertDialogDescription>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Annuler</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(capture.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Supprimer
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                   </CardContent>

@@ -11,11 +11,13 @@ const QUOTA_LIMITS = {
     viewOnce: 3,
     deletedMessages: 3,
     scheduledStatuses: 5,
+    statusReactions: 2, // 2 reactions per day for free users
   },
   premium: {
     viewOnce: Infinity,
     deletedMessages: Infinity,
     scheduledStatuses: Infinity,
+    statusReactions: Infinity, // Unlimited for premium
   },
 };
 
@@ -213,11 +215,58 @@ export const incrementScheduledStatus = async (userId: string): Promise<void> =>
 };
 
 /**
+ * Check if user has exceeded daily quota for status reactions
+ * Free users: 2 reactions per day
+ * Premium users: Unlimited
+ */
+export const checkStatusReactionQuota = async (userId: string): Promise<void> => {
+  const plan = await getUserPlan(userId);
+  
+  // Premium users have unlimited reactions
+  if (plan === 'premium') {
+    return;
+  }
+
+  // For free users, check daily reactions
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const { count, error } = await supabase
+    .from('status_likes')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('liked_at', today.toISOString());
+
+  if (error) {
+    logger.error('[Quota] Error checking status reaction quota:', error);
+    throw new Error('Failed to check status reaction quota');
+  }
+
+  const limit = QUOTA_LIMITS[plan].statusReactions;
+  const used = count || 0;
+
+  if (used >= limit) {
+    throw new QuotaExceededError(
+      `Quota de réactions de status dépassé. Limite: ${limit} par jour. Passez à Premium pour des réactions illimitées.`
+    );
+  }
+};
+
+/**
  * Get quota information for a user
  */
 export const getUserQuota = async (userId: string) => {
   const plan = await getUserPlan(userId);
   const quota = await getOrCreateQuota(userId);
+
+  // Get daily status reactions count
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const { count: statusReactionsCount } = await supabase
+    .from('status_likes')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('liked_at', today.toISOString());
 
   return {
     plan,
@@ -241,6 +290,13 @@ export const getUserQuota = async (userId: string) => {
       remaining: QUOTA_LIMITS[plan].scheduledStatuses === Infinity 
         ? Infinity 
         : QUOTA_LIMITS[plan].scheduledStatuses - quota.scheduled_statuses_count,
+    },
+    statusReactions: {
+      used: statusReactionsCount || 0,
+      limit: QUOTA_LIMITS[plan].statusReactions,
+      remaining: QUOTA_LIMITS[plan].statusReactions === Infinity 
+        ? Infinity 
+        : QUOTA_LIMITS[plan].statusReactions - (statusReactionsCount || 0),
     },
     resetDate: new Date(quota.reset_date),
   };
@@ -277,6 +333,7 @@ export const quotaService = {
   checkViewOnceQuota,
   checkDeletedMessagesQuota,
   checkScheduledStatusQuota,
+  checkStatusReactionQuota,
   incrementViewOnce,
   incrementDeletedMessages,
   incrementScheduledStatus,

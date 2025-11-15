@@ -38,7 +38,8 @@ export const getQRCode = async (req: AuthRequest, res: Response, next: NextFunct
 
 /**
  * Generate pairing code for WhatsApp connection
- * GET /api/whatsapp/pairing-code
+ * POST /api/whatsapp/pairing-code
+ * Body: { phoneNumber: string }
  */
 export const getPairingCode = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -46,7 +47,20 @@ export const getPairingCode = async (req: AuthRequest, res: Response, next: Next
       throw new ValidationError('User not authenticated');
     }
 
-    const { pairingCode, sessionId } = await whatsappService.connectWhatsAppWithPairingCode(req.userId);
+    // Get phone number from request body or query
+    const phoneNumber = req.body?.phoneNumber || req.query?.phoneNumber as string | undefined;
+
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Numéro de téléphone requis pour générer le code de couplage',
+          statusCode: 400,
+        },
+      });
+    }
+
+    const { pairingCode, sessionId } = await whatsappService.connectWhatsAppWithPairingCode(req.userId, phoneNumber);
 
     // Log pairing code status for debugging
     console.log(`[WhatsApp] Pairing Code request for user ${req.userId}:`, {

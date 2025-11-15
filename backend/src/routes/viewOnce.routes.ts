@@ -6,6 +6,7 @@ import {
   getViewOnceCaptureById,
   downloadViewOnceCapture,
   getViewOnceStats,
+  deleteViewOnceCapture,
 } from '../controllers/viewOnce.controller';
 import {
   getCommandConfig,
@@ -26,6 +27,7 @@ router.get('/', apiLimiter, listViewOnceCaptures);
 router.get('/stats', apiLimiter, getViewOnceStats);
 router.get('/:id', apiLimiter, getViewOnceCaptureById);
 router.get('/:id/download', apiLimiter, downloadViewOnceCapture);
+router.delete('/:id', apiLimiter, deleteViewOnceCapture);
 
 export default router;
 
