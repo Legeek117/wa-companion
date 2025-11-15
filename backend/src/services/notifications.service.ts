@@ -358,3 +358,182 @@ export const sendPushNotification = async (
   }
 };
 
+/**
+ * Create a notification in the database
+ */
+export const createNotification = async (
+  userId: string,
+  type: 'view_once' | 'status_liked' | 'deleted_message',
+  title: string,
+  body: string,
+  imageUrl?: string,
+  data?: any
+): Promise<string | null> => {
+  try {
+    const { data: notification, error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        type,
+        title,
+        body,
+        image_url: imageUrl || null,
+        data: data || null,
+        read: false,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      // If table doesn't exist, log warning but don't throw
+      if (error.code === '42P01') {
+        logger.warn('[NotificationsService] Notifications table does not exist. Please run the SQL migration.');
+        return null;
+      }
+      logger.error('[NotificationsService] Error creating notification:', error);
+      throw error;
+    }
+
+    logger.info(`[NotificationsService] Created notification ${notification.id} for user ${userId}`);
+    return notification.id;
+  } catch (error) {
+    logger.error('[NotificationsService] Error creating notification:', error);
+    return null;
+  }
+};
+
+/**
+ * Get notifications for a user
+ */
+export const getNotifications = async (
+  userId: string,
+  limit: number = 50,
+  unreadOnly: boolean = false
+): Promise<Array<{
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  imageUrl?: string;
+  data?: any;
+  read: boolean;
+  createdAt: string;
+}>> => {
+  try {
+    let query = supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (unreadOnly) {
+      query = query.eq('read', false);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      // If table doesn't exist, return empty array
+      if (error.code === '42P01') {
+        logger.warn('[NotificationsService] Notifications table does not exist. Please run the SQL migration.');
+        return [];
+      }
+      logger.error('[NotificationsService] Error fetching notifications:', error);
+      throw error;
+    }
+
+    return (data || []).map((n: any) => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      imageUrl: n.image_url,
+      data: n.data,
+      read: n.read,
+      createdAt: n.created_at,
+    }));
+  } catch (error) {
+    logger.error('[NotificationsService] Error fetching notifications:', error);
+    return [];
+  }
+};
+
+/**
+ * Mark notification as read
+ */
+export const markNotificationAsRead = async (userId: string, notificationId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notificationId)
+      .eq('user_id', userId);
+
+    if (error) {
+      if (error.code === '42P01') {
+        return false;
+      }
+      logger.error('[NotificationsService] Error marking notification as read:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logger.error('[NotificationsService] Error marking notification as read:', error);
+    return false;
+  }
+};
+
+/**
+ * Mark all notifications as read for a user
+ */
+export const markAllNotificationsAsRead = async (userId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', userId)
+      .eq('read', false);
+
+    if (error) {
+      if (error.code === '42P01') {
+        return false;
+      }
+      logger.error('[NotificationsService] Error marking all notifications as read:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logger.error('[NotificationsService] Error marking all notifications as read:', error);
+    return false;
+  }
+};
+
+/**
+ * Get unread notification count
+ */
+export const getUnreadNotificationCount = async (userId: string): Promise<number> => {
+  try {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('read', false);
+
+    if (error) {
+      if (error.code === '42P01') {
+        return 0;
+      }
+      logger.error('[NotificationsService] Error getting unread count:', error);
+      return 0;
+    }
+
+    return count || 0;
+  } catch (error) {
+    logger.error('[NotificationsService] Error getting unread count:', error);
+    return 0;
+  }
+};
+

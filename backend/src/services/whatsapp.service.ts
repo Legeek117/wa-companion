@@ -86,6 +86,9 @@ const supabase = getSupabaseClient();
 // Store active WhatsApp sockets by userId
 const activeSockets = new Map<string, WASocket>();
 
+// Store keep-alive intervals by userId
+const keepAliveIntervals = new Map<string, NodeJS.Timeout>();
+
 /**
  * Get all active sockets (for user identification)
  */
@@ -739,6 +742,9 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
         // Setup message listeners for connected socket
         setupMessageListeners(userId, socket);
         
+        // Setup keep-alive to maintain bot presence as "online"
+        setupKeepAlive(userId, socket);
+        
         // Resolve with empty string if connected without QR (already connected)
         if (qrCodeResolve) {
           qrCodeResolve('');
@@ -1339,6 +1345,9 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         // Setup message listeners for connected socket
         setupMessageListeners(userId, socket);
         
+        // Setup keep-alive to maintain bot presence as "online"
+        setupKeepAlive(userId, socket);
+        
         // Resolve with empty string if connected without pairing code (already connected)
         if (pairingCodeResolve) {
           pairingCodeResolve('');
@@ -1755,6 +1764,9 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
  */
 export const disconnectWhatsApp = async (userId: string): Promise<void> => {
   try {
+    // Stop keep-alive first
+    stopKeepAlive(userId);
+    
     const socket = activeSockets.get(userId);
 
     if (socket) {
@@ -2254,6 +2266,70 @@ export const likeStatus = async (
 const listenersSetup = new WeakSet<WASocket>();
 
 /**
+ * Setup keep-alive to maintain bot presence as "online"
+ * Sends presence updates periodically to keep the bot active
+ */
+const setupKeepAlive = (userId: string, socket: WASocket): void => {
+  // Clear any existing keep-alive interval for this user
+  const existingInterval = keepAliveIntervals.get(userId);
+  if (existingInterval) {
+    clearInterval(existingInterval);
+    keepAliveIntervals.delete(userId);
+  }
+
+  // Send initial presence update
+  try {
+    socket.sendPresenceUpdate('available');
+    logger.info(`[WhatsApp] ✅ Initial presence update sent for user ${userId}`);
+  } catch (error) {
+    logger.warn(`[WhatsApp] Error sending initial presence update for user ${userId}:`, error);
+  }
+
+  // Set up periodic presence updates (every 30 seconds)
+  // This keeps the bot visible as "online" on WhatsApp
+  const interval = setInterval(() => {
+    try {
+      if (socket.user && socket.user.id) {
+        socket.sendPresenceUpdate('available');
+        logger.debug(`[WhatsApp] 🔄 Keep-alive presence update sent for user ${userId}`);
+        
+        // Also update lastSeen in database
+        updateSessionStatus(userId, {
+          lastSeen: new Date(),
+          status: 'connected',
+        }).catch((err) => {
+          logger.debug(`[WhatsApp] Error updating lastSeen in keep-alive:`, err);
+        });
+      } else {
+        logger.warn(`[WhatsApp] Socket not connected for user ${userId}, stopping keep-alive`);
+        clearInterval(interval);
+        keepAliveIntervals.delete(userId);
+      }
+    } catch (error) {
+      logger.warn(`[WhatsApp] Error in keep-alive for user ${userId}:`, error);
+      // If there's an error, try to clear the interval
+      clearInterval(interval);
+      keepAliveIntervals.delete(userId);
+    }
+  }, 30000); // Every 30 seconds
+
+  keepAliveIntervals.set(userId, interval);
+  logger.info(`[WhatsApp] ✅ Keep-alive started for user ${userId} (updates every 30s)`);
+};
+
+/**
+ * Stop keep-alive for a user
+ */
+const stopKeepAlive = (userId: string): void => {
+  const interval = keepAliveIntervals.get(userId);
+  if (interval) {
+    clearInterval(interval);
+    keepAliveIntervals.delete(userId);
+    logger.info(`[WhatsApp] 🛑 Keep-alive stopped for user ${userId}`);
+  }
+};
+
+/**
  * Setup message event listeners for a connected socket
  */
 const setupMessageListeners = (userId: string, socket: WASocket): void => {
@@ -2566,6 +2642,9 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
 
           // Setup message listeners for reconnected socket
           setupMessageListeners(userId, socket);
+          
+          // Setup keep-alive to maintain bot presence as "online"
+          setupKeepAlive(userId, socket);
         } else if (connection === 'close') {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
           const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
@@ -2935,12 +3014,24 @@ export const getContactStatuses = async (userId: string, contactId: string): Pro
 
           if (status.message?.imageMessage) {
             type = 'image';
-            url = status.message.imageMessage.url;
-            caption = status.message.imageMessage.caption;
+            // Try to get URL from directMessage or use a proxy endpoint
+            const imageMsg = status.message.imageMessage;
+            url = imageMsg.url || imageMsg.directPath || undefined;
+            // If no direct URL, we'll need to use a proxy endpoint
+            if (!url && status.key) {
+              // Create a proxy URL that will download and serve the media
+              url = `/api/whatsapp/media/${encodeURIComponent(decodedContactId)}/${encodeURIComponent(statusId)}`;
+            }
+            caption = imageMsg.caption;
           } else if (status.message?.videoMessage) {
             type = 'video';
-            url = status.message.videoMessage.url;
-            caption = status.message.videoMessage.caption;
+            const videoMsg = status.message.videoMessage;
+            url = videoMsg.url || videoMsg.directPath || undefined;
+            // If no direct URL, use proxy endpoint
+            if (!url && status.key) {
+              url = `/api/whatsapp/media/${encodeURIComponent(decodedContactId)}/${encodeURIComponent(statusId)}`;
+            }
+            caption = videoMsg.caption;
           } else if (status.message?.extendedTextMessage) {
             type = 'text';
             caption = status.message.extendedTextMessage.text;

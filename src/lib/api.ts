@@ -286,6 +286,11 @@ export const api = {
     getSettings: () => apiClient.get('/api/notifications/settings'),
     updateSettings: (settings: { enabled: boolean; viewOnce?: boolean; statusLiked?: boolean; deletedMessage?: boolean }) =>
       apiClient.put('/api/notifications/settings', settings),
+    list: (limit?: number, unreadOnly?: boolean) => 
+      apiClient.get(`/api/notifications${limit || unreadOnly ? `?${limit ? `limit=${limit}` : ''}${limit && unreadOnly ? '&' : ''}${unreadOnly ? 'unreadOnly=true' : ''}` : ''}`),
+    getUnreadCount: () => apiClient.get('/api/notifications/unread-count'),
+    markAsRead: (id: string) => apiClient.put(`/api/notifications/${id}/read`),
+    markAllAsRead: () => apiClient.put('/api/notifications/read-all'),
   },
 };
 

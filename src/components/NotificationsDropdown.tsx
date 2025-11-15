@@ -12,44 +12,75 @@ import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Notification {
   id: string;
   type: 'view_once' | 'status_liked' | 'deleted_message';
   title: string;
   body: string;
-  image?: string;
+  imageUrl?: string;
   data?: any;
   createdAt: string;
   read: boolean;
 }
 
-// Mock notifications for now - will be replaced with API call
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'view_once',
-    title: 'View Once capturé',
-    body: 'Nouveau View Once de John Doe',
-    createdAt: new Date().toISOString(),
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'status_liked',
-    title: 'Status liké',
-    body: 'Status de Jane Smith liké avec ❤️',
-    createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    read: false,
-  },
-];
-
 export function NotificationsDropdown() {
   const navigate = useNavigate();
-  const notifications = mockNotifications;
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Fetch notifications
+  const { data: notifications = [], isLoading } = useQuery({
+    queryKey: ['notifications', user?.id],
+    queryFn: async () => {
+      const response = await api.notifications.list(50);
+      if (response.success && response.data) {
+        return response.data as Notification[];
+      }
+      return [];
+    },
+    enabled: !!user,
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    refetchOnWindowFocus: true,
+  });
+
+  // Fetch unread count
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['notifications', 'unread-count', user?.id],
+    queryFn: async () => {
+      const response = await api.notifications.getUnreadCount();
+      if (response.success && response.data) {
+        return response.data.count as number;
+      }
+      return 0;
+    },
+    enabled: !!user,
+    refetchInterval: 30 * 1000,
+  });
+
+  const unreadCount = unreadCountData || 0;
+
+  // Mark notification as read mutation
+  const markAsReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await api.notifications.markAsRead(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count', user?.id] });
+    },
+  });
 
   const handleNotificationClick = (notification: Notification) => {
+    // Mark as read if not already read
+    if (!notification.read) {
+      markAsReadMutation.mutate(notification.id);
+    }
+
+    // Navigate to appropriate page
     let path = '/dashboard';
     if (notification.type === 'view_once') {
       path = '/dashboard/view-once';
@@ -67,7 +98,9 @@ export function NotificationsDropdown() {
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
-            <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full animate-pulse"></span>
+            <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Badge>
           )}
         </Button>
       </DropdownMenuTrigger>
@@ -82,7 +115,11 @@ export function NotificationsDropdown() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <ScrollArea className="h-96">
-          {notifications.length === 0 ? (
+          {isLoading ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              Chargement...
+            </div>
+          ) : notifications.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
               Aucune notification
             </div>
@@ -99,11 +136,14 @@ export function NotificationsDropdown() {
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    {notification.image && (
+                    {notification.imageUrl && (
                       <img
-                        src={notification.image}
+                        src={notification.imageUrl}
                         alt=""
                         className="w-10 h-10 rounded-lg object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                     )}
                     <div className="flex-1 min-w-0">
