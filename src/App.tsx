@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import Connect from "./pages/Connect";
 import Status from "./pages/Status";
 import StatusList from "./pages/StatusList";
+import StatusDetail from "./pages/StatusDetail";
 import StatusSchedule from "./pages/StatusSchedule";
 import StatusConfig from "./pages/StatusConfig";
 import ViewOnce from "./pages/ViewOnce";
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="connect" element={<Connect />} />
               <Route path="status" element={<Status />} />
               <Route path="status/list" element={<StatusList />} />
+              <Route path="status/:contactId" element={<StatusDetail />} />
               <Route path="status/schedule" element={<StatusSchedule />} />
               <Route path="status/config" element={<StatusConfig />} />
               <Route path="view-once" element={<ViewOnce />} />

@@ -2831,3 +2831,82 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
     throw new Error('Failed to fetch available statuses');
   }
 };
+
+/**
+ * Get all statuses for a specific contact
+ */
+export const getContactStatuses = async (userId: string, contactId: string): Promise<{
+  contactId: string;
+  contactName: string;
+  statuses: Array<{
+    id: string;
+    timestamp: number;
+    caption?: string;
+    type: 'image' | 'video' | 'text';
+    url?: string;
+  }>;
+}> => {
+  try {
+    const socket = activeSockets.get(userId);
+    if (!socket) {
+      throw new Error('WhatsApp not connected');
+    }
+
+    // Decode contactId if it's URL encoded
+    const decodedContactId = decodeURIComponent(contactId);
+    
+    // Fetch statuses from WhatsApp using Baileys
+    let statuses: Array<{
+      id: string;
+      timestamp: number;
+      caption?: string;
+      type: 'image' | 'video' | 'text';
+      url?: string;
+    }> = [];
+
+    // Get statuses from status_likes table (these are statuses that have been viewed/liked)
+    // For now, we'll use the status_likes table as the source of truth
+    // In the future, we can enhance this to fetch directly from WhatsApp if needed
+    const { data: statusLikes } = await supabase
+      .from('status_likes')
+      .select('status_id, liked_at, emoji')
+      .eq('user_id', userId)
+      .eq('contact_id', decodedContactId)
+      .order('liked_at', { ascending: false });
+
+    if (statusLikes && statusLikes.length > 0) {
+      statuses = statusLikes.map((like: any) => ({
+        id: like.status_id || `status_${Date.now()}_${Math.random()}`,
+        timestamp: new Date(like.liked_at).getTime(),
+        type: 'text' as const,
+      }));
+    } else {
+      // If no statuses found in status_likes, try to get from WhatsApp directly
+      // Note: Baileys doesn't have a direct fetchStatus method, so we rely on status_likes
+      // which is populated when statuses are viewed/liked
+      logger.info(`[WhatsApp] No statuses found in status_likes for contact ${decodedContactId}, user ${userId}`);
+    }
+
+    // Get contact name
+    const { data: contactData } = await supabase
+      .from('status_likes')
+      .select('contact_name')
+      .eq('user_id', userId)
+      .eq('contact_id', decodedContactId)
+      .limit(1)
+      .maybeSingle();
+
+    const contactName = contactData?.contact_name || decodedContactId.split('@')[0];
+
+    logger.info(`[WhatsApp] Retrieved ${statuses.length} statuses for contact ${decodedContactId} (user ${userId})`);
+    
+    return {
+      contactId: decodedContactId,
+      contactName,
+      statuses,
+    };
+  } catch (error) {
+    logger.error(`[WhatsApp] Error fetching contact statuses for user ${userId}, contact ${contactId}:`, error);
+    throw new Error('Failed to fetch contact statuses');
+  }
+};

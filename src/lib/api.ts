@@ -185,6 +185,7 @@ export const api = {
   status: {
     list: () => apiClient.get('/api/status'),
     getAvailable: () => apiClient.get('/api/status/available'),
+    getContactStatuses: (contactId: string) => apiClient.get(`/api/status/contact/${encodeURIComponent(contactId)}`),
     getStats: () => apiClient.get('/api/status/stats'),
     getContacts: () => apiClient.get('/api/status/contacts'),
     like: (contactId: string, statusId: string, emoji?: string) =>

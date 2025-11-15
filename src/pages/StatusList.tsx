@@ -305,6 +305,7 @@ const StatusList = () => {
                 <div
                   key={status.contactId}
                   className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-muted/50 transition-colors cursor-pointer group"
+                  onClick={() => navigate(`/dashboard/status/${encodeURIComponent(status.contactId)}`)}
                 >
                   {/* Avatar with status indicator (blue circle like WhatsApp) */}
                   <div className="relative flex-shrink-0">
@@ -321,7 +322,7 @@ const StatusList = () => {
                   </div>
 
                   {/* Contact info */}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-semibold text-sm sm:text-base truncate">
                         {status.contactName}
@@ -344,7 +345,7 @@ const StatusList = () => {
                   </div>
 
                   {/* Reaction button */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                   {isPremium ? (
                     <Popover>
                       <PopoverTrigger asChild>
