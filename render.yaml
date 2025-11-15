@@ -6,6 +6,7 @@ services:
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm start
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -46,3 +47,6 @@ services:
         value: ""
       - key: REDIS_PORT
         value: "6379"
+      # Firebase (Push Notifications)
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
