@@ -3,7 +3,7 @@ services:
     name: amda-backend
     env: node
     plan: free
-    buildCommand: cd backend && npm install && npm run build
+    buildCommand: bash .render-build.sh
     startCommand: cd backend && npm start
     healthCheckPath: /health
     envVars:
