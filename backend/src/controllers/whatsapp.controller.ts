@@ -79,7 +79,7 @@ export const getPairingCode = async (req: AuthRequest, res: Response, next: Next
     });
   } catch (error) {
     console.error('[WhatsApp] Error generating pairing code:', error);
-    next(error);
+    return next(error);
   }
 };
 
