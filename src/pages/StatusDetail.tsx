@@ -239,7 +239,7 @@ const StatusDetail = () => {
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/status')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/status/list')}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex items-center gap-3 flex-1">

@@ -2762,20 +2762,8 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
       throw new Error('WhatsApp not connected');
     }
 
-    // Get all contacts that have statuses (from status_likes table)
-    const { data: statusLikes } = await supabase
-      .from('status_likes')
-      .select('contact_id, contact_name, liked_at, status_id')
-      .eq('user_id', userId)
-      .order('liked_at', { ascending: false });
-
-    if (!statusLikes || statusLikes.length === 0) {
-      logger.info(`[WhatsApp] No status likes found for user ${userId}`);
-      return [];
-    }
-
-    // Group by contact and get latest status info
-    const contactMap = new Map<string, {
+    // Try to fetch all statuses from WhatsApp using Baileys
+    let contactsWithStatuses = new Map<string, {
       contactId: string;
       contactName: string;
       lastStatusTime: number;
@@ -2784,36 +2772,100 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
       latestStatusId?: string;
     }>();
 
-    for (const like of statusLikes) {
-      const contactId = like.contact_id;
-      if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
-        continue;
-      }
+    try {
+      // Get all contacts from the socket
+      const allContacts = await getAllContactsFromSocket(userId);
+      
+      // Fetch statuses for each contact
+      for (const contact of allContacts) {
+        const contactId = contact.contact_id;
+        if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
+          continue;
+        }
 
-      if (!contactMap.has(contactId)) {
-        contactMap.set(contactId, {
-          contactId,
-          contactName: like.contact_name || contactId.split('@')[0],
-          lastStatusTime: new Date(like.liked_at).getTime(),
-          statusCount: 0,
-          statusIds: new Set(),
-        });
-      }
+        try {
+          const statusList = await socket.fetchStatus(contactId);
+          
+          if (statusList && Array.isArray(statusList) && statusList.length > 0) {
+            let latestTime = 0;
+            let latestStatusId: string | undefined;
+            const statusIds = new Set<string>();
 
-      const contact = contactMap.get(contactId)!;
-      if (!contact.statusIds.has(like.status_id)) {
-        contact.statusIds.add(like.status_id);
-        contact.statusCount++;
-        const statusTime = new Date(like.liked_at).getTime();
-        if (statusTime > contact.lastStatusTime) {
-          contact.lastStatusTime = statusTime;
-          contact.latestStatusId = like.status_id;
+            for (const status of statusList) {
+              const statusId = (status.key && typeof status.key === 'object' && 'id' in status.key) 
+                ? (status.key as any).id 
+                : `status_${Date.now()}_${Math.random()}`;
+              const timestamp = status.updateTimestamp && typeof status.updateTimestamp === 'number' 
+                ? status.updateTimestamp * 1000 
+                : Date.now();
+              
+              statusIds.add(statusId);
+              
+              if (timestamp > latestTime) {
+                latestTime = timestamp;
+                latestStatusId = statusId;
+              }
+            }
+
+            if (statusIds.size > 0) {
+              contactsWithStatuses.set(contactId, {
+                contactId,
+                contactName: contact.contact_name || contactId.split('@')[0],
+                lastStatusTime: latestTime,
+                statusCount: statusIds.size,
+                statusIds,
+                latestStatusId,
+              });
+            }
+          }
+        } catch (contactError: any) {
+          // Skip contacts that don't have statuses or have errors
+          logger.debug(`[WhatsApp] No statuses or error for contact ${contactId}:`, contactError?.message);
+        }
+      }
+    } catch (fetchError: any) {
+      logger.warn(`[WhatsApp] Could not fetch all statuses from WhatsApp:`, fetchError?.message || fetchError);
+      
+      // Fallback: Get from status_likes table
+      const { data: statusLikes } = await supabase
+        .from('status_likes')
+        .select('contact_id, contact_name, liked_at, status_id')
+        .eq('user_id', userId)
+        .order('liked_at', { ascending: false });
+
+      if (statusLikes && statusLikes.length > 0) {
+        for (const like of statusLikes) {
+          const contactId = like.contact_id;
+          if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
+            continue;
+          }
+
+          if (!contactsWithStatuses.has(contactId)) {
+            contactsWithStatuses.set(contactId, {
+              contactId,
+              contactName: like.contact_name || contactId.split('@')[0],
+              lastStatusTime: new Date(like.liked_at).getTime(),
+              statusCount: 0,
+              statusIds: new Set(),
+            });
+          }
+
+          const contact = contactsWithStatuses.get(contactId)!;
+          if (!contact.statusIds.has(like.status_id)) {
+            contact.statusIds.add(like.status_id);
+            contact.statusCount++;
+            const statusTime = new Date(like.liked_at).getTime();
+            if (statusTime > contact.lastStatusTime) {
+              contact.lastStatusTime = statusTime;
+              contact.latestStatusId = like.status_id;
+            }
+          }
         }
       }
     }
 
     // Convert to array and sort by most recent status
-    const result = Array.from(contactMap.values())
+    const result = Array.from(contactsWithStatuses.values())
       .map(contact => ({
         contactId: contact.contactId,
         contactName: contact.contactName,
@@ -2864,39 +2916,97 @@ export const getContactStatuses = async (userId: string, contactId: string): Pro
       url?: string;
     }> = [];
 
-    // Get statuses from status_likes table (these are statuses that have been viewed/liked)
-    // For now, we'll use the status_likes table as the source of truth
-    // In the future, we can enhance this to fetch directly from WhatsApp if needed
-    const { data: statusLikes } = await supabase
-      .from('status_likes')
-      .select('status_id, liked_at, emoji')
-      .eq('user_id', userId)
-      .eq('contact_id', decodedContactId)
-      .order('liked_at', { ascending: false });
+    // Try to fetch statuses directly from WhatsApp using Baileys
+    try {
+      // Use Baileys fetchStatus to get all available statuses for the contact
+      const statusList = await socket.fetchStatus(decodedContactId);
+      
+      if (statusList && Array.isArray(statusList) && statusList.length > 0) {
+        statuses = statusList.map((status: any) => {
+          const statusId = (status.key && typeof status.key === 'object' && 'id' in status.key) 
+            ? (status.key as any).id 
+            : `status_${Date.now()}_${Math.random()}`;
+          const timestamp = status.updateTimestamp ? status.updateTimestamp * 1000 : Date.now();
+          
+          // Determine status type and URL
+          let type: 'image' | 'video' | 'text' = 'text';
+          let url: string | undefined;
+          let caption: string | undefined;
 
-    if (statusLikes && statusLikes.length > 0) {
-      statuses = statusLikes.map((like: any) => ({
-        id: like.status_id || `status_${Date.now()}_${Math.random()}`,
-        timestamp: new Date(like.liked_at).getTime(),
-        type: 'text' as const,
-      }));
-    } else {
-      // If no statuses found in status_likes, try to get from WhatsApp directly
-      // Note: Baileys doesn't have a direct fetchStatus method, so we rely on status_likes
-      // which is populated when statuses are viewed/liked
-      logger.info(`[WhatsApp] No statuses found in status_likes for contact ${decodedContactId}, user ${userId}`);
+          if (status.message?.imageMessage) {
+            type = 'image';
+            url = status.message.imageMessage.url;
+            caption = status.message.imageMessage.caption;
+          } else if (status.message?.videoMessage) {
+            type = 'video';
+            url = status.message.videoMessage.url;
+            caption = status.message.videoMessage.caption;
+          } else if (status.message?.extendedTextMessage) {
+            type = 'text';
+            caption = status.message.extendedTextMessage.text;
+          } else if (status.message?.conversation) {
+            type = 'text';
+            caption = status.message.conversation;
+          }
+
+          return {
+            id: statusId,
+            timestamp,
+            caption,
+            type,
+            url,
+          };
+        });
+        
+        logger.info(`[WhatsApp] Fetched ${statuses.length} statuses from WhatsApp for contact ${decodedContactId}`);
+      }
+    } catch (fetchError: any) {
+      logger.warn(`[WhatsApp] Could not fetch statuses from WhatsApp for contact ${decodedContactId}:`, fetchError?.message || fetchError);
+      
+      // Fallback: Get statuses from status_likes table
+      const { data: statusLikes } = await supabase
+        .from('status_likes')
+        .select('status_id, liked_at, emoji')
+        .eq('user_id', userId)
+        .eq('contact_id', decodedContactId)
+        .order('liked_at', { ascending: false });
+
+      if (statusLikes && statusLikes.length > 0) {
+        statuses = statusLikes.map((like: any) => ({
+          id: like.status_id || `status_${Date.now()}_${Math.random()}`,
+          timestamp: new Date(like.liked_at).getTime(),
+          type: 'text' as const,
+        }));
+        logger.info(`[WhatsApp] Using ${statuses.length} statuses from status_likes as fallback`);
+      }
     }
 
-    // Get contact name
+    // Get contact name from contacts table or status_likes
+    let contactName = decodedContactId.split('@')[0];
     const { data: contactData } = await supabase
-      .from('status_likes')
+      .from('contacts')
       .select('contact_name')
       .eq('user_id', userId)
       .eq('contact_id', decodedContactId)
       .limit(1)
       .maybeSingle();
 
-    const contactName = contactData?.contact_name || decodedContactId.split('@')[0];
+    if (contactData?.contact_name) {
+      contactName = contactData.contact_name;
+    } else {
+      // Fallback to status_likes
+      const { data: statusLikeData } = await supabase
+        .from('status_likes')
+        .select('contact_name')
+        .eq('user_id', userId)
+        .eq('contact_id', decodedContactId)
+        .limit(1)
+        .maybeSingle();
+      
+      if (statusLikeData?.contact_name) {
+        contactName = statusLikeData.contact_name;
+      }
+    }
 
     logger.info(`[WhatsApp] Retrieved ${statuses.length} statuses for contact ${decodedContactId} (user ${userId})`);
     
