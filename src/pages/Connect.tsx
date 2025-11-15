@@ -179,7 +179,8 @@ const Connect = () => {
             )}
           </div>
 
-          {/* Divider */}
+          {/* Pairing Code Method - DISABLED */}
+          {/* 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border" />
@@ -189,8 +190,7 @@ const Connect = () => {
             </div>
           </div>
 
-          {/* Pairing Code Method */}
-          <div className="space-y-4">
+          <div className="space-y-4 opacity-50 pointer-events-none">
             <div className="flex items-center justify-between p-4 border border-border rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-lg">
@@ -199,112 +199,16 @@ const Connect = () => {
                 <div>
                   <h3 className="font-semibold">Code de couplage</h3>
                   <p className="text-sm text-muted-foreground">
-                    Entrez votre numéro pour générer le code
+                    Temporairement désactivé
                   </p>
                 </div>
               </div>
-              <Button
-                onClick={handlePairingCode}
-                disabled={activeMethod === 'qr' || isGettingQR || isGettingPairingCode}
-                variant={activeMethod === 'pairing' || showPhoneInput ? 'default' : 'outline'}
-              >
-                {(activeMethod === 'pairing' || isGettingPairingCode) ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    En cours...
-                  </>
-                ) : showPhoneInput ? (
-                  'Générer Code'
-                ) : (
-                  'Générer Code'
-                )}
+              <Button disabled variant="outline">
+                Désactivé
               </Button>
             </div>
-
-            {/* Phone Number Input */}
-            {showPhoneInput && !pairingCode && (
-              <div className="p-4 border border-border rounded-lg bg-muted/50 space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="phoneNumber" className="text-sm font-medium">
-                    Numéro de téléphone
-                  </Label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="phoneNumber"
-                        type="tel"
-                        placeholder="+229 67 00 11 22"
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value)}
-                        className="pl-9"
-                        disabled={isGettingPairingCode}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && phoneNumber.trim().length >= 8) {
-                            handlePairingCode();
-                          }
-                        }}
-                      />
-                    </div>
-                    <Button
-                      onClick={handlePairingCode}
-                      disabled={!phoneNumber || phoneNumber.trim().length < 8 || isGettingPairingCode}
-                      size="default"
-                    >
-                      {isGettingPairingCode ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Génération...
-                        </>
-                      ) : (
-                        'Générer'
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Format: +XX XXXX XXXX ou XXXXXXXXXX (sans espaces)
-                  </p>
-                </div>
-                {!isGettingPairingCode && (
-                  <Button variant="outline" size="sm" onClick={() => {
-                    setShowPhoneInput(false);
-                    setPhoneNumber('');
-                  }}>
-                    Annuler
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {activeMethod === 'pairing' && pairingCode && (
-              <div className="p-4 border border-border rounded-lg bg-muted/50">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="text-center">
-                    <div className="inline-flex items-center justify-center w-32 h-32 border-4 border-primary rounded-lg bg-primary/10 mb-4">
-                      <span className="text-3xl font-bold text-primary">{pairingCode}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Entrez ce code dans WhatsApp : Paramètres → Appareils liés → Lier un appareil
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={handleStop}>
-                    Arrêter
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {activeMethod === 'pairing' && !pairingCode && (
-              <div className="p-4 border border-border rounded-lg bg-muted/50">
-                <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">
-                    Génération du code de couplage en cours...
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
+          */}
 
           {/* Status indicator */}
           {status?.status === 'connecting' && (

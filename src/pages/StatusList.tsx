@@ -50,8 +50,10 @@ const StatusList = () => {
       return [];
     },
     enabled: !!user && isConnected,
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
-    refetchOnWindowFocus: true,
+    refetchInterval: 60 * 1000, // Refetch every 60 seconds (reduced from 30s to avoid rate limiting)
+    refetchOnWindowFocus: false, // Disabled to avoid too many requests
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
   });
 
   // Get status likes to know which statuses have been reacted to

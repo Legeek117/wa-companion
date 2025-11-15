@@ -35,20 +35,29 @@ export function useAuth() {
         // This happens every time /api/auth/me is called, refreshing the token
         return response.data as User;
       }
-      // If 401, token is invalid - clear it
+      // Only clear token if it's a 401 (unauthorized) - don't clear on network errors
       if (response.error?.statusCode === 401) {
         apiClient.setToken(null);
+        throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
+      // For other errors (network, 500, etc.), don't clear token - just throw error
       throw new Error(response.error?.message || 'Failed to get user');
     },
-    retry: false,
+    retry: (failureCount, error: any) => {
+      // Retry up to 3 times, but not for 401 errors
+      if (error?.message?.includes('Session expirée') || error?.message?.includes('401')) {
+        return false; // Don't retry on 401
+      }
+      return failureCount < 3; // Retry up to 3 times for other errors
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff
     enabled: !!token,
-    // Refetch every 30 seconds to quickly detect premium status changes
-    // This ensures premium status is detected immediately after upgrade
-    refetchInterval: 30 * 1000, // 30 seconds - fast detection of premium changes
-    staleTime: 10 * 1000, // Consider data stale after 10 seconds
-    refetchOnWindowFocus: true, // Refetch when user returns to the page
+    // Refetch every 60 seconds to detect premium status changes (reduced from 30s to avoid rate limiting)
+    refetchInterval: 60 * 1000, // 60 seconds
+    staleTime: 30 * 1000, // Consider data stale after 30 seconds
+    refetchOnWindowFocus: true, // Refetch when user returns to the page (important for PWA)
     refetchOnMount: true, // Always refetch on mount to get latest status
+    refetchOnReconnect: true, // Refetch when network reconnects
   });
 
   // Register mutation

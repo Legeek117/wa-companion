@@ -434,13 +434,23 @@ export const getNotifications = async (
     const { data, error } = await query;
 
     if (error) {
-      // If table doesn't exist, return empty array
+      // If table doesn't exist, return empty array (don't log as error)
       if (error.code === '42P01') {
-        logger.warn('[NotificationsService] Notifications table does not exist. Please run the SQL migration.');
+        logger.debug('[NotificationsService] Notifications table does not exist. Please run the SQL migration.');
         return [];
       }
-      logger.error('[NotificationsService] Error fetching notifications:', error);
-      throw error;
+      // If rate limit error (429), log as warning and return empty array
+      if (error.code === 'PGRST301' || error.message?.includes('rate limit') || error.message?.includes('429')) {
+        logger.warn('[NotificationsService] Rate limit reached while fetching notifications. Returning empty array.');
+        return [];
+      }
+      // For other errors, log but don't throw (return empty array to avoid breaking the app)
+      logger.warn('[NotificationsService] Error fetching notifications:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+      return [];
     }
 
     return (data || []).map((n: any) => ({
@@ -453,8 +463,12 @@ export const getNotifications = async (
       read: n.read,
       createdAt: n.created_at,
     }));
-  } catch (error) {
-    logger.error('[NotificationsService] Error fetching notifications:', error);
+  } catch (error: any) {
+    // Catch any unexpected errors and return empty array
+    logger.warn('[NotificationsService] Unexpected error fetching notifications:', {
+      message: error?.message || error,
+      stack: error?.stack,
+    });
     return [];
   }
 };

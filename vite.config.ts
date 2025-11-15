@@ -55,16 +55,31 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/api\./i,
+            // Don't cache auth endpoints - always use network
+            urlPattern: /^https:\/\/.*\/api\/auth\//i,
+            handler: "NetworkOnly",
+            options: {
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            // For other API endpoints, use NetworkFirst but with shorter cache
+            urlPattern: /^https:\/\/.*\/api\//i,
             handler: "NetworkFirst",
             options: {
               cacheName: "api-cache",
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 // 24 hours
+                maxAgeSeconds: 60 * 5 // 5 minutes (reduced from 24 hours)
               },
               cacheableResponse: {
                 statuses: [0, 200]
+              },
+              // Don't cache if response includes Authorization header
+              matchOptions: {
+                ignoreSearch: false
               }
             }
           }

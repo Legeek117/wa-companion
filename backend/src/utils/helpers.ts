@@ -41,3 +41,34 @@ export function chunkArray<T>(array: T[], size: number): T[][] {
   return chunks;
 }
 
+/**
+ * Normalize emoji to NFC (Normalization Form Canonical Composition)
+ * This ensures emojis are correctly encoded for WhatsApp, especially on iPhone
+ * iPhone requires emojis to be in NFC format for proper display
+ * @param emoji - The emoji string to normalize
+ * @returns Normalized emoji string
+ */
+export function normalizeEmoji(emoji: string): string {
+  if (!emoji || typeof emoji !== 'string') {
+    return '❤️'; // Default fallback
+  }
+
+  // Trim whitespace
+  const trimmed = emoji.trim();
+  if (trimmed === '') {
+    return '❤️'; // Default fallback
+  }
+
+  // Normalize to NFC (Canonical Composition)
+  // This is critical for iPhone compatibility - iPhone expects NFC format
+  // NFC combines characters into their composed form (e.g., é instead of e + ́)
+  try {
+    const normalized = trimmed.normalize('NFC');
+    return normalized;
+  } catch (error) {
+    // If normalization fails, return default
+    console.warn(`[Helpers] Failed to normalize emoji "${emoji}":`, error);
+    return '❤️';
+  }
+}
+

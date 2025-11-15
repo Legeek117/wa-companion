@@ -43,8 +43,10 @@ export function NotificationsDropdown() {
       return [];
     },
     enabled: !!user,
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
-    refetchOnWindowFocus: true,
+    refetchInterval: 60 * 1000, // Refetch every 60 seconds (reduced from 30s to avoid rate limiting)
+    refetchOnWindowFocus: false, // Disabled to avoid too many requests
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff
   });
 
   // Fetch unread count
@@ -58,7 +60,10 @@ export function NotificationsDropdown() {
       return 0;
     },
     enabled: !!user,
-    refetchInterval: 30 * 1000,
+    refetchInterval: 60 * 1000, // Refetch every 60 seconds (reduced from 30s)
+    refetchOnWindowFocus: false, // Disabled to avoid too many requests
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff
   });
 
   const unreadCount = unreadCountData || 0;

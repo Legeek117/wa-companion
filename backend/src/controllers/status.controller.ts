@@ -432,7 +432,9 @@ export const likeStatusController = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const reactionEmoji = emoji || '❤️';
+    // Normalize emoji to NFC format for iPhone compatibility
+    const { normalizeEmoji } = await import('../utils/helpers');
+    const reactionEmoji = normalizeEmoji(emoji || '❤️');
 
     // Check quota for status reactions (2/day for free, unlimited for premium)
     try {

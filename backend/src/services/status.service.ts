@@ -574,7 +574,9 @@ export const handleStatusUpdate = async (
 
         // Utiliser l'emoji configuré (pas d'emoji aléatoire)
         // Vérifier que l'emoji est valide et non vide
-        const reactionEmoji = emoji && emoji.trim() !== '' ? emoji.trim() : '❤️';
+        // Normalize emoji to NFC format for iPhone compatibility
+        const { normalizeEmoji } = await import('../utils/helpers');
+        const reactionEmoji = normalizeEmoji(emoji && emoji.trim() !== '' ? emoji.trim() : '❤️');
         
         logger.info(`[Status] 🎯 Using emoji for reaction: "${reactionEmoji}" (original: "${emoji}", length: ${reactionEmoji.length}, codePoints: ${Array.from(reactionEmoji).map((e: string) => e.codePointAt(0)?.toString(16)).join(',')})`);
 

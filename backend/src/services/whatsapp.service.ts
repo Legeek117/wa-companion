@@ -3111,15 +3111,25 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
       }
     }
 
-    // If we have cached statuses, use them
+    // Get all contacts with their names first (this ensures we have proper names)
+    const allContacts = await getAllContactsFromSocket(userId);
+    const contactsMap = new Map<string, string>();
+    for (const contact of allContacts) {
+      contactsMap.set(contact.contact_id, contact.contact_name);
+    }
+
+    // If we have cached statuses, use them but update contact names from contactsMap
     if (contactsWithStatuses.size > 0) {
       logger.info(`[WhatsApp] Using ${contactsWithStatuses.size} contacts with cached statuses for user ${userId}`);
+      // Update contact names from contactsMap
+      for (const [contactId, contact] of contactsWithStatuses.entries()) {
+        if (contactsMap.has(contactId)) {
+          contact.contactName = contactsMap.get(contactId)!;
+        }
+      }
     } else {
       // Fallback: Try to fetch from WhatsApp using Baileys
       try {
-        // Get all contacts from the socket
-        const allContacts = await getAllContactsFromSocket(userId);
-      
         // Fetch statuses for each contact
         for (const contact of allContacts) {
           const contactId = contact.contact_id;
@@ -3152,9 +3162,11 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
               }
 
               if (statusIds.size > 0) {
+                // Use contact name from contactsMap, fallback to contact.contact_name, then to phone number
+                const contactName = contactsMap.get(contactId) || contact.contact_name || contactId.split('@')[0];
                 contactsWithStatuses.set(contactId, {
                   contactId,
-                  contactName: contact.contact_name || contactId.split('@')[0],
+                  contactName,
                   lastStatusTime: latestTime,
                   statusCount: statusIds.size,
                   statusIds,
@@ -3184,10 +3196,13 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
               continue;
             }
 
+            // Use contact name from contactsMap, fallback to like.contact_name, then to phone number
+            const contactName = contactsMap.get(contactId) || like.contact_name || contactId.split('@')[0];
+
             if (!contactsWithStatuses.has(contactId)) {
               contactsWithStatuses.set(contactId, {
                 contactId,
-                contactName: like.contact_name || contactId.split('@')[0],
+                contactName,
                 lastStatusTime: new Date(like.liked_at).getTime(),
                 statusCount: 0,
                 statusIds: new Set(),

@@ -23,9 +23,15 @@ class ApiClient {
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
-    // Load token from localStorage
+    // Load token from localStorage immediately
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem('auth_token');
+      // Also listen for storage events to sync token across tabs/windows
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'auth_token') {
+          this.token = e.newValue;
+        }
+      });
     }
   }
 
@@ -51,7 +57,8 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount: number = 0
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
     const headers: HeadersInit = {
@@ -101,6 +108,19 @@ class ApiClient {
         };
       }
 
+      // Handle 429 (Too Many Requests) with exponential backoff retry
+      if (response.status === 429 && retryCount < 3) {
+        const retryAfter = response.headers.get('Retry-After');
+        const delay = retryAfter 
+          ? parseInt(retryAfter, 10) * 1000 
+          : Math.min(1000 * Math.pow(2, retryCount), 10000); // Max 10 seconds
+        
+        console.warn(`[API] Rate limited (429), retrying after ${delay}ms (attempt ${retryCount + 1}/3)`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.request<T>(endpoint, options, retryCount + 1);
+      }
+
       if (!response.ok) {
         // If 401, clear token as it might be invalid
         if (response.status === 401) {
@@ -125,6 +145,14 @@ class ApiClient {
         ...data,
       };
     } catch (error) {
+      // Retry on network errors with exponential backoff (max 3 retries)
+      if (retryCount < 3 && error instanceof TypeError && error.message.includes('fetch')) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Max 5 seconds
+        console.warn(`[API] Network error, retrying after ${delay}ms (attempt ${retryCount + 1}/3)`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.request<T>(endpoint, options, retryCount + 1);
+      }
+      
       return {
         success: false,
         error: {
