@@ -120,9 +120,18 @@ const reconnectionAttempts = new Map<string, { count: number; lastAttempt: numbe
 // Track sessions with conflicts to prevent reconnection
 const conflictedSessions = new Set<string>();
 
-// Maximum reconnection attempts before giving up
-const MAX_RECONNECTION_ATTEMPTS = 3;
-const RECONNECTION_COOLDOWN = 60 * 1000; // 60 seconds
+// Track reconnection timers to prevent multiple simultaneous reconnection attempts
+const reconnectionTimers = new Map<string, NodeJS.Timeout>();
+
+// Track connection health monitoring intervals
+const connectionHealthMonitors = new Map<string, NodeJS.Timeout>();
+
+// Maximum reconnection attempts before giving up (increased from 3 to 10)
+const MAX_RECONNECTION_ATTEMPTS = 10;
+const RECONNECTION_COOLDOWN = 30 * 1000; // 30 seconds (reduced from 60s for faster recovery)
+const INITIAL_RECONNECTION_DELAY = 5 * 1000; // 5 seconds initial delay
+const MAX_RECONNECTION_DELAY = 5 * 60 * 1000; // 5 minutes max delay
+const CONNECTION_HEALTH_CHECK_INTERVAL = 30 * 1000; // Check connection health every 30 seconds
 
 /**
  * Get session directory path for a user
@@ -644,6 +653,15 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
                           
                           // Setup message listeners for reconnected socket
                           setupMessageListeners(userId, newSocket);
+                          
+                          // Setup keep-alive
+                          setupKeepAlive(userId, newSocket);
+                          
+                          // Start connection health monitoring
+                          startConnectionHealthMonitor(userId, newSocket);
+                          
+                          // Cancel any scheduled reconnections
+                          cancelScheduledReconnection(userId);
                         } else if (connection === 'close') {
                           const statusCode = (update.lastDisconnect?.error as any)?.output?.statusCode;
                           logger.warn(`[WhatsApp] Reconnection closed for user ${userId}:`, { statusCode });
@@ -714,6 +732,10 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
           // Connection closed or method not allowed - might be temporary
           logger.warn(`[WhatsApp] Connection closed with status ${statusCode}, will retry if needed`);
           
+          // Stop health monitoring and keep-alive
+          stopConnectionHealthMonitor(userId);
+          stopKeepAlive(userId);
+          
           // If QR code was already generated, don't reject - it's safe in memory
           if (qrCodes.has(userId)) {
             logger.info(`[WhatsApp] QR code already generated, ignoring connection close for user ${userId}`);
@@ -729,15 +751,38 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
           // Don't reject the promise here - let the timeout handle it
           // This allows the QR code to be generated even if connection closes
         } else {
-          // Other disconnect reasons
+          // Other disconnect reasons - schedule automatic reconnection if credentials exist
+          logger.warn(`[WhatsApp] Connection closed for user ${userId} with status ${statusCode}, scheduling reconnection`);
+          
+          // Stop health monitoring and keep-alive
+          stopConnectionHealthMonitor(userId);
+          stopKeepAlive(userId);
+          
+          // Check if credentials exist - if so, schedule reconnection
+          const sessionPath = getSessionPath(userId);
+          try {
+            await ensureSessionFromSupabase(userId, sessionPath);
+            const { state } = await useMultiFileAuthState(sessionPath);
+            if (state.creds && state.creds.me) {
+              logger.info(`[WhatsApp] Credentials exist for user ${userId}, scheduling automatic reconnection`);
+              scheduleReconnection(userId);
+            }
+          } catch (error) {
+            logger.debug(`[WhatsApp] Could not check credentials for reconnection:`, error);
+          }
+          
+          // Update status to disconnected
           await updateSessionStatus(userId, {
             status: 'disconnected',
             qrCode: null,
+          }).catch((err) => {
+            logger.error(`[WhatsApp] Error updating session status:`, err);
           });
           
           if (qrCodeReject) {
             qrCodeReject(new Error(`Connection closed: ${errorMessage} (${statusCode})`));
             qrCodeReject = null;
+            qrCodeResolve = null;
           }
         }
       } else if (connection === 'open') {
@@ -756,6 +801,12 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
         
         // Setup keep-alive to maintain bot presence as "online"
         setupKeepAlive(userId, socket);
+        
+        // Start connection health monitoring
+        startConnectionHealthMonitor(userId, socket);
+        
+        // Cancel any scheduled reconnections since we're now connected
+        cancelScheduledReconnection(userId);
         
         // Resolve with empty string if connected without QR (already connected)
         if (qrCodeResolve) {
@@ -1079,7 +1130,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         // Attach connection handler to wait for connection after pairing code is entered
         // Define handler if not already defined
         if (!pairingCodeHandler) {
-          pairingCodeHandler = async (update: any) => {
+    pairingCodeHandler = async (update: any) => {
             const { connection } = update;
             if (connection === 'open') {
               logger.info(`[WhatsApp] WhatsApp connected via pairing code for user: ${userId}`);
@@ -1097,6 +1148,12 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
               
               // Setup keep-alive to maintain bot presence as "online"
               setupKeepAlive(userId, socket);
+              
+              // Start connection health monitoring
+              startConnectionHealthMonitor(userId, socket);
+              
+              // Cancel any scheduled reconnections
+              cancelScheduledReconnection(userId);
             }
           };
         }
@@ -1372,6 +1429,10 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
           // Connection closed or method not allowed - might be temporary
           logger.warn(`[WhatsApp] Connection closed with status ${statusCode}, will retry if needed`);
           
+          // Stop health monitoring and keep-alive
+          stopConnectionHealthMonitor(userId);
+          stopKeepAlive(userId);
+          
           // Don't reject immediately for connection errors, might retry
           // But if pairing code wasn't generated, we should reject after timeout
           if (pairingCodeReject && !pairingCodes.has(userId)) {
@@ -1412,6 +1473,12 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         // Setup keep-alive to maintain bot presence as "online"
         setupKeepAlive(userId, socket);
         
+        // Start connection health monitoring
+        startConnectionHealthMonitor(userId, socket);
+        
+        // Cancel any scheduled reconnections since we're now connected
+        cancelScheduledReconnection(userId);
+        
         // Resolve with empty string if connected without pairing code (already connected)
         if (pairingCodeResolve) {
           pairingCodeResolve('');
@@ -1424,7 +1491,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     // Attach handler IMMEDIATELY - use 'on' to catch all events
     logger.info(`[WhatsApp] Attaching connection.update handler for pairing code, user ${userId}`);
     if (pairingCodeHandler) {
-      socket.ev.on('connection.update', pairingCodeHandler);
+    socket.ev.on('connection.update', pairingCodeHandler);
     }
 
     // Also add debug logging for first few connection updates (inspired by reference code)
@@ -1854,6 +1921,11 @@ export const disconnectWhatsApp = async (userId: string): Promise<void> => {
     // Clear conflict status and reconnection attempts when user manually disconnects
     conflictedSessions.delete(userId);
     reconnectionAttempts.delete(userId);
+    
+    // Stop all monitoring and scheduled reconnections
+    stopConnectionHealthMonitor(userId);
+    stopKeepAlive(userId);
+    cancelScheduledReconnection(userId);
 
     // Update status
     await updateSessionStatus(userId, {
@@ -2397,6 +2469,240 @@ const stopKeepAlive = (userId: string): void => {
 };
 
 /**
+ * Monitor connection health and trigger reconnection if needed
+ */
+const startConnectionHealthMonitor = (userId: string, socket: WASocket): void => {
+  // Clear any existing monitor
+  stopConnectionHealthMonitor(userId);
+
+  let lastHealthCheck = Date.now();
+  let consecutiveFailures = 0;
+  const MAX_CONSECUTIVE_FAILURES = 3;
+
+  const monitor = setInterval(async () => {
+    try {
+      const currentSocket = activeSockets.get(userId);
+      
+      // If socket was removed, stop monitoring
+      if (!currentSocket || currentSocket !== socket) {
+        logger.debug(`[WhatsApp] Socket removed for user ${userId}, stopping health monitor`);
+        clearInterval(monitor);
+        connectionHealthMonitors.delete(userId);
+        return;
+      }
+
+      // Check if socket is still valid
+      if (!socket.user || !socket.user.id) {
+        consecutiveFailures++;
+        logger.warn(`[WhatsApp] ⚠️ Connection health check failed for user ${userId} - socket invalid (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+        
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          logger.warn(`[WhatsApp] ⚠️ Multiple consecutive health check failures for user ${userId}, triggering reconnection`);
+          clearInterval(monitor);
+          connectionHealthMonitors.delete(userId);
+          
+          // Stop keep-alive
+          stopKeepAlive(userId);
+          
+          // Trigger reconnection
+          scheduleReconnection(userId);
+          return;
+        }
+        return;
+      }
+
+      // Try to verify connection by checking socket state
+      try {
+        // Try a lightweight operation to verify connection is alive
+        // Check if socket has valid connection state
+        const socketAny = socket as any;
+        const hasValidConnection = socketAny.ws && socketAny.ws.readyState !== undefined;
+        
+        if (hasValidConnection) {
+          // Connection appears healthy
+          consecutiveFailures = 0; // Reset failure counter
+          lastHealthCheck = Date.now();
+          logger.debug(`[WhatsApp] Connection health check passed for user ${userId}`);
+        } else {
+          consecutiveFailures++;
+          logger.warn(`[WhatsApp] ⚠️ Connection health check warning for user ${userId} - socket state unclear (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+          
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            logger.warn(`[WhatsApp] ⚠️ Multiple consecutive health check failures for user ${userId}, triggering reconnection`);
+            clearInterval(monitor);
+            connectionHealthMonitors.delete(userId);
+            
+            // Stop keep-alive
+            stopKeepAlive(userId);
+            
+            // Trigger reconnection
+            scheduleReconnection(userId);
+            return;
+          }
+        }
+      } catch (error) {
+        consecutiveFailures++;
+        logger.warn(`[WhatsApp] ⚠️ Connection health check error for user ${userId} (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, error);
+        
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          logger.warn(`[WhatsApp] ⚠️ Multiple consecutive health check errors for user ${userId}, triggering reconnection`);
+          clearInterval(monitor);
+          connectionHealthMonitors.delete(userId);
+          
+          // Stop keep-alive
+          stopKeepAlive(userId);
+          
+          // Trigger reconnection
+          scheduleReconnection(userId);
+          return;
+        }
+      }
+    } catch (error) {
+      logger.error(`[WhatsApp] Error in connection health monitor for user ${userId}:`, error);
+    }
+  }, CONNECTION_HEALTH_CHECK_INTERVAL);
+
+  connectionHealthMonitors.set(userId, monitor);
+  logger.info(`[WhatsApp] ✅ Connection health monitor started for user ${userId} (checks every ${CONNECTION_HEALTH_CHECK_INTERVAL / 1000}s)`);
+};
+
+/**
+ * Stop connection health monitor for a user
+ */
+const stopConnectionHealthMonitor = (userId: string): void => {
+  const monitor = connectionHealthMonitors.get(userId);
+  if (monitor) {
+    clearInterval(monitor);
+    connectionHealthMonitors.delete(userId);
+    logger.debug(`[WhatsApp] Connection health monitor stopped for user ${userId}`);
+  }
+};
+
+/**
+ * Schedule a reconnection attempt with exponential backoff
+ */
+const scheduleReconnection = (userId: string): void => {
+  // Check if already connected - don't schedule if connected
+  const socket = activeSockets.get(userId);
+  if (socket && socket.user && socket.user.id) {
+    logger.debug(`[WhatsApp] User ${userId} already connected, skipping scheduled reconnection`);
+    return;
+  }
+
+  // Clear any existing reconnection timer
+  const existingTimer = reconnectionTimers.get(userId);
+  if (existingTimer) {
+    // Timer already exists, don't schedule another one
+    logger.debug(`[WhatsApp] Reconnection already scheduled for user ${userId}, skipping duplicate`);
+    return;
+  }
+
+  // Check if session has a conflict
+  if (conflictedSessions.has(userId)) {
+    logger.warn(`[WhatsApp] Session for user ${userId} has a conflict, skipping scheduled reconnection`);
+    return;
+  }
+
+  // Get current attempt count
+  const attempts = reconnectionAttempts.get(userId) || { count: 0, lastAttempt: 0 };
+  const now = Date.now();
+
+  // Check if we've exceeded max attempts
+  if (attempts.count >= MAX_RECONNECTION_ATTEMPTS) {
+    // Check if cooldown has passed (2x the normal cooldown for max attempts)
+    if (now - attempts.lastAttempt > RECONNECTION_COOLDOWN * 2) {
+      logger.info(`[WhatsApp] Extended cooldown passed for user ${userId}, resetting reconnection attempts`);
+      reconnectionAttempts.delete(userId);
+      // Retry after reset
+      scheduleReconnection(userId);
+      return;
+    } else {
+      logger.warn(`[WhatsApp] Max reconnection attempts reached for user ${userId}, waiting for extended cooldown`);
+      return;
+    }
+  }
+
+  // Check cooldown period
+  if (now - attempts.lastAttempt < RECONNECTION_COOLDOWN) {
+    const remainingCooldown = RECONNECTION_COOLDOWN - (now - attempts.lastAttempt);
+    logger.debug(`[WhatsApp] Reconnection cooldown active for user ${userId}, waiting ${Math.round(remainingCooldown / 1000)}s more`);
+    // Schedule after cooldown
+    const timer = setTimeout(() => {
+      reconnectionTimers.delete(userId);
+      scheduleReconnection(userId);
+    }, remainingCooldown);
+    reconnectionTimers.set(userId, timer);
+    return;
+  }
+
+  // Calculate delay with exponential backoff
+  const baseDelay = INITIAL_RECONNECTION_DELAY;
+  const exponentialDelay = Math.min(
+    baseDelay * Math.pow(2, attempts.count),
+    MAX_RECONNECTION_DELAY
+  );
+  const jitter = Math.random() * 1000; // Add random jitter (0-1s) to prevent thundering herd
+  const delay = exponentialDelay + jitter;
+
+  logger.info(`[WhatsApp] 🔄 Scheduling reconnection for user ${userId} in ${Math.round(delay / 1000)}s (attempt ${attempts.count + 1}/${MAX_RECONNECTION_ATTEMPTS})`);
+
+  const timer = setTimeout(async () => {
+    reconnectionTimers.delete(userId);
+    
+    // Double-check if already connected (might have connected during delay)
+    const currentSocket = activeSockets.get(userId);
+    if (currentSocket && currentSocket.user && currentSocket.user.id) {
+      logger.info(`[WhatsApp] User ${userId} already connected, cancelling scheduled reconnection`);
+      reconnectionAttempts.delete(userId);
+      return;
+    }
+
+    // Update attempt count
+    reconnectionAttempts.set(userId, {
+      count: attempts.count + 1,
+      lastAttempt: Date.now(),
+    });
+
+    // Attempt reconnection
+    try {
+      logger.info(`[WhatsApp] 🔄 Attempting scheduled reconnection for user ${userId}...`);
+      const reconnected = await reconnectWhatsAppIfCredentialsExist(userId);
+      
+      if (reconnected) {
+        logger.info(`[WhatsApp] ✅ Scheduled reconnection successful for user ${userId}`);
+        reconnectionAttempts.delete(userId);
+      } else {
+        logger.warn(`[WhatsApp] ⚠️ Scheduled reconnection failed for user ${userId}, will retry`);
+        // Schedule another attempt only if not conflicted
+        if (!conflictedSessions.has(userId)) {
+          scheduleReconnection(userId);
+        }
+      }
+    } catch (error) {
+      logger.error(`[WhatsApp] Error during scheduled reconnection for user ${userId}:`, error);
+      // Schedule another attempt only if not conflicted
+      if (!conflictedSessions.has(userId)) {
+        scheduleReconnection(userId);
+      }
+    }
+  }, delay);
+
+  reconnectionTimers.set(userId, timer);
+};
+
+/**
+ * Cancel any scheduled reconnection for a user
+ */
+const cancelScheduledReconnection = (userId: string): void => {
+  const timer = reconnectionTimers.get(userId);
+  if (timer) {
+    clearTimeout(timer);
+    reconnectionTimers.delete(userId);
+    logger.debug(`[WhatsApp] Cancelled scheduled reconnection for user ${userId}`);
+  }
+};
+
+/**
  * Process and store a status message (inspired by reference code)
  */
 const processAndStoreStatus = async (userId: string, socket: WASocket, message: any): Promise<void> => {
@@ -2880,6 +3186,12 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
           
           // Setup keep-alive to maintain bot presence as "online"
           setupKeepAlive(userId, socket);
+          
+          // Start connection health monitoring
+          startConnectionHealthMonitor(userId, socket);
+          
+          // Cancel any scheduled reconnections since we're now connected
+          cancelScheduledReconnection(userId);
         } else if (connection === 'close') {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
           const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
@@ -2916,13 +3228,21 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
               statusCode, 
               streamErrorCode,
             });
-            // Update status but don't trigger reconnection immediately
+            
+            // Stop health monitoring and keep-alive
+            stopConnectionHealthMonitor(userId);
+            stopKeepAlive(userId);
+            
+            // Update status but schedule reconnection after a short delay
             await updateSessionStatus(userId, {
               status: 'disconnected',
               lastSeen: new Date(),
             }).catch((err) => {
               logger.error(`[WhatsApp] Error updating session status:`, err);
             });
+            
+            // Schedule reconnection for normal closes (might be temporary network issue)
+            scheduleReconnection(userId);
             return;
           }
           
@@ -2981,39 +3301,15 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
             
             activeSockets.delete(userId);
           } else {
-            // Other disconnect reasons - check if we should retry
-            const now = Date.now();
-            const attempts = reconnectionAttempts.get(userId) || { count: 0, lastAttempt: 0 };
+            // Other disconnect reasons - schedule automatic reconnection
+            logger.warn(`[WhatsApp] Auto-reconnection closed for user ${userId} with status ${statusCode}, scheduling reconnection`);
             
-            // Check if we've exceeded max attempts or are in cooldown
-            if (attempts.count >= MAX_RECONNECTION_ATTEMPTS) {
-              logger.warn(`[WhatsApp] Max reconnection attempts (${MAX_RECONNECTION_ATTEMPTS}) reached for user ${userId}, giving up`);
-              conflictedSessions.add(userId);
-              reconnectionAttempts.delete(userId);
-              activeSockets.delete(userId);
-              
-              await updateSessionStatus(userId, {
-                status: 'disconnected',
-                qrCode: null,
-                pairingCode: null,
-              }).catch(() => {});
-              
-              return;
-            }
+            // Stop health monitoring and keep-alive
+            stopConnectionHealthMonitor(userId);
+            stopKeepAlive(userId);
             
-            // Check cooldown period
-            if (now - attempts.lastAttempt < RECONNECTION_COOLDOWN) {
-              logger.info(`[WhatsApp] Reconnection cooldown active for user ${userId}, waiting...`);
-              return;
-            }
-            
-            // Increment attempt counter
-            reconnectionAttempts.set(userId, {
-              count: attempts.count + 1,
-              lastAttempt: now,
-            });
-            
-            logger.info(`[WhatsApp] Reconnection attempt ${attempts.count + 1}/${MAX_RECONNECTION_ATTEMPTS} for user ${userId}`);
+            // Schedule automatic reconnection with exponential backoff
+            scheduleReconnection(userId);
           }
         }
       } catch (error) {
@@ -3024,11 +3320,29 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
     return true;
   } catch (error) {
     logger.error(`[WhatsApp] Error auto-reconnecting user ${userId}:`, error);
+    
+    // Stop monitoring if it was started
+    stopConnectionHealthMonitor(userId);
+    stopKeepAlive(userId);
+    
+    // Update status
     await updateSessionStatus(userId, {
       status: 'disconnected',
       qrCode: null,
       pairingCode: null,
+    }).catch((err) => {
+      logger.error(`[WhatsApp] Error updating session status after failed reconnect:`, err);
     });
+    
+    // Schedule another reconnection attempt if not a conflict
+    if (!conflictedSessions.has(userId)) {
+      const attempts = reconnectionAttempts.get(userId) || { count: 0, lastAttempt: 0 };
+      if (attempts.count < MAX_RECONNECTION_ATTEMPTS) {
+        logger.info(`[WhatsApp] Scheduling retry after error for user ${userId}`);
+        scheduleReconnection(userId);
+      }
+    }
+    
     return false;
   }
 };
