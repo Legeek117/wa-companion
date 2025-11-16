@@ -1091,6 +1091,172 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
       throw new Error('Compte déjà connecté. Veuillez vous déconnecter d\'abord.');
     }
 
+    // Define comprehensive connection handler BEFORE requesting pairing code
+    // This ensures we catch all connection events, including errors
+    pairingCodeHandler = async (update: any) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      // Handle successful connection
+      if (connection === 'open') {
+        logger.info(`[WhatsApp] ✅ WhatsApp connected via pairing code for user: ${userId}`);
+        await updateSessionStatus(userId, {
+          status: 'connected',
+          pairingCode: null,
+          connectedAt: new Date(),
+          lastSeen: new Date(),
+        });
+        activeSockets.set(userId, socket);
+        pairingCodes.delete(userId);
+        
+        // Setup message listeners for connected socket
+        setupMessageListeners(userId, socket);
+        
+        // Setup keep-alive to maintain bot presence as "online"
+        setupKeepAlive(userId, socket);
+        
+        // Start connection health monitoring
+        startConnectionHealthMonitor(userId, socket);
+        
+        // Cancel any scheduled reconnections
+        cancelScheduledReconnection(userId);
+        return;
+      }
+
+      // Handle connection errors
+      if (connection === 'close') {
+        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+        const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
+        const streamErrorCode = (lastDisconnect?.error as any)?.output?.statusCode || 
+                                (lastDisconnect?.error as any)?.tag?.attrs?.code;
+        
+        // Check for conflict error (session replaced)
+        const errorContent = (lastDisconnect?.error as any)?.output?.tag?.content;
+        const isConflict = errorContent?.some?.((item: any) => item?.tag === 'conflict' && item?.attrs?.type === 'replaced') || 
+                          errorMessage?.includes('conflict') || 
+                          errorMessage?.includes('replaced');
+        
+        logger.warn(`[WhatsApp] Pairing code connection closed for user ${userId}:`, {
+          statusCode,
+          streamErrorCode,
+          errorMessage,
+          isConflict,
+        });
+
+        // Handle conflict error (session replaced by another device)
+        if (isConflict) {
+          logger.warn(`[WhatsApp] ⚠️ Session conflict detected for pairing code, user ${userId} - session was replaced by another device`);
+          conflictedSessions.add(userId);
+          reconnectionAttempts.delete(userId);
+          
+          try {
+            if (socket) {
+              try {
+                await socket.end(undefined);
+              } catch (e) {
+                // Ignore errors when closing
+              }
+            }
+            activeSockets.delete(userId);
+            pairingCodes.delete(userId);
+            
+            await updateSessionStatus(userId, {
+              status: 'disconnected',
+              qrCode: null,
+              pairingCode: null,
+            }).catch((err) => {
+              logger.error(`[WhatsApp] Error updating session status after conflict (pairing code):`, err);
+            });
+            
+            if (pairingCodeReject) {
+              pairingCodeReject(new Error('Session replaced by another device. Please disconnect the other device and try again.'));
+              pairingCodeReject = null;
+              pairingCodeResolve = null;
+            }
+          } catch (error) {
+            logger.error(`[WhatsApp] Error handling conflict (pairing code) for user ${userId}:`, error);
+          }
+          return;
+        }
+
+        // Check if credentials were saved (pairing successful)
+        const hasCredentials = state.creds && state.creds.me;
+        
+        // Handle stream error 515 (restart required after pairing)
+        if (streamErrorCode === '515' || errorMessage?.includes('restart required') || errorMessage?.includes('Stream Errored')) {
+          logger.info(`[WhatsApp] Stream error 515 detected for pairing code, user ${userId} - restart required`);
+          
+          if (hasCredentials) {
+            logger.info(`[WhatsApp] ✅ Pairing successful for user ${userId}, credentials saved. Restarting connection...`);
+            await updateSessionStatus(userId, {
+              status: 'connecting', // Will be updated to 'connected' after restart
+              pairingCode: null, // Clear pairing code after successful pairing
+            }).catch((err) => {
+              logger.error(`[WhatsApp] Error updating session status after stream error 515 (pairing code):`, err);
+            });
+            return; // Exit early, let the restart logic handle it
+          } else {
+            logger.warn(`[WhatsApp] Stream error 515 but no credentials found for pairing code, user ${userId}`);
+          }
+        }
+
+        // Handle different disconnect reasons
+        if (statusCode === DisconnectReason.loggedOut) {
+          logger.warn(`[WhatsApp] User ${userId} logged out during pairing`);
+          await updateSessionStatus(userId, {
+            status: 'disconnected',
+            pairingCode: null,
+          });
+          await removeSessionFromSupabase(userId);
+          await deleteLocalSessionDirectory(sessionPath);
+          activeSockets.delete(userId);
+          pairingCodes.delete(userId);
+          
+          if (pairingCodeReject) {
+            pairingCodeReject(new Error('Connection closed: Logged out'));
+            pairingCodeReject = null;
+          }
+        } else if (statusCode === DisconnectReason.restartRequired) {
+          // Restart required is normal after pairing - credentials should be saved
+          logger.info(`[WhatsApp] Restart required after pairing for user ${userId} - this is normal`);
+          if (hasCredentials) {
+            logger.info(`[WhatsApp] ✅ Credentials saved, connection will restart automatically for user ${userId}`);
+            return; // Don't update status - let the restart handle it
+          }
+        } else if (statusCode === DisconnectReason.connectionClosed || statusCode === 405) {
+          // Connection closed - might be temporary, but log it
+          logger.warn(`[WhatsApp] Connection closed during pairing for user ${userId} (status: ${statusCode})`);
+          // Don't update status immediately - might reconnect
+        } else {
+          // Other errors
+          logger.error(`[WhatsApp] Connection error during pairing for user ${userId}: ${errorMessage} (${statusCode})`);
+          await updateSessionStatus(userId, {
+            status: 'disconnected',
+            pairingCode: null,
+          }).catch(() => {});
+          
+          if (pairingCodeReject) {
+            pairingCodeReject(new Error(`Connection closed: ${errorMessage} (${statusCode})`));
+            pairingCodeReject = null;
+          }
+        }
+      }
+    };
+
+    // Attach handler IMMEDIATELY - before requesting pairing code
+    // This ensures we catch all connection events
+    logger.info(`[WhatsApp] Attaching connection handler BEFORE requesting pairing code, user ${userId}`);
+    socket.ev.on('connection.update', pairingCodeHandler);
+
+    // Also listen for credentials update to detect successful pairing
+    socket.ev.on('creds.update', async () => {
+      try {
+        logger.info(`[WhatsApp] ✅ Credentials updated during pairing for user ${userId}`);
+        await persistCreds();
+      } catch (error) {
+        logger.error(`[WhatsApp] Error in creds.update handler (pairing) for user ${userId}:`, error);
+      }
+    });
+
     // If phone number is provided, request pairing code directly (inspired by reference code)
     if (phoneNumber) {
       try {
@@ -1103,10 +1269,18 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
 
         logger.info(`[WhatsApp] Requesting pairing code for phone number: ${cleanPhoneNumber}, user: ${userId}`);
         
-        // Request pairing code using Baileys method (inspired by reference code)
-        // Wait a bit for socket to be ready
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait longer for socket to be fully ready (increased from 1s to 3s)
+        // This ensures the socket is properly initialized before requesting pairing code
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
+        // Verify socket is still valid before requesting
+        if (!socket || !socket.user) {
+          // Socket might not be ready yet, wait a bit more
+          logger.info(`[WhatsApp] Socket not fully ready, waiting additional 2 seconds...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        // Request pairing code using Baileys method
         const pairingCode = await socket.requestPairingCode(cleanPhoneNumber);
         
         logger.info(`[WhatsApp] ✅ Pairing code generated via requestPairingCode for user ${userId}, code: ${pairingCode}`);
@@ -1127,41 +1301,8 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
           pairingCodeResolve = null;
         }
         
-        // Attach connection handler to wait for connection after pairing code is entered
-        // Define handler if not already defined
-        if (!pairingCodeHandler) {
-    pairingCodeHandler = async (update: any) => {
-            const { connection } = update;
-            if (connection === 'open') {
-              logger.info(`[WhatsApp] WhatsApp connected via pairing code for user: ${userId}`);
-              await updateSessionStatus(userId, {
-                status: 'connected',
-                pairingCode: null,
-                connectedAt: new Date(),
-                lastSeen: new Date(),
-              });
-              activeSockets.set(userId, socket);
-              pairingCodes.delete(userId);
-              
-              // Setup message listeners for connected socket
-              setupMessageListeners(userId, socket);
-              
-              // Setup keep-alive to maintain bot presence as "online"
-              setupKeepAlive(userId, socket);
-              
-              // Start connection health monitoring
-              startConnectionHealthMonitor(userId, socket);
-              
-              // Cancel any scheduled reconnections
-              cancelScheduledReconnection(userId);
-            }
-          };
-        }
-        
-        // Attach handler to wait for connection
-        socket.ev.on('connection.update', pairingCodeHandler);
-        
         // Return pairing code immediately
+        // The connection handler is already attached and will handle the connection
         return {
           pairingCode: pairingCode,
           sessionId: session.sessionId,
@@ -1181,9 +1322,9 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
       }
     }
 
-    // Handle connection updates for pairing code - Define BEFORE socket creation if phoneNumber provided
-    // Otherwise define here
-    if (!pairingCodeHandler) {
+    // Handle connection updates for pairing code (fallback - only if phoneNumber not provided)
+    // If phoneNumber was provided, handler is already defined and attached above
+    if (!phoneNumber && !pairingCodeHandler) {
       pairingCodeHandler = async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -1488,9 +1629,9 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     };
     }
     
-    // Attach handler IMMEDIATELY - use 'on' to catch all events
-    logger.info(`[WhatsApp] Attaching connection.update handler for pairing code, user ${userId}`);
-    if (pairingCodeHandler) {
+    // Attach handler if not already attached (only for fallback case without phoneNumber)
+    if (!phoneNumber && pairingCodeHandler) {
+      logger.info(`[WhatsApp] Attaching connection.update handler for pairing code (fallback), user ${userId}`);
     socket.ev.on('connection.update', pairingCodeHandler);
     }
 
@@ -1524,27 +1665,8 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
       }
     });
 
-    // Also listen for 'creds.update' to save credentials and detect pairing success
-    socket.ev.on('creds.update', async () => {
-      try {
-        logger.info(`[WhatsApp] ✅ Credentials updated for pairing code, user ${userId} - pairing successful`);
-        await persistCreds();
-        // Check if credentials were saved successfully
-        const hasCredentials = state.creds && state.creds.me;
-        if (hasCredentials) {
-          logger.info(`[WhatsApp] ✅ Pairing successful for user ${userId}, credentials saved. Connection will restart automatically.`);
-          // Update status to indicate pairing was successful
-          await updateSessionStatus(userId, {
-            status: 'connecting', // Will be updated to 'connected' after restart
-            pairingCode: null, // Clear pairing code after successful pairing
-          }).catch((err) => {
-            logger.error(`[WhatsApp] Error updating session status after creds.update (pairing code):`, err);
-          });
-        }
-      } catch (error) {
-        logger.error(`[WhatsApp] Error in creds.update handler (pairing code) for user ${userId}:`, error);
-      }
-    });
+    // Note: creds.update handler is already attached above (line 1251) for phoneNumber case
+    // This duplicate handler is removed to avoid duplicate event listeners
     
     // Check if pairing code was already emitted (can happen synchronously)
     setTimeout(() => {

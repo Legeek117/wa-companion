@@ -179,8 +179,7 @@ const Connect = () => {
             )}
           </div>
 
-          {/* Pairing Code Method - DISABLED */}
-          {/* 
+          {/* Pairing Code Method */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border" />
@@ -190,7 +189,7 @@ const Connect = () => {
             </div>
           </div>
 
-          <div className="space-y-4 opacity-50 pointer-events-none">
+          <div className="space-y-4">
             <div className="flex items-center justify-between p-4 border border-border rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-lg">
@@ -199,16 +198,87 @@ const Connect = () => {
                 <div>
                   <h3 className="font-semibold">Code de couplage</h3>
                   <p className="text-sm text-muted-foreground">
-                    Temporairement désactivé
+                    Entrez votre numéro de téléphone pour générer un code
                   </p>
                 </div>
               </div>
-              <Button disabled variant="outline">
-                Désactivé
+              <Button
+                onClick={handlePairingCode}
+                disabled={activeMethod === 'qr' || isGettingQR || isGettingPairingCode}
+                variant={activeMethod === 'pairing' ? 'default' : 'outline'}
+              >
+                {(activeMethod === 'pairing' || isGettingPairingCode) ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    En cours...
+                  </>
+                ) : (
+                  'Générer code'
+                )}
               </Button>
             </div>
+
+            {/* Phone number input */}
+            {showPhoneInput && (
+              <div className="p-4 border border-border rounded-lg bg-muted/50 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Numéro de téléphone</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="229 XX XX XX XX"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      disabled={activeMethod === 'pairing' || isGettingPairingCode}
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={handlePairingCode}
+                      disabled={!phoneNumber || phoneNumber.trim().length < 8 || activeMethod === 'pairing' || isGettingPairingCode}
+                      variant="outline"
+                    >
+                      <Phone className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Format: 229 XX XX XX XX ou 229 XX XX XX XX XX
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Pairing code display */}
+            {activeMethod === 'pairing' && pairingCode && (
+              <div className="p-4 border border-border rounded-lg bg-muted/50">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="text-center space-y-2">
+                    <p className="text-sm font-medium">Votre code de couplage</p>
+                    <div className="text-3xl font-bold tracking-wider font-mono bg-background p-4 rounded-lg border-2 border-primary">
+                      {pairingCode}
+                    </div>
+                    <p className="text-sm text-muted-foreground text-center">
+                      Entrez ce code dans WhatsApp sur votre téléphone
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={handleStop}>
+                    Arrêter
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {activeMethod === 'pairing' && !pairingCode && (
+              <div className="p-4 border border-border rounded-lg bg-muted/50">
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">
+                    Génération du code de couplage en cours...
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-          */}
 
           {/* Status indicator */}
           {status?.status === 'connecting' && (
