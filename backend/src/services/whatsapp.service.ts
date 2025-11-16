@@ -1041,12 +1041,18 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     };
 
     // Fetch latest Baileys version (like in reference implementation)
+    // Note: This fetches WhatsApp Web version, not the npm package version
+    // The npm package version (6.7.21) contains the code improvements
     let baileysVersion: [number, number, number] | null = null;
     try {
-      logger.info(`[WhatsApp] Fetching latest Baileys version for pairing code, user ${userId}...`);
+      // Log npm package version
+      const baileysPackage = require('@whiskeysockets/baileys/package.json');
+      logger.info(`[WhatsApp] 📦 Using Baileys npm package version: ${baileysPackage.version} for pairing code, user ${userId}`);
+      
+      logger.info(`[WhatsApp] Fetching latest WhatsApp Web version for pairing code, user ${userId}...`);
       const { version } = await fetchLatestBaileysVersion();
       baileysVersion = version;
-      logger.info(`[WhatsApp] 📦 Baileys version: ${version.join('.')} for pairing code, user ${userId}`);
+      logger.info(`[WhatsApp] 📦 WhatsApp Web version: ${version.join('.')} for pairing code, user ${userId}`);
     } catch (error) {
       logger.error(`[WhatsApp] Error fetching Baileys version for pairing code, user ${userId}:`, error);
       // Continue without version - Baileys will use default
@@ -1266,13 +1272,134 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
           
           if (hasCredentials) {
             logger.info(`[WhatsApp] ✅ Pairing successful for user ${userId}, credentials saved. Restarting connection...`);
+            
+            // Close the current socket
+            try {
+              if (socket) {
+                await socket.end(undefined);
+              }
+              activeSockets.delete(userId);
+              pairingCodes.delete(userId);
+            } catch (e) {
+              logger.warn(`[WhatsApp] Error closing socket after pairing:`, e);
+            }
+            
+            // Update status to indicate pairing was successful
             await updateSessionStatus(userId, {
               status: 'connecting', // Will be updated to 'connected' after restart
               pairingCode: null, // Clear pairing code after successful pairing
             }).catch((err) => {
               logger.error(`[WhatsApp] Error updating session status after stream error 515 (pairing code):`, err);
             });
-            return; // Exit early, let the restart logic handle it
+            
+            // Restart the connection automatically after a short delay
+            // This allows Baileys to use the saved credentials
+            setTimeout(() => {
+              (async () => {
+                logger.info(`[WhatsApp] 🔄 Restarting connection for user ${userId} after pairing code...`);
+                try {
+                  // Reconnect with saved credentials (will connect automatically)
+                  const sessionPath = getSessionPath(userId);
+                  await ensureSessionFromSupabase(userId, sessionPath);
+                  const { state: newState, saveCreds: newSaveCreds } = await useMultiFileAuthState(sessionPath);
+                  const persistRestartCreds = async () => {
+                    try {
+                      await newSaveCreds();
+                      await syncSessionToSupabase(userId, sessionPath);
+                    } catch (error) {
+                      logger.warn(`[WhatsApp] Error persisting credentials during restart (pairing):`, error);
+                    }
+                  };
+                  
+                  if (newState.creds && newState.creds.me) {
+                    logger.info(`[WhatsApp] ✅ Credentials found, connecting directly after pairing for user ${userId}...`);
+                    
+                    // Fetch latest Baileys version
+                    let baileysVersion: [number, number, number] | null = null;
+                    try {
+                      const { version } = await fetchLatestBaileysVersion();
+                      baileysVersion = version;
+                    } catch (error) {
+                      logger.warn(`[WhatsApp] Error fetching Baileys version for restart (pairing):`, error);
+                    }
+                    
+                    // Create new socket with saved credentials
+                    const socketConfig: any = {
+                      auth: newState,
+                      logger: createBaileysLogger(),
+                      getMessage: async (_key: any) => undefined,
+                      connectTimeoutMs: 60000,
+                      defaultQueryTimeoutMs: 60000,
+                      keepAliveIntervalMs: 10000,
+                      retryRequestDelayMs: 250,
+                      browser: ['Ubuntu', 'Chrome', '22.04.4'],
+                    };
+                    
+                    if (baileysVersion) {
+                      socketConfig.version = baileysVersion;
+                    }
+                    
+                    const newSocket = makeWASocket(socketConfig);
+                    activeSockets.set(userId, newSocket);
+                    
+                    // Save credentials when updated
+                    newSocket.ev.on('creds.update', persistRestartCreds);
+                    
+                    // Handle connection updates
+                    newSocket.ev.on('connection.update', async (update: any) => {
+                      try {
+                        const { connection } = update;
+                        
+                        if (connection === 'open') {
+                          logger.info(`[WhatsApp] ✅ Successfully reconnected after pairing code for user ${userId}`);
+                          await updateSessionStatus(userId, {
+                            status: 'connected',
+                            pairingCode: null,
+                            connectedAt: new Date(),
+                            lastSeen: new Date(),
+                          }).catch((err) => {
+                            logger.error(`[WhatsApp] Error updating session status after reconnect (pairing):`, err);
+                          });
+                          
+                          // Setup message listeners for reconnected socket
+                          setupMessageListeners(userId, newSocket);
+                          
+                          // Setup keep-alive
+                          setupKeepAlive(userId, newSocket);
+                          
+                          // Start connection health monitoring
+                          startConnectionHealthMonitor(userId, newSocket);
+                          
+                          // Cancel any scheduled reconnections
+                          cancelScheduledReconnection(userId);
+                        } else if (connection === 'close') {
+                          const statusCode = (update.lastDisconnect?.error as any)?.output?.statusCode;
+                          logger.warn(`[WhatsApp] Reconnection closed after pairing for user ${userId}:`, { statusCode });
+                        }
+                      } catch (error) {
+                        logger.error(`[WhatsApp] Error in connection.update handler during restart (pairing) for user ${userId}:`, error);
+                      }
+                    });
+                  } else {
+                    logger.warn(`[WhatsApp] No credentials found for restart after pairing, user ${userId}`);
+                    await updateSessionStatus(userId, {
+                      status: 'disconnected',
+                      pairingCode: null,
+                    });
+                  }
+                } catch (error) {
+                  logger.error(`[WhatsApp] Error restarting connection after pairing for user ${userId}:`, error);
+                  await updateSessionStatus(userId, {
+                    status: 'disconnected',
+                    pairingCode: null,
+                  });
+                }
+              })().catch((error) => {
+                logger.error(`[WhatsApp] Unhandled error in restart timeout (pairing) for user ${userId}:`, error);
+              });
+            }, 2000); // Wait 2 seconds before restarting
+            
+            return; // Exit early, restart will happen automatically
           } else {
             logger.warn(`[WhatsApp] Stream error 515 but no credentials found for pairing code, user ${userId}`);
           }
