@@ -434,7 +434,20 @@ export const likeStatusController = async (req: AuthRequest, res: Response): Pro
 
     // Normalize emoji to NFC format for iPhone compatibility
     const { normalizeEmoji } = await import('../utils/helpers');
-    const reactionEmoji = normalizeEmoji(emoji || '❤️');
+    const originalEmoji = emoji || '❤️';
+    const reactionEmoji = normalizeEmoji(originalEmoji);
+    
+    // Log detailed emoji information for debugging iPhone issues
+    const codePoints = Array.from(reactionEmoji).map((e: string) => {
+      const cp = e.codePointAt(0);
+      return cp ? `U+${cp.toString(16).toUpperCase().padStart(4, '0')}` : '?';
+    });
+    logger.info(`[Status] 🎯 Emoji normalization:`, {
+      original: originalEmoji,
+      normalized: reactionEmoji,
+      length: reactionEmoji.length,
+      codePoints: codePoints.join(' '),
+    });
 
     // Check quota for status reactions (2/day for free, unlimited for premium)
     try {

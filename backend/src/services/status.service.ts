@@ -576,9 +576,24 @@ export const handleStatusUpdate = async (
         // Vérifier que l'emoji est valide et non vide
         // Normalize emoji to NFC format for iPhone compatibility
         const { normalizeEmoji } = await import('../utils/helpers');
-        const reactionEmoji = normalizeEmoji(emoji && emoji.trim() !== '' ? emoji.trim() : '❤️');
+        const originalEmoji = emoji && emoji.trim() !== '' ? emoji.trim() : '❤️';
+        const reactionEmoji = normalizeEmoji(originalEmoji);
         
-        logger.info(`[Status] 🎯 Using emoji for reaction: "${reactionEmoji}" (original: "${emoji}", length: ${reactionEmoji.length}, codePoints: ${Array.from(reactionEmoji).map((e: string) => e.codePointAt(0)?.toString(16)).join(',')})`);
+        // Log detailed emoji information for debugging iPhone issues
+        const codePoints = Array.from(reactionEmoji).map((e: string) => {
+          const cp = e.codePointAt(0);
+          return cp ? `U+${cp.toString(16).toUpperCase().padStart(4, '0')}` : '?';
+        });
+        const bytes = Buffer.from(reactionEmoji, 'utf8');
+        
+        logger.info(`[Status] 🎯 Using emoji for reaction:`, {
+          emoji: reactionEmoji,
+          original: originalEmoji,
+          length: reactionEmoji.length,
+          codePoints: codePoints.join(' '),
+          bytes: Array.from(bytes).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' '),
+          normalized: reactionEmoji.normalize('NFC') === reactionEmoji ? 'NFC' : 'other',
+        });
 
         // Essayer de réagir au statut (méthode inspirée d'OVL)
         // OVL utilise: sendMessage avec react, statusJidList et broadcast: true

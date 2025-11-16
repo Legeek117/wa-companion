@@ -79,7 +79,41 @@ export const getPairingCode = async (req: AuthRequest, res: Response, next: Next
     });
   } catch (error) {
     console.error('[WhatsApp] Error generating pairing code:', error);
-    return next(error);
+    
+    // Format error response properly
+    if (error instanceof Error) {
+      // Check if it's a validation error
+      if (error.message.includes('déjà connecté') || 
+          error.message.includes('déconnecter') ||
+          error.message.includes('invalide') ||
+          error.message.includes('Session replaced')) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: error.message,
+            statusCode: 400,
+          },
+        });
+      }
+      
+      // For other errors, return 500 with user-friendly message
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: error.message || 'Erreur lors de la génération du code de couplage',
+          statusCode: 500,
+        },
+      });
+    }
+    
+    // Fallback for unknown errors
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: 'Erreur interne lors de la génération du code de couplage',
+        statusCode: 500,
+      },
+    });
   }
 };
 

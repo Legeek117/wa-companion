@@ -196,7 +196,29 @@ export function useWhatsApp() {
     },
     onError: (error: Error) => {
       console.error('[WhatsApp] Pairing code mutation error:', error);
-      toast.error(error.message || 'Erreur lors de la génération du code de couplage');
+      
+      // Extract error message from API response if available
+      let errorMessage = error.message || 'Erreur lors de la génération du code de couplage';
+      
+      // Check if error message contains useful information
+      if (errorMessage.includes('Internal server error') || errorMessage.includes('500')) {
+        errorMessage = 'Erreur serveur lors de la génération du code de couplage. Veuillez réessayer dans quelques instants.';
+      } else if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        errorMessage = 'Service non disponible. Veuillez réessayer plus tard.';
+      } else if (errorMessage.includes('Network error') || errorMessage.includes('fetch')) {
+        errorMessage = 'Erreur de connexion. Vérifiez votre connexion internet et réessayez.';
+      }
+      
+      toast.error(errorMessage, {
+        duration: 5000,
+      });
+      
+      // Reset status on error
+      queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
+        ...(old || {}),
+        status: 'disconnected' as const,
+        pairingCode: undefined,
+      }));
     },
   });
 

@@ -7,7 +7,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { env } from '../config/env';
 import { getSupabaseClient } from '../config/database';
 import { logger } from '../config/logger';
@@ -958,15 +958,12 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     // Get or create session
     const session = await getOrCreateSession(userId);
 
-    // If already connected, return empty pairing code
+    // If already connected, refuse to generate pairing code to protect existing session
     if (session.status === 'connected' && activeSockets.has(userId)) {
       const socket = activeSockets.get(userId);
       if (socket?.user) {
-        logger.info(`[WhatsApp] User ${userId} already connected, returning empty pairing code`);
-        return {
-          pairingCode: '',
-          sessionId: session.sessionId,
-        };
+        logger.warn(`[WhatsApp] User ${userId} already connected, cannot generate pairing code (would delete existing session)`);
+        throw new Error('Vous êtes déjà connecté à WhatsApp. Veuillez vous déconnecter d\'abord si vous souhaitez vous reconnecter avec un code de couplage.');
       }
     }
 
@@ -1269,18 +1266,10 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
 
         logger.info(`[WhatsApp] Requesting pairing code for phone number: ${cleanPhoneNumber}, user: ${userId}`);
         
-        // Wait longer for socket to be fully ready (increased from 1s to 3s)
-        // This ensures the socket is properly initialized before requesting pairing code
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Request pairing code using Baileys method (inspired by reference code)
+        // Wait a bit for socket to be ready
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Verify socket is still valid before requesting
-        if (!socket || !socket.user) {
-          // Socket might not be ready yet, wait a bit more
-          logger.info(`[WhatsApp] Socket not fully ready, waiting additional 2 seconds...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-
-        // Request pairing code using Baileys method
         const pairingCode = await socket.requestPairingCode(cleanPhoneNumber);
         
         logger.info(`[WhatsApp] ✅ Pairing code generated via requestPairingCode for user ${userId}, code: ${pairingCode}`);
@@ -1733,9 +1722,47 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
       sessionId: session.sessionId,
     };
   } catch (error) {
-    logger.error('Error connecting WhatsApp with pairing code:', error);
-    await updateSessionStatus(userId, { status: 'disconnected' });
-    throw new Error('Failed to connect WhatsApp with pairing code');
+    logger.error(`[WhatsApp] Error connecting WhatsApp with pairing code for user ${userId}:`, error);
+    
+    // Clean up on error
+    try {
+      if (activeSockets.has(userId)) {
+        const socket = activeSockets.get(userId);
+        if (socket) {
+          try {
+            await socket.end(undefined);
+          } catch (e) {
+            // Ignore errors when closing
+          }
+        }
+        activeSockets.delete(userId);
+      }
+      pairingCodes.delete(userId);
+      qrCodes.delete(userId);
+    } catch (cleanupError) {
+      logger.warn(`[WhatsApp] Error during cleanup after pairing code error:`, cleanupError);
+    }
+    
+    try {
+      await updateSessionStatus(userId, { status: 'disconnected', pairingCode: null });
+    } catch (updateError) {
+      logger.warn(`[WhatsApp] Error updating status after pairing code error:`, updateError);
+    }
+    
+    // Preserve original error message if it's a user-friendly error
+    if (error instanceof Error) {
+      // If it's already a user-friendly error, throw it as-is
+      if (error.message.includes('déjà connecté') || 
+          error.message.includes('déconnecter') ||
+          error.message.includes('invalide') ||
+          error.message.includes('Session replaced')) {
+        throw error;
+      }
+      // Otherwise, wrap it with more context
+      throw new Error(`Échec de la connexion WhatsApp avec code de couplage: ${error.message}`);
+    }
+    
+    throw new Error('Échec de la connexion WhatsApp avec code de couplage. Veuillez réessayer.');
   }
 };
 
