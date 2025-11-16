@@ -1266,9 +1266,17 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
 
         logger.info(`[WhatsApp] Requesting pairing code for phone number: ${cleanPhoneNumber}, user: ${userId}`);
         
-        // Request pairing code using Baileys method (inspired by reference code)
-        // Wait a bit for socket to be ready
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Request pairing code using Baileys method (improved in 6.7.21)
+        // Wait a bit for socket to be ready (increased wait time for better reliability)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Check socket readiness before requesting pairing code
+        const socketAny = socket as any;
+        if (socketAny.ws && socketAny.ws.readyState !== 1) {
+          logger.info(`[WhatsApp] Waiting for socket to be ready, current state: ${socketAny.ws.readyState}, user: ${userId}`);
+          // Wait additional time if socket is not ready
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
         
         const pairingCode = await socket.requestPairingCode(cleanPhoneNumber);
         
@@ -1575,14 +1583,42 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
             }, 5000); // Wait 5 seconds before rejecting
           }
         } else {
-          // Other disconnect reasons
+          // Other disconnect reasons - likely connection failure
+          logger.error(`[WhatsApp] Connection failed for pairing code, user ${userId}: ${errorMessage} (${statusCode})`);
+          
+          // Clean up resources
+          try {
+            if (socket) {
+              try {
+                await socket.end(undefined);
+              } catch (e) {
+                // Ignore errors when closing
+              }
+            }
+            activeSockets.delete(userId);
+            pairingCodes.delete(userId);
+          } catch (cleanupError) {
+            logger.warn(`[WhatsApp] Error during cleanup after pairing failure:`, cleanupError);
+          }
+          
           await updateSessionStatus(userId, {
             status: 'disconnected',
             pairingCode: null,
+          }).catch((err) => {
+            logger.error(`[WhatsApp] Error updating status after pairing failure:`, err);
           });
           
           if (pairingCodeReject) {
-            pairingCodeReject(new Error(`Connection closed: ${errorMessage} (${statusCode})`));
+            // Provide user-friendly error message
+            let userMessage = 'Échec de la connexion. ';
+            if (errorMessage?.includes('timeout') || errorMessage?.includes('expired')) {
+              userMessage += 'Le code de couplage a peut-être expiré. Veuillez générer un nouveau code.';
+            } else if (errorMessage?.includes('invalid') || errorMessage?.includes('wrong')) {
+              userMessage += 'Le code de couplage est invalide. Veuillez générer un nouveau code.';
+            } else {
+              userMessage += 'Veuillez réessayer ou utiliser le QR Code.';
+            }
+            pairingCodeReject(new Error(userMessage));
             pairingCodeReject = null;
           }
         }

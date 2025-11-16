@@ -34,37 +34,31 @@ const Connect = () => {
     }
   }, [activeMethod, status?.qrCode, status?.pairingCode]);
 
-  // Poll for pairing code if active but not received yet
+  // Timeout for "connecting" status that's stuck (5 minutes max)
   useEffect(() => {
-    if (activeMethod === 'pairing' && !pairingCode) {
-      let pollCount = 0;
-      const maxPolls = 30; // 30 * 2s = 60 seconds max
+    if (status?.status === 'connecting') {
+      const connectingStartTime = Date.now();
+      const maxConnectingTime = 5 * 60 * 1000; // 5 minutes
       
-      const pollInterval = setInterval(async () => {
-        pollCount++;
-        try {
-          const result = await refetch();
-          if (result.data?.pairingCode) {
-            setPairingCode(result.data.pairingCode);
-            toast.success('Code de couplage généré !');
-            clearInterval(pollInterval);
-          } else if (pollCount >= maxPolls) {
-            clearInterval(pollInterval);
-            toast.error('Le code de couplage n\'a pas pu être généré. Veuillez réessayer ou utiliser le QR Code.');
-          }
-        } catch (error) {
-          console.error('Error polling for pairing code:', error);
-          if (pollCount >= maxPolls) {
-            clearInterval(pollInterval);
-          }
+      const timeoutCheck = setInterval(() => {
+        const elapsed = Date.now() - connectingStartTime;
+        if (elapsed > maxConnectingTime) {
+          console.warn('[Connect] Connection stuck in "connecting" status for too long, resetting...');
+          toast.error('La connexion prend trop de temps. Veuillez réessayer.');
+          // Reset to disconnected
+          setActiveMethod(null);
+          setQrCode(null);
+          setPairingCode(null);
+          setShowPhoneInput(false);
+          setPhoneNumber('');
         }
-      }, 2000); // Poll every 2 seconds
+      }, 30000); // Check every 30 seconds
 
       return () => {
-        clearInterval(pollInterval);
+        clearInterval(timeoutCheck);
       };
     }
-  }, [activeMethod, pairingCode, refetch]);
+  }, [status?.status]);
 
   const handleQRCode = () => {
     if (activeMethod === 'pairing') {
@@ -107,6 +101,9 @@ const Connect = () => {
     setShowPhoneInput(false);
     setPhoneNumber('');
     toast.info('Génération arrêtée');
+    
+    // Force refetch to update status
+    refetch();
   };
 
   return (

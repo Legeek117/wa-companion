@@ -14,9 +14,10 @@ export const apiLimiter = rateLimit({
 });
 
 // Loose limiter for frequently called endpoints (like /auth/me, /whatsapp/status)
+// Increased limit to handle polling for QR code and pairing code
 export const looseLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60, // 60 requests per minute (1 per second)
+  max: 120, // Increased from 60 to 120 requests per minute (2 per second) to handle polling
   message: 'Too many requests, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,

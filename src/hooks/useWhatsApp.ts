@@ -52,12 +52,12 @@ export function useWhatsApp() {
     retry: false,
     refetchInterval: (query) => {
       const data = query.state.data as WhatsAppStatus | undefined;
-      // Poll every 2 seconds if connecting (to catch QR code updates)
-      if (data?.status === 'connecting') return 2000;
+      // Poll every 5 seconds if connecting (reduced from 2s to avoid rate limiting)
+      if (data?.status === 'connecting') return 5000;
       // Poll every 30 seconds if connected (to check if still connected)
       if (data?.status === 'connected') return 30000;
-      // Poll every 10 seconds if disconnected and has QR code or pairing code (user might be connecting)
-      if (data?.status === 'disconnected' && (data?.qrCode || data?.pairingCode)) return 10000;
+      // Poll every 15 seconds if disconnected and has QR code or pairing code (reduced from 10s)
+      if (data?.status === 'disconnected' && (data?.qrCode || data?.pairingCode)) return 15000;
       // Otherwise, don't poll (to avoid unnecessary requests)
       return false;
     },
@@ -104,33 +104,55 @@ export function useWhatsApp() {
           ...(old || {}),
           status: 'connecting' as const,
         }));
-        // Poll for QR code status
+        // Poll for QR code status (reduced frequency to avoid rate limiting)
         let attempts = 0;
-        const maxAttempts = 30; // 30 * 2s = 60 seconds max
+        const maxAttempts = 12; // 12 * 5s = 60 seconds max
+        let pollTimeout: NodeJS.Timeout | null = null;
         const pollStatus = async () => {
+          // Check if user switched to pairing code (stop polling if so)
+          const currentData = queryClient.getQueryData(['whatsapp', 'status']) as WhatsAppStatus | undefined;
+          if (currentData?.pairingCode) {
+            console.log('[WhatsApp] User switched to pairing code, stopping QR polling');
+            return;
+          }
+          
           console.log(`[WhatsApp] Polling for QR code, attempt ${attempts + 1}/${maxAttempts}`);
-          const result = await refetch();
-          attempts++;
-          const currentStatus = result.data as WhatsAppStatus | undefined;
-          console.log('[WhatsApp] Poll result:', {
-            hasQRCode: !!currentStatus?.qrCode,
-            status: currentStatus?.status,
-            qrCodeLength: currentStatus?.qrCode?.length || 0,
-          });
-          if (currentStatus?.qrCode) {
-            toast.success('QR code généré avec succès !');
-          } else if (attempts < maxAttempts) {
-            setTimeout(pollStatus, 2000);
-          } else {
-            toast.error('Le QR code n\'a pas pu être généré. Essayez avec le code de couplage.');
-            // Reset status if QR code generation failed
-            queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
-              ...(old || {}),
-              status: 'disconnected' as const,
-            }));
+          try {
+            const result = await refetch();
+            attempts++;
+            const currentStatus = result.data as WhatsAppStatus | undefined;
+            console.log('[WhatsApp] Poll result:', {
+              hasQRCode: !!currentStatus?.qrCode,
+              status: currentStatus?.status,
+              qrCodeLength: currentStatus?.qrCode?.length || 0,
+            });
+            if (currentStatus?.qrCode) {
+              toast.success('QR code généré avec succès !');
+            } else if (attempts < maxAttempts) {
+              pollTimeout = setTimeout(pollStatus, 5000); // Increased from 2s to 5s
+            } else {
+              toast.error('Le QR code n\'a pas pu être généré. Essayez avec le code de couplage.');
+              // Reset status if QR code generation failed
+              queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
+                ...(old || {}),
+                status: 'disconnected' as const,
+                qrCode: undefined,
+              }));
+            }
+          } catch (error) {
+            console.error('[WhatsApp] Error polling for QR code:', error);
+            if (attempts < maxAttempts) {
+              pollTimeout = setTimeout(pollStatus, 5000);
+            } else {
+              queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
+                ...(old || {}),
+                status: 'disconnected' as const,
+                qrCode: undefined,
+              }));
+            }
           }
         };
-        setTimeout(pollStatus, 2000);
+        pollTimeout = setTimeout(pollStatus, 5000); // Start after 5 seconds
       }
     },
     onError: (error: Error) => {
@@ -171,27 +193,54 @@ export function useWhatsApp() {
         }));
       } else {
         toast.info('Génération du code de couplage en cours...');
-        // Poll for pairing code status
+        // Poll for pairing code status (reduced frequency to avoid rate limiting)
         let attempts = 0;
-        const maxAttempts = 20; // 20 * 2s = 40 seconds max
+        const maxAttempts = 12; // 12 * 5s = 60 seconds max
+        let pollTimeout: NodeJS.Timeout | null = null;
         const pollStatus = async () => {
+          // Check if user switched to QR code (stop polling if so)
+          const currentData = queryClient.getQueryData(['whatsapp', 'status']) as WhatsAppStatus | undefined;
+          if (currentData?.qrCode) {
+            console.log('[WhatsApp] User switched to QR code, stopping pairing code polling');
+            return;
+          }
+          
           console.log(`[WhatsApp] Polling for pairing code, attempt ${attempts + 1}/${maxAttempts}`);
-          const result = await refetch();
-          attempts++;
-          const currentStatus = result.data as WhatsAppStatus | undefined;
-          console.log('[WhatsApp] Poll result:', {
-            hasPairingCode: !!currentStatus?.pairingCode,
-            status: currentStatus?.status,
-          });
-          if (currentStatus?.pairingCode) {
-            toast.success(`Code de couplage : ${currentStatus.pairingCode}`);
-          } else if (attempts < maxAttempts) {
-            setTimeout(pollStatus, 2000);
-          } else {
-            toast.error('Le code de couplage n\'a pas pu être généré. Veuillez réessayer.');
+          try {
+            const result = await refetch();
+            attempts++;
+            const currentStatus = result.data as WhatsAppStatus | undefined;
+            console.log('[WhatsApp] Poll result:', {
+              hasPairingCode: !!currentStatus?.pairingCode,
+              status: currentStatus?.status,
+            });
+            if (currentStatus?.pairingCode) {
+              toast.success(`Code de couplage : ${currentStatus.pairingCode}`);
+            } else if (attempts < maxAttempts) {
+              pollTimeout = setTimeout(pollStatus, 5000); // Increased from 2s to 5s
+            } else {
+              toast.error('Le code de couplage n\'a pas pu être généré. Veuillez réessayer.');
+              // Reset status on timeout
+              queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
+                ...(old || {}),
+                status: 'disconnected' as const,
+                pairingCode: undefined,
+              }));
+            }
+          } catch (error) {
+            console.error('[WhatsApp] Error polling for pairing code:', error);
+            if (attempts < maxAttempts) {
+              pollTimeout = setTimeout(pollStatus, 5000);
+            } else {
+              queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
+                ...(old || {}),
+                status: 'disconnected' as const,
+                pairingCode: undefined,
+              }));
+            }
           }
         };
-        setTimeout(pollStatus, 2000);
+        pollTimeout = setTimeout(pollStatus, 5000); // Start after 5 seconds
       }
     },
     onError: (error: Error) => {

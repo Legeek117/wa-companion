@@ -338,7 +338,7 @@ const StatusList = () => {
                         {status.statusCount} statut{status.statusCount > 1 ? 's' : ''}
                       </p>
                       {isLiked && (
-                        <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-xs">
                           <Heart className="w-3 h-3 mr-1 fill-primary text-primary" />
                           Réagi
                     </Badge>
