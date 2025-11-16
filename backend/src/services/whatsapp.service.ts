@@ -2424,7 +2424,7 @@ const setupKeepAlive = (userId: string, socket: WASocket): void => {
     logger.warn(`[WhatsApp] Error sending initial presence update for user ${userId}:`, error);
   }
 
-  // Set up periodic presence updates (every 30 seconds)
+  // Set up periodic presence updates (every 15 seconds)
   // This keeps the bot visible as "online" on WhatsApp
   const interval = setInterval(() => {
     try {
@@ -2450,10 +2450,10 @@ const setupKeepAlive = (userId: string, socket: WASocket): void => {
       clearInterval(interval);
       keepAliveIntervals.delete(userId);
     }
-  }, 30000); // Every 30 seconds
+  }, 15000); // Every 15 seconds
 
   keepAliveIntervals.set(userId, interval);
-  logger.info(`[WhatsApp] ✅ Keep-alive started for user ${userId} (updates every 30s)`);
+  logger.info(`[WhatsApp] ✅ Keep-alive started for user ${userId} (updates every 15s)`);
 };
 
 /**
