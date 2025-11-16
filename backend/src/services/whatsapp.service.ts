@@ -1003,6 +1003,34 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
 
     // Load auth state
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    
+    // Check if account is already registered BEFORE creating socket
+    // This prevents creating a socket that will fail to generate pairing code
+    if (state.creds && state.creds.registered && state.creds.me) {
+      logger.warn(`[WhatsApp] Account already registered for user ${userId}, credentials exist. Cannot generate pairing code.`);
+      
+      // Clean up any existing socket
+      if (activeSockets.has(userId)) {
+        const existingSocket = activeSockets.get(userId);
+        if (existingSocket) {
+          try {
+            await existingSocket.end(undefined);
+          } catch (e) {
+            // Ignore errors when closing
+          }
+        }
+        activeSockets.delete(userId);
+      }
+      
+      // Update status to disconnected
+      await updateSessionStatus(userId, { 
+        status: 'disconnected',
+        pairingCode: null,
+      });
+      
+      throw new Error('Compte déjà connecté. Veuillez vous déconnecter d\'abord si vous souhaitez vous reconnecter avec un code de couplage.');
+    }
+    
     const persistCreds = async () => {
       try {
         await saveCreds();
@@ -1077,14 +1105,28 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     // Store socket immediately
     activeSockets.set(userId, socket);
 
-    // Check if already registered (inspired by reference code)
+    // Additional check after socket creation (double verification)
+    // This is a safety check, but we already checked before creating the socket
     const socketAny = socket as any;
     const isRegistered = socketAny.authState?.creds?.registered;
     
     if (isRegistered) {
-      logger.warn(`[WhatsApp] Account already registered for user ${userId}, cannot generate pairing code`);
-      await updateSessionStatus(userId, { status: 'disconnected' });
+      logger.warn(`[WhatsApp] Account already registered detected after socket creation for user ${userId}, cleaning up`);
+      
+      // Clean up socket
+      try {
+        await socket.end(undefined);
+      } catch (e) {
+        // Ignore errors when closing
+      }
       activeSockets.delete(userId);
+      
+      // Update status
+      await updateSessionStatus(userId, { 
+        status: 'disconnected',
+        pairingCode: null,
+      });
+      
       throw new Error('Compte déjà connecté. Veuillez vous déconnecter d\'abord.');
     }
 
@@ -1092,6 +1134,46 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     // This ensures we catch all connection events, including errors
     pairingCodeHandler = async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
+
+      // Handle connection errors (connection === 'error')
+      if (connection === 'error') {
+        const error = lastDisconnect?.error || new Error('Connection error');
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        logger.error(`[WhatsApp] Connection error for pairing code, user ${userId}:`, errorMessage);
+        
+        // Clean up resources
+        try {
+          if (socket) {
+            try {
+              await socket.end(undefined);
+            } catch (e) {
+              // Ignore errors when closing
+            }
+          }
+          activeSockets.delete(userId);
+          pairingCodes.delete(userId);
+        } catch (cleanupError) {
+          logger.warn(`[WhatsApp] Error during cleanup after connection error:`, cleanupError);
+        }
+        
+        // Update status to disconnected
+        await updateSessionStatus(userId, {
+          status: 'disconnected',
+          pairingCode: null,
+        }).catch((err) => {
+          logger.error(`[WhatsApp] Error updating status after connection error:`, err);
+        });
+        
+        // Reject promise if pairing code wasn't generated
+        if (pairingCodeReject) {
+          pairingCodeReject(new Error(`Erreur de connexion: ${errorMessage}. Veuillez réessayer.`));
+          pairingCodeReject = null;
+          pairingCodeResolve = null;
+        }
+        
+        return;
+      }
 
       // Handle successful connection
       if (connection === 'open') {
@@ -1307,15 +1389,41 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
       } catch (error: any) {
         logger.error(`[WhatsApp] Error requesting pairing code for user ${userId}:`, error);
         
+        // Clean up resources on error
+        try {
+          if (socket) {
+            try {
+              await socket.end(undefined);
+            } catch (e) {
+              // Ignore errors when closing
+            }
+          }
+          activeSockets.delete(userId);
+          pairingCodes.delete(userId);
+        } catch (cleanupError) {
+          logger.warn(`[WhatsApp] Error during cleanup after requestPairingCode error:`, cleanupError);
+        }
+        
+        // Update status to disconnected
+        await updateSessionStatus(userId, { 
+          status: 'disconnected',
+          pairingCode: null,
+        }).catch((err) => {
+          logger.error(`[WhatsApp] Error updating status after requestPairingCode error:`, err);
+        });
+        
         // If error is about already registered, throw it
         if (error?.message?.includes('registered') || error?.message?.includes('déjà connecté')) {
-          await updateSessionStatus(userId, { status: 'disconnected' });
-          activeSockets.delete(userId);
           throw new Error('Compte déjà connecté. Veuillez vous déconnecter d\'abord.');
         }
         
-        // If requestPairingCode fails, fall back to waiting for automatic generation
-        logger.warn(`[WhatsApp] Falling back to automatic pairing code detection for user ${userId}`);
+        // If error is about connection failure, provide user-friendly message
+        if (error?.message?.includes('Connection Failure') || error?.message?.includes('connection')) {
+          throw new Error('Erreur de connexion avec WhatsApp. Veuillez réessayer ou utiliser le QR Code.');
+        }
+        
+        // For other errors, throw with context
+        throw new Error(`Échec de la génération du code de couplage: ${error?.message || 'Erreur inconnue'}. Veuillez réessayer.`);
       }
     }
 
