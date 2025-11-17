@@ -1,7 +1,7 @@
 import { WASocket } from '@whiskeysockets/baileys';
 import { getSupabaseClient } from '../config/database';
 import { logger } from '../config/logger';
-import { likeStatus, addContactIfNotExists } from './whatsapp.service';
+import { likeStatus, addContactIfNotExists, hasRecentlyProcessedStatus, markStatusAsProcessed } from './whatsapp.service';
 import { getMediaType, processAndUploadMedia } from './media.service';
 
 const supabase = getSupabaseClient();
@@ -438,6 +438,13 @@ export const handleStatusUpdate = async (
         }
 
         logger.info(`[Status] 📱 Status detected from: ${statusJid} (ID: ${statusId})`);
+
+        // Skip if this status was already processed recently (prevents loops)
+        if (hasRecentlyProcessedStatus(userId, statusId)) {
+          logger.debug(`[Status] ⏭️ Status ${statusId} already processed recently for user ${userId}, skipping`);
+          continue;
+        }
+        markStatusAsProcessed(userId, statusId);
 
         // Récupérer le nom du contact depuis WhatsApp
         // Le nom est généralement disponible dans pushName du message

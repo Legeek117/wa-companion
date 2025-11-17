@@ -101,6 +101,39 @@ const statusCache = new Map<string, Array<{
   caption?: string;
 }>>();
 
+// Track recently processed status IDs per user to avoid duplicate processing/likes
+const processedStatusIds = new Map<string, Set<string>>();
+const MAX_TRACKED_STATUS_IDS = 500;
+
+export const hasRecentlyProcessedStatus = (userId: string, statusId: string): boolean => {
+  const processedSet = processedStatusIds.get(userId);
+  return processedSet ? processedSet.has(statusId) : false;
+};
+
+export const markStatusAsProcessed = (userId: string, statusId: string): void => {
+  if (!statusId) {
+    return;
+  }
+  let processedSet = processedStatusIds.get(userId);
+  if (!processedSet) {
+    processedSet = new Set<string>();
+    processedStatusIds.set(userId, processedSet);
+  }
+  processedSet.add(statusId);
+  if (processedSet.size > MAX_TRACKED_STATUS_IDS) {
+    const iterator = processedSet.values().next();
+    if (!iterator.done) {
+      processedSet.delete(iterator.value);
+    }
+  }
+};
+
+const clearStatusTracking = (userId: string): void => {
+  statusCache.delete(userId);
+  processedStatusIds.delete(userId);
+  logger.info(`[WhatsApp] 🧹 Cleared status tracking cache for user ${userId}`);
+};
+
 /**
  * Get all active sockets (for user identification)
  */
@@ -652,8 +685,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
                           });
                           
                           // Clear status cache to force refresh after reconnection
-                          statusCache.delete(userId);
-                          logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after reconnection`);
+                          clearStatusTracking(userId);
                           
                           // Setup message listeners for reconnected socket
                           logger.info(`[WhatsApp] 🔧 Setting up message listeners for reconnected socket, user ${userId}`);
@@ -804,8 +836,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
         qrCodes.delete(userId);
         
         // Clear status cache to ensure fresh data after connection
-        statusCache.delete(userId);
-        logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after initial connection`);
+        clearStatusTracking(userId);
         
         // Setup message listeners for connected socket
         logger.info(`[WhatsApp] 🔧 Setting up message listeners for newly connected socket, user ${userId}`);
@@ -1208,8 +1239,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         pairingCodes.delete(userId);
         
         // Clear status cache to ensure fresh data after connection
-        statusCache.delete(userId);
-        logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after initial connection`);
+        clearStatusTracking(userId);
         
         // Setup message listeners for connected socket
         logger.info(`[WhatsApp] 🔧 Setting up message listeners for newly connected socket, user ${userId}`);
@@ -1383,8 +1413,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
                           });
                           
                           // Clear status cache to force refresh after reconnection
-                          statusCache.delete(userId);
-                          logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after reconnection`);
+                          clearStatusTracking(userId);
                           
                           // Setup message listeners for reconnected socket
                           // IMPORTANT: This must be called with the NEW socket, not the old one
@@ -1898,8 +1927,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         pairingCodes.delete(userId);
         
         // Clear status cache to ensure fresh data after connection
-        statusCache.delete(userId);
-        logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after initial connection`);
+        clearStatusTracking(userId);
         
         // Setup message listeners for connected socket
         logger.info(`[WhatsApp] 🔧 Setting up message listeners for newly connected socket, user ${userId}`);
@@ -3649,8 +3677,7 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
           activeSockets.set(userId, socket);
 
           // Clear status cache to force refresh after reconnection
-          statusCache.delete(userId);
-          logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after auto-reconnection`);
+          clearStatusTracking(userId);
 
           // Setup message listeners for reconnected socket
           logger.info(`[WhatsApp] 🔧 Setting up message listeners for auto-reconnected socket, user ${userId}`);
