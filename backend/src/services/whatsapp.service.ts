@@ -651,7 +651,12 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
                             logger.error(`[WhatsApp] Error updating session status after reconnect:`, err);
                           });
                           
+                          // Clear status cache to force refresh after reconnection
+                          statusCache.delete(userId);
+                          logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after reconnection`);
+                          
                           // Setup message listeners for reconnected socket
+                          logger.info(`[WhatsApp] 🔧 Setting up message listeners for reconnected socket, user ${userId}`);
                           setupMessageListeners(userId, newSocket);
                           
                           // Setup keep-alive
@@ -662,6 +667,8 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
                           
                           // Cancel any scheduled reconnections
                           cancelScheduledReconnection(userId);
+                          
+                          logger.info(`[WhatsApp] ✅ All listeners and services set up for reconnected socket, user ${userId}`);
                         } else if (connection === 'close') {
                           const statusCode = (update.lastDisconnect?.error as any)?.output?.statusCode;
                           logger.warn(`[WhatsApp] Reconnection closed for user ${userId}:`, { statusCode });
@@ -796,7 +803,12 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
         activeSockets.set(userId, socket);
         qrCodes.delete(userId);
         
+        // Clear status cache to ensure fresh data after connection
+        statusCache.delete(userId);
+        logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after initial connection`);
+        
         // Setup message listeners for connected socket
+        logger.info(`[WhatsApp] 🔧 Setting up message listeners for newly connected socket, user ${userId}`);
         setupMessageListeners(userId, socket);
         
         // Setup keep-alive to maintain bot presence as "online"
@@ -807,6 +819,8 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
         
         // Cancel any scheduled reconnections since we're now connected
         cancelScheduledReconnection(userId);
+        
+        logger.info(`[WhatsApp] ✅ All listeners and services set up for newly connected socket, user ${userId}`);
         
         // Resolve with empty string if connected without QR (already connected)
         if (qrCodeResolve) {
@@ -1193,7 +1207,12 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         activeSockets.set(userId, socket);
         pairingCodes.delete(userId);
         
+        // Clear status cache to ensure fresh data after connection
+        statusCache.delete(userId);
+        logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after initial connection`);
+        
         // Setup message listeners for connected socket
+        logger.info(`[WhatsApp] 🔧 Setting up message listeners for newly connected socket, user ${userId}`);
         setupMessageListeners(userId, socket);
         
         // Setup keep-alive to maintain bot presence as "online"
@@ -1204,6 +1223,8 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         
         // Cancel any scheduled reconnections
         cancelScheduledReconnection(userId);
+        
+        logger.info(`[WhatsApp] ✅ All listeners and services set up for newly connected socket, user ${userId}`);
         return;
       }
 
@@ -1361,7 +1382,13 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
                             logger.error(`[WhatsApp] Error updating session status after reconnect (pairing):`, err);
                           });
                           
+                          // Clear status cache to force refresh after reconnection
+                          statusCache.delete(userId);
+                          logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after reconnection`);
+                          
                           // Setup message listeners for reconnected socket
+                          // IMPORTANT: This must be called with the NEW socket, not the old one
+                          logger.info(`[WhatsApp] 🔧 Setting up message listeners for reconnected socket, user ${userId}`);
                           setupMessageListeners(userId, newSocket);
                           
                           // Setup keep-alive
@@ -1372,6 +1399,8 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
                           
                           // Cancel any scheduled reconnections
                           cancelScheduledReconnection(userId);
+                          
+                          logger.info(`[WhatsApp] ✅ All listeners and services set up for reconnected socket, user ${userId}`);
                         } else if (connection === 'close') {
                           const statusCode = (update.lastDisconnect?.error as any)?.output?.statusCode;
                           logger.warn(`[WhatsApp] Reconnection closed after pairing for user ${userId}:`, { statusCode });
@@ -1868,7 +1897,12 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         activeSockets.set(userId, socket);
         pairingCodes.delete(userId);
         
+        // Clear status cache to ensure fresh data after connection
+        statusCache.delete(userId);
+        logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after initial connection`);
+        
         // Setup message listeners for connected socket
+        logger.info(`[WhatsApp] 🔧 Setting up message listeners for newly connected socket, user ${userId}`);
         setupMessageListeners(userId, socket);
         
         // Setup keep-alive to maintain bot presence as "online"
@@ -1879,6 +1913,8 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         
         // Cancel any scheduled reconnections since we're now connected
         cancelScheduledReconnection(userId);
+        
+        logger.info(`[WhatsApp] ✅ All listeners and services set up for newly connected socket, user ${userId}`);
         
         // Resolve with empty string if connected without pairing code (already connected)
         if (pairingCodeResolve) {
@@ -3283,11 +3319,17 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
 const setupMessageListeners = (userId: string, socket: WASocket): void => {
   // Check if listeners are already set up for this socket
   if (listenersSetup.has(socket)) {
-    logger.info(`[WhatsApp] Listeners already set up for user ${userId}, skipping`);
-    return;
+    logger.warn(`[WhatsApp] ⚠️ Listeners already set up for this socket for user ${userId}, but setting up again to ensure they work`);
+    // Don't return - we'll set them up again to ensure they work after reconnection
+    // This is safe because adding the same listener multiple times won't cause issues
   }
 
-  logger.info(`[WhatsApp] 🔧 Setting up message listeners for user ${userId}`);
+  logger.info(`[WhatsApp] 🔧 Setting up message listeners for user ${userId}`, {
+    socketExists: !!socket,
+    socketType: typeof socket,
+    hasEv: !!socket?.ev,
+    listenersSetupSize: listenersSetup.has(socket) ? 'already in set' : 'not in set',
+  });
   logger.info(`[WhatsApp] 📡 Available events: messages.upsert, messages.delete, messages.update`);
 
   // Mark that listeners are set up for this socket
@@ -3333,7 +3375,12 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
 
       // Handle status updates FIRST (before processing individual messages)
       // This should be called once per update, not per message
-      logger.info(`[Status] 🚀 Calling handleStatusUpdate for user ${userId}`);
+      logger.info(`[Status] 🚀 Calling handleStatusUpdate for user ${userId}`, {
+        messageCount: update.messages?.length || 0,
+        hasStatusMessages: update.messages?.some((m: any) => m.key?.remoteJid === 'status@broadcast') || false,
+        socketExists: !!socket,
+        socketConnected: socket?.user ? 'yes' : 'no',
+      });
       await handleStatusUpdate(userId, socket, update).catch((err) => {
         logger.error(`[WhatsApp] Error handling status update for user ${userId}:`, err);
       });
@@ -3601,7 +3648,12 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
           
           activeSockets.set(userId, socket);
 
+          // Clear status cache to force refresh after reconnection
+          statusCache.delete(userId);
+          logger.info(`[WhatsApp] 🧹 Cleared status cache for user ${userId} after auto-reconnection`);
+
           // Setup message listeners for reconnected socket
+          logger.info(`[WhatsApp] 🔧 Setting up message listeners for auto-reconnected socket, user ${userId}`);
           setupMessageListeners(userId, socket);
           
           // Setup keep-alive to maintain bot presence as "online"
@@ -3612,6 +3664,8 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
           
           // Cancel any scheduled reconnections since we're now connected
           cancelScheduledReconnection(userId);
+          
+          logger.info(`[WhatsApp] ✅ All listeners and services set up for auto-reconnected socket, user ${userId}`);
         } else if (connection === 'close') {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
           const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
