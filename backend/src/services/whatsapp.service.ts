@@ -105,6 +105,27 @@ const statusCache = new Map<string, Array<{
 const processedStatusIds = new Map<string, Set<string>>();
 const MAX_TRACKED_STATUS_IDS = 500;
 
+// Track users for whom auto-reconnect is temporarily disabled (e.g., user requested logout)
+const autoReconnectDisabled = new Set<string>();
+
+const disableAutoReconnect = (userId: string, reason: string): void => {
+  if (!autoReconnectDisabled.has(userId)) {
+    logger.info(`[WhatsApp] ⛔ Disabling auto-reconnect for user ${userId}: ${reason}`);
+  } else {
+    logger.debug(`[WhatsApp] Auto-reconnect already disabled for user ${userId}, reason: ${reason}`);
+  }
+  autoReconnectDisabled.add(userId);
+  stopConnectionHealthMonitor(userId);
+  stopKeepAlive(userId);
+  cancelScheduledReconnection(userId);
+};
+
+const enableAutoReconnect = (userId: string): void => {
+  if (autoReconnectDisabled.delete(userId)) {
+    logger.info(`[WhatsApp] ✅ Auto-reconnect re-enabled for user ${userId}`);
+  }
+};
+
 export const hasRecentlyProcessedStatus = (userId: string, statusId: string): boolean => {
   const processedSet = processedStatusIds.get(userId);
   return processedSet ? processedSet.has(statusId) : false;
@@ -269,6 +290,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
     // Clear conflict status when user manually tries to connect
     conflictedSessions.delete(userId);
     reconnectionAttempts.delete(userId);
+    enableAutoReconnect(userId);
     
     // Get or create session
     const session = await getOrCreateSession(userId);
@@ -745,6 +767,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
 
         // Handle different disconnect reasons
         if (statusCode === DisconnectReason.loggedOut) {
+          disableAutoReconnect(userId, 'WhatsApp logged out via QR connection');
           await updateSessionStatus(userId, {
             status: 'disconnected',
             qrCode: null,
@@ -999,6 +1022,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     // Clear conflict status when user manually tries to connect
     conflictedSessions.delete(userId);
     reconnectionAttempts.delete(userId);
+    enableAutoReconnect(userId);
     
     // Get or create session
     const session = await getOrCreateSession(userId);
@@ -1465,6 +1489,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
 
         // Handle different disconnect reasons
         if (statusCode === DisconnectReason.loggedOut) {
+          disableAutoReconnect(userId, 'WhatsApp logged out during pairing');
           logger.warn(`[WhatsApp] User ${userId} logged out during pairing`);
           await updateSessionStatus(userId, {
             status: 'disconnected',
@@ -1834,6 +1859,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
 
         // Handle different disconnect reasons
         if (statusCode === DisconnectReason.loggedOut) {
+          disableAutoReconnect(userId, 'WhatsApp logged out during pairing fallback');
           await updateSessionStatus(userId, {
             status: 'disconnected',
             pairingCode: null,
@@ -2231,6 +2257,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
   // Check if socket is still active and actually connected
   const socket = activeSockets.get(userId);
   let actualStatus: 'disconnected' | 'connecting' | 'connected' = session.status;
+  const autoReconnectBlocked = autoReconnectDisabled.has(userId);
   
   // ALTERNATIVE DETECTION: Check for recent activity to detect if session is actually active
   // This is important because even if socket is not in memory, if messages are being received,
@@ -2269,7 +2296,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
   
   // ALTERNATIVE: If no socket but credentials exist AND recent activity, consider as connected
   // This handles the case where server restarted but session is still active on phone
-  if (!socket && hasCredentials && hasRecentActivity) {
+  if (!socket && hasCredentials && hasRecentActivity && !autoReconnectBlocked) {
     logger.info(`[WhatsApp] ✅ No socket but recent activity detected for user ${userId}, considering as connected`);
     actualStatus = 'connected';
     
@@ -2297,7 +2324,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
   else if (session.status === 'connected' && !socket && !hasRecentActivity) {
     logger.warn(`[WhatsApp] Session status is "connected" in DB but no socket and no recent activity for user ${userId}`);
     
-    if (hasCredentials) {
+    if (hasCredentials && !autoReconnectBlocked) {
       logger.info(`[WhatsApp] Credentials found for user ${userId}, attempting to reconnect...`);
       actualStatus = 'connecting';
       
@@ -2310,6 +2337,8 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
       }).catch((err) => {
         logger.error(`[WhatsApp] Auto-reconnect attempt for user ${userId} failed:`, err);
       });
+    } else if (hasCredentials && autoReconnectBlocked) {
+      logger.info(`[WhatsApp] ⏸️ Auto-reconnect disabled for user ${userId}, not attempting reconnect`);
     } else {
       logger.warn(`[WhatsApp] No credentials found for user ${userId}, marking as disconnected`);
       actualStatus = 'disconnected';
@@ -2321,7 +2350,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
     }
   }
   // If status is disconnected but credentials exist and recent activity, consider as connected
-  else if (actualStatus === 'disconnected' && hasCredentials && hasRecentActivity) {
+  else if (actualStatus === 'disconnected' && hasCredentials && hasRecentActivity && !autoReconnectBlocked) {
     logger.info(`[WhatsApp] ✅ Status is disconnected but recent activity detected for user ${userId}, considering as connected`);
     actualStatus = 'connected';
     
@@ -2342,7 +2371,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
     });
   }
   // If status is disconnected but credentials exist (no recent activity), try to reconnect
-  else if (actualStatus === 'disconnected' && hasCredentials && !hasRecentActivity) {
+  else if (actualStatus === 'disconnected' && hasCredentials && !hasRecentActivity && !autoReconnectBlocked) {
     logger.info(`[WhatsApp] Status is disconnected but credentials exist for user ${userId}, attempting to reconnect...`);
     actualStatus = 'connecting';
     
@@ -2355,6 +2384,9 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
     }).catch((err) => {
       logger.debug(`[WhatsApp] Reconnection attempt for user ${userId} failed:`, err);
     });
+  }
+  else if (autoReconnectBlocked) {
+    logger.info(`[WhatsApp] ⏸️ Auto-reconnect disabled for user ${userId}; status remains ${actualStatus}`);
   }
 
   // Get QR code and pairing code if available
@@ -2384,6 +2416,7 @@ export const disconnectWhatsApp = async (userId: string): Promise<void> => {
   try {
     // Stop keep-alive first
     stopKeepAlive(userId);
+    disableAutoReconnect(userId, 'User requested manual disconnect');
     
     const socket = activeSockets.get(userId);
 
@@ -3066,6 +3099,10 @@ const stopConnectionHealthMonitor = (userId: string): void => {
  * Schedule a reconnection attempt with exponential backoff
  */
 const scheduleReconnection = (userId: string): void => {
+  if (autoReconnectDisabled.has(userId)) {
+    logger.info(`[WhatsApp] ⏸️ Auto-reconnect disabled for user ${userId}, skipping scheduled reconnection`);
+    return;
+  }
   // Check if already connected - don't schedule if connected
   const socket = activeSockets.get(userId);
   if (socket && socket.user && socket.user.id) {
@@ -3547,6 +3584,10 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
  */
 export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promise<boolean> => {
   try {
+    if (autoReconnectDisabled.has(userId)) {
+      logger.info(`[WhatsApp] ⏸️ Auto-reconnect is disabled for user ${userId}, skipping reconnect`);
+      return false;
+    }
     // Check if session has a conflict - don't reconnect if conflicted
     if (conflictedSessions.has(userId)) {
       logger.warn(`[WhatsApp] Session for user ${userId} has a conflict, skipping auto-reconnect. User must manually reconnect.`);
@@ -3786,6 +3827,7 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
           }
           
           if (statusCode === DisconnectReason.loggedOut) {
+            disableAutoReconnect(userId, 'WhatsApp logged out during auto-reconnect');
             // User logged out, clean up
             conflictedSessions.delete(userId);
             reconnectionAttempts.delete(userId);
