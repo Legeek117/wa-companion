@@ -60,53 +60,120 @@ export const getPairingCode = async (req: AuthRequest, res: Response, next: Next
       });
     }
 
-    const { pairingCode, sessionId } = await whatsappService.connectWhatsAppWithPairingCode(req.userId, phoneNumber);
-
-    // Log pairing code status for debugging
-    console.log(`[WhatsApp] Pairing Code request for user ${req.userId}:`, {
-      hasPairingCode: !!pairingCode,
-      pairingCodeLength: pairingCode?.length || 0,
-      pairingCode: pairingCode || null,
-      sessionId,
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        pairingCode: pairingCode || '',
-        sessionId,
-      },
-    });
-  } catch (error) {
-    console.error('[WhatsApp] Error generating pairing code:', error);
+    // Use queue system for pairing code generation
+    const { addPairingCodeJob, getPairingCodeJobStatus } = await import('../services/pairingQueue.service');
+    const { acquireSessionLock, releaseSessionLock } = await import('../services/sessionLock.service');
     
-    // Format error response properly
-    if (error instanceof Error) {
-      // Check if it's a validation error
-      if (error.message.includes('déjà connecté') || 
-          error.message.includes('déconnecter') ||
-          error.message.includes('invalide') ||
-          error.message.includes('Session replaced')) {
-        return res.status(400).json({
+    // Try to acquire lock
+    const lockAcquired = await acquireSessionLock(req.userId);
+    if (!lockAcquired) {
+      // Check if there's an active job
+      const jobStatus = await getPairingCodeJobStatus(req.userId);
+      if (jobStatus.status === 'active' || jobStatus.status === 'waiting') {
+        return res.status(429).json({
           success: false,
           error: {
-            message: error.message,
-            statusCode: 400,
+            message: 'Une demande de code de couplage est déjà en cours. Veuillez patienter.',
+            statusCode: 429,
+          },
+        });
+      }
+      // If no active job but lock exists, wait a bit and retry
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const retryLock = await acquireSessionLock(req.userId);
+      if (!retryLock) {
+        return res.status(429).json({
+          success: false,
+          error: {
+            message: 'Une opération est déjà en cours pour votre compte. Veuillez réessayer dans quelques instants.',
+            statusCode: 429,
+          },
+        });
+      }
+    }
+    
+    try {
+      // Add job to queue
+      const jobId = await addPairingCodeJob(req.userId, phoneNumber);
+      if (!jobId) {
+        await releaseSessionLock(req.userId);
+        return res.status(500).json({
+          success: false,
+          error: {
+            message: 'Impossible d\'ajouter la demande à la file d\'attente',
+            statusCode: 500,
           },
         });
       }
       
-      // For other errors, return 500 with user-friendly message
+      // Process the pairing code request (this will be handled by the queue worker)
+      // For now, we'll call it directly but in production, a worker would process it
+      const { pairingCode, sessionId } = await whatsappService.connectWhatsAppWithPairingCode(req.userId, phoneNumber);
+      
+      // Release lock after successful generation
+      await releaseSessionLock(req.userId);
+
+      // Log pairing code status for debugging
+      console.log(`[WhatsApp] Pairing Code request for user ${req.userId}:`, {
+        hasPairingCode: !!pairingCode,
+        pairingCodeLength: pairingCode?.length || 0,
+        pairingCode: pairingCode || null,
+        sessionId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          pairingCode: pairingCode || '',
+          sessionId,
+        },
+      });
+    } catch (error) {
+      // Release lock on error
+      await releaseSessionLock(req.userId).catch(() => {
+        // Ignore errors when releasing lock
+      });
+      
+      console.error('[WhatsApp] Error generating pairing code:', error);
+      
+      // Format error response properly
+      if (error instanceof Error) {
+        // Check if it's a validation error
+        if (error.message.includes('déjà connecté') || 
+            error.message.includes('déconnecter') ||
+            error.message.includes('invalide') ||
+            error.message.includes('Session replaced')) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: error.message,
+              statusCode: 400,
+            },
+          });
+        }
+        
+        // For other errors, return 500 with user-friendly message
+        return res.status(500).json({
+          success: false,
+          error: {
+            message: error.message || 'Erreur lors de la génération du code de couplage',
+            statusCode: 500,
+          },
+        });
+      }
+      
+      // Fallback for unknown errors
       return res.status(500).json({
         success: false,
         error: {
-          message: error.message || 'Erreur lors de la génération du code de couplage',
+          message: 'Erreur interne lors de la génération du code de couplage',
           statusCode: 500,
         },
       });
     }
-    
-    // Fallback for unknown errors
+  } catch (error) {
+    // Outer catch for any errors in lock acquisition or queue setup
+    console.error('[WhatsApp] Unexpected error in pairing code generation:', error);
     return res.status(500).json({
       success: false,
       error: {

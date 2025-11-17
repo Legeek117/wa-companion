@@ -13,7 +13,8 @@
     "check-env": "ts-node src/config/check-env.ts",
     "generate-secrets": "node scripts/generate-jwt-secrets.js",
     "check-db": "ts-node scripts/check-database.ts",
-    "test-deleted": "ts-node scripts/test-deleted-messages.ts"
+    "test-deleted": "ts-node scripts/test-deleted-messages.ts",
+    "migrate-cloudinary": "ts-node scripts/migrate-supabase-to-cloudinary.ts"
   },
   "keywords": [
     "whatsapp",

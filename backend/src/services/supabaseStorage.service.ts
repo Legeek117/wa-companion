@@ -47,7 +47,6 @@ export const uploadMediaToSupabase = async (
 
     const publicUrl = urlData.publicUrl;
     logger.info(`[SupabaseStorage] Media uploaded: ${path} -> ${publicUrl}`);
-    
     return publicUrl;
   } catch (error) {
     logger.error('[SupabaseStorage] Error uploading media:', error);

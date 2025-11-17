@@ -6,6 +6,7 @@ import { getSupabaseClient } from './config/database';
 import { logEnvironmentStatus, checkEnvironmentVariables } from './config/check-env';
 import { reconnectWhatsAppIfCredentialsExist } from './services/whatsapp.service';
 import { initializeFirebaseAdmin } from './services/notifications.service';
+import { initializePairingQueue } from './services/pairingQueue.service';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { startRenderKeepAlive } from './utils/renderKeepAlive';
@@ -52,6 +53,16 @@ async function startServer(): Promise<void> {
         initializeFirebaseAdmin();
       } catch (error) {
         logger.warn('Firebase Admin initialization failed, push notifications will be disabled:', error);
+      }
+    }
+
+    // Initialize pairing code queue
+    if (env.NODE_ENV !== 'test') {
+      try {
+        await initializePairingQueue();
+        logger.info('✅ Pairing code queue initialized');
+      } catch (error) {
+        logger.warn('Pairing code queue initialization failed, pairing code may not work properly:', error);
       }
     }
 

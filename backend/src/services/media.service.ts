@@ -2,6 +2,7 @@ import { WASocket, downloadMediaMessage } from '@whiskeysockets/baileys';
 import { logger } from '../config/logger';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { uploadMediaToCloudinary } from './cloudinaryStorage.service';
 import { uploadMediaToSupabase } from './supabaseStorage.service';
 
 /**
@@ -36,7 +37,7 @@ export const getExtensionFromMimeType = (mimeType: string): string => {
 };
 
 /**
- * Upload media to Supabase Storage (preferred) or local storage (fallback)
+ * Upload media to Cloudinary (preferred), Supabase Storage (fallback), or local storage (last resort)
  */
 export const uploadMedia = async (
   buffer: Buffer,
@@ -55,11 +56,25 @@ export const uploadMedia = async (
       finalFilename = `${filename}.${extension}`;
     }
     
-    // Try Supabase Storage first (if enabled)
+    // Try Cloudinary first (preferred)
     const storagePath = userId 
       ? `${subdirectory}/${userId}/${finalFilename}`
       : `${subdirectory}/${finalFilename}`;
     
+    const cloudinaryUrl = await uploadMediaToCloudinary(
+      buffer,
+      storagePath,
+      mimeType,
+      { folder: subdirectory }
+    );
+    
+    if (cloudinaryUrl) {
+      logger.info(`[Media] Media uploaded to Cloudinary: ${cloudinaryUrl}`);
+      return cloudinaryUrl;
+    }
+    
+    // Fallback to Supabase Storage if Cloudinary is not available
+    logger.debug('[Media] Cloudinary not available, trying Supabase Storage');
     const supabaseUrl = await uploadMediaToSupabase(
       buffer,
       storagePath,
@@ -72,8 +87,8 @@ export const uploadMedia = async (
       return supabaseUrl;
     }
     
-    // Fallback to local storage if Supabase is not available
-    logger.warn('[Media] Supabase Storage not available, falling back to local storage');
+    // Fallback to local storage if both Cloudinary and Supabase are not available
+    logger.warn('[Media] Cloudinary and Supabase Storage not available, falling back to local storage');
     
     // Create uploads directory if it doesn't exist
     const uploadsDir = join(process.cwd(), 'uploads', subdirectory);
