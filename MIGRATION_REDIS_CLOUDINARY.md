@@ -54,9 +54,9 @@ REDIS_PORT=6379
 REDIS_PASSWORD=  # Optionnel
 
 # Cloudinary (NOUVEAU - REQUIS)
-CLOUDINARY_CLOUD_NAME=votre-cloud-name
-CLOUDINARY_API_KEY=votre-api-key
-CLOUDINARY_API_SECRET=votre-api-secret
+CLOUDINARY_CLOUD_NAME=ddspseywa
+CLOUDINARY_API_KEY=593314221226451
+CLOUDINARY_API_SECRET=nVBGgxLfbicS8jwStp3ur4EyF7c
 ```
 
 ### Comment Obtenir les Clés Cloudinary

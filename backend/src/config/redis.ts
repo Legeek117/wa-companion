@@ -11,12 +11,40 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
 
   if (!redisClient) {
     try {
-      redisClient = createClient({
-        url: env.REDIS_URL,
-        password: env.REDIS_PASSWORD,
+      // Build Redis client config
+      // Use URL-only approach to avoid AUTH conflicts
+      // Don't specify socket.host/port when using url - it causes conflicts
+      
+      // Clean the URL - ensure no empty password
+      let redisUrl = env.REDIS_URL.trim();
+      
+      // Remove empty password patterns from URL
+      // redis://:@host:port -> redis://host:port
+      redisUrl = redisUrl.replace(/^redis:\/\/:@/, 'redis://');
+      // redis://:password@host:port -> keep as is if password exists
+      
+      // If password is provided separately and not empty, inject it into URL
+      if (env.REDIS_PASSWORD && env.REDIS_PASSWORD.trim() !== '') {
+        // Extract host and port from URL
+        const match = redisUrl.match(/^redis:\/\/(?:[^@]+@)?([^:]+):?(\d+)?/);
+        if (match) {
+          const host = match[1];
+          const port = match[2] || '6379';
+          redisUrl = `redis://:${env.REDIS_PASSWORD.trim()}@${host}:${port}`;
+        }
+      } else {
+        // Ensure URL has no password field at all
+        // Remove any :password@ or :@ from URL
+        redisUrl = redisUrl.replace(/^redis:\/\/:[^@]*@/, 'redis://');
+      }
+
+      // Log the final URL (without password for security)
+      const safeUrl = redisUrl.replace(/redis:\/\/:[^@]+@/, 'redis://***@');
+      console.log(`[Redis] Connecting to: ${safeUrl}`);
+
+      const clientConfig: any = {
+        url: redisUrl,
         socket: {
-          host: env.REDIS_HOST,
-          port: env.REDIS_PORT,
           reconnectStrategy: (retries) => {
             // Stop trying after 3 retries
             if (retries > 3) {
@@ -26,7 +54,9 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
             return Math.min(retries * 100, 3000); // Exponential backoff
           },
         },
-      });
+      };
+
+      redisClient = createClient(clientConfig);
 
       redisClient.on('error', (err) => {
         // Only log error, don't throw
