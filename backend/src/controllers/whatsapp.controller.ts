@@ -62,56 +62,88 @@ export const getPairingCode = async (req: AuthRequest, res: Response, next: Next
 
     // Use queue system for pairing code generation
     const { addPairingCodeJob, getPairingCodeJobStatus } = await import('../services/pairingQueue.service');
-    const { acquireSessionLock, releaseSessionLock } = await import('../services/sessionLock.service');
+    const { acquireSessionLock, releaseSessionLock, hasSessionLock } = await import('../services/sessionLock.service');
+    const { getRedisClient } = await import('../config/redis');
     
-    // Try to acquire lock
-    const lockAcquired = await acquireSessionLock(req.userId);
-    if (!lockAcquired) {
-      // Check if there's an active job
-      const jobStatus = await getPairingCodeJobStatus(req.userId);
-      if (jobStatus.status === 'active' || jobStatus.status === 'waiting') {
-        return res.status(429).json({
-          success: false,
-          error: {
-            message: 'Une demande de code de couplage est déjà en cours. Veuillez patienter.',
-            statusCode: 429,
-          },
-        });
+    // Check if Redis is available
+    const redisClient = await getRedisClient();
+    const redisAvailable = redisClient !== null;
+    
+    // Try to acquire lock only if Redis is available
+    let lockAcquired = false;
+    if (redisAvailable) {
+      lockAcquired = await acquireSessionLock(req.userId);
+      if (!lockAcquired) {
+        // Check if there's an active job (only if queue is available)
+        try {
+          const jobStatus = await getPairingCodeJobStatus(req.userId);
+          if (jobStatus.status === 'active' || jobStatus.status === 'waiting') {
+            return res.status(429).json({
+              success: false,
+              error: {
+                message: 'Une demande de code de couplage est déjà en cours. Veuillez patienter.',
+                statusCode: 429,
+              },
+            });
+          }
+        } catch (error) {
+          // If queue check fails, continue without queue check
+          console.warn(`[WhatsApp] Could not check job status for user ${req.userId}, continuing:`, error);
+        }
+        // If no active job but lock exists, wait a bit and retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const retryLock = await acquireSessionLock(req.userId);
+        if (!retryLock) {
+          // Check if lock still exists (might have expired)
+          const lockExists = await hasSessionLock(req.userId);
+          if (lockExists) {
+            return res.status(429).json({
+              success: false,
+              error: {
+                message: 'Une opération est déjà en cours pour votre compte. Veuillez réessayer dans quelques instants.',
+                statusCode: 429,
+              },
+            });
+          }
+          // Lock doesn't exist, try one more time
+          lockAcquired = await acquireSessionLock(req.userId);
+          if (!lockAcquired) {
+            // If still can't acquire, allow operation without lock (fallback)
+            console.warn(`[WhatsApp] Could not acquire lock for user ${req.userId}, proceeding without lock (Redis available but lock failed)`);
+          }
+        } else {
+          lockAcquired = true;
+        }
       }
-      // If no active job but lock exists, wait a bit and retry
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const retryLock = await acquireSessionLock(req.userId);
-      if (!retryLock) {
-        return res.status(429).json({
-          success: false,
-          error: {
-            message: 'Une opération est déjà en cours pour votre compte. Veuillez réessayer dans quelques instants.',
-            statusCode: 429,
-          },
-        });
-      }
+    } else {
+      // Redis not available - allow operation without lock (fallback mode)
+      console.warn(`[WhatsApp] Redis not available, proceeding without lock for user ${req.userId}`);
     }
     
     try {
-      // Add job to queue
-      const jobId = await addPairingCodeJob(req.userId, phoneNumber);
-      if (!jobId) {
-        await releaseSessionLock(req.userId);
-        return res.status(500).json({
-          success: false,
-          error: {
-            message: 'Impossible d\'ajouter la demande à la file d\'attente',
-            statusCode: 500,
-          },
-        });
+      // Add job to queue (only if Redis is available)
+      // If Redis is not available, we'll process directly without queue
+      if (redisAvailable) {
+        const jobId = await addPairingCodeJob(req.userId, phoneNumber);
+        if (!jobId) {
+          // If queue is not available, proceed without queue (fallback mode)
+          console.warn(`[WhatsApp] Queue not available for user ${req.userId}, proceeding without queue`);
+        }
+      } else {
+        console.warn(`[WhatsApp] Redis not available, processing pairing code directly without queue for user ${req.userId}`);
       }
       
-      // Process the pairing code request (this will be handled by the queue worker)
-      // For now, we'll call it directly but in production, a worker would process it
+      // Process the pairing code request
+      // If queue is available, this would normally be handled by a worker
+      // For now, we process it directly
       const { pairingCode, sessionId } = await whatsappService.connectWhatsAppWithPairingCode(req.userId, phoneNumber);
       
-      // Release lock after successful generation
-      await releaseSessionLock(req.userId);
+      // Release lock after successful generation (only if we acquired it)
+      if (lockAcquired && redisAvailable) {
+        await releaseSessionLock(req.userId).catch((err) => {
+          console.warn(`[WhatsApp] Error releasing lock for user ${req.userId}:`, err);
+        });
+      }
 
       // Log pairing code status for debugging
       console.log(`[WhatsApp] Pairing Code request for user ${req.userId}:`, {
@@ -129,10 +161,12 @@ export const getPairingCode = async (req: AuthRequest, res: Response, next: Next
         },
       });
     } catch (error) {
-      // Release lock on error
-      await releaseSessionLock(req.userId).catch(() => {
-        // Ignore errors when releasing lock
-      });
+      // Release lock on error (only if we acquired it)
+      if (lockAcquired && redisAvailable) {
+        await releaseSessionLock(req.userId).catch(() => {
+          // Ignore errors when releasing lock
+        });
+      }
       
       console.error('[WhatsApp] Error generating pairing code:', error);
       

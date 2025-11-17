@@ -45,7 +45,7 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
       const clientConfig: any = {
         url: redisUrl,
         socket: {
-          reconnectStrategy: (retries) => {
+          reconnectStrategy: (retries: number) => {
             // Stop trying after 3 retries
             if (retries > 3) {
               console.warn('Redis connection failed after 3 retries, continuing without Redis');
