@@ -25,6 +25,10 @@ import adminRoutes from './routes/admin.routes';
 
 const app: Application = express();
 
+// When running behind a proxy (Render, Netlify, etc.), Express must trust it
+// so that rate limiting & IP detection can use the X-Forwarded-For header
+app.set('trust proxy', true);
+
 // CORS MUST be before Helmet to avoid blocking CORS headers
 app.use(
   cors({
