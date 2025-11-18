@@ -75,7 +75,11 @@ const Dashboard = () => {
     autoresponder: "text-emerald-500",
   };
 
-  const canManualReconnect = !isConnected && !!whatsappStatus?.lastSeen;
+  const canManualReconnect = !isConnected && !!whatsappStatus && (
+    whatsappStatus.hasSavedSession ||
+    !!whatsappStatus.lastSeen ||
+    !!whatsappStatus.connectedAt
+  );
   const lastSeenDisplay = whatsappStatus?.lastSeen
     ? new Date(whatsappStatus.lastSeen).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : null;

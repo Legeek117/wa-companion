@@ -2251,6 +2251,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
   pairingCode?: string;
   connectedAt?: Date;
   lastSeen?: Date;
+  hasSavedSession?: boolean;
 }> => {
   const session = await getOrCreateSession(userId);
 
@@ -2406,6 +2407,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
     pairingCode: pairingCode || sessionData?.pairing_code || undefined,
     connectedAt: session.connectedAt,
     lastSeen: session.lastSeen,
+    hasSavedSession: hasCredentials,
   };
 };
 

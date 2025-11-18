@@ -8,6 +8,7 @@ export interface WhatsAppStatus {
   pairingCode?: string;
   connectedAt?: string;
   lastSeen?: string;
+  hasSavedSession?: boolean;
 }
 
 export interface QRResponse {

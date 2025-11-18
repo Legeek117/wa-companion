@@ -115,7 +115,11 @@ const Connect = () => {
     refetch();
   };
 
-  const canManualReconnect = status?.status === 'disconnected' && !!status?.lastSeen;
+  const canManualReconnect = status?.status === 'disconnected' && (
+    status?.hasSavedSession ||
+    !!status?.lastSeen ||
+    !!status?.connectedAt
+  );
   const lastSeenDisplay = status?.lastSeen
     ? new Date(status.lastSeen).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : null;
