@@ -20,6 +20,12 @@ export interface PairingCodeResponse {
   sessionId: string;
 }
 
+export interface ManualReconnectResult {
+  success: boolean;
+  status: 'connected' | 'connecting' | 'disconnected' | 'no-credentials' | 'error';
+  message: string;
+}
+
 /**
  * Hook for WhatsApp operations
  */
@@ -288,6 +294,24 @@ export function useWhatsApp() {
     },
   });
 
+  // Manual reconnect mutation
+  const reconnectMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.whatsapp.reconnect();
+      if (response.success && response.data) {
+        return response.data as ManualReconnectResult;
+      }
+      throw new Error(response.error?.message || 'Impossible de relancer la connexion automatiquement');
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Reconnexion lancée');
+      queryClient.invalidateQueries({ queryKey: ['whatsapp', 'status'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Erreur lors de la reconnexion');
+    },
+  });
+
   return {
     status,
     isLoading,
@@ -305,6 +329,8 @@ export function useWhatsApp() {
     isGettingQR: getQRMutation.isPending,
     isGettingPairingCode: getPairingCodeMutation.isPending,
     isDisconnecting: disconnectMutation.isPending,
+    reconnect: reconnectMutation.mutate,
+    isReconnecting: reconnectMutation.isPending,
     refetch,
   };
 }

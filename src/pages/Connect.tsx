@@ -10,7 +10,16 @@ import { toast } from "sonner";
 
 const Connect = () => {
   const navigate = useNavigate();
-  const { status, getQR, getPairingCode, isGettingQR, isGettingPairingCode, refetch } = useWhatsApp();
+  const { 
+    status, 
+    getQR, 
+    getPairingCode, 
+    isGettingQR, 
+    isGettingPairingCode, 
+    refetch,
+    reconnect: manualReconnect,
+    isReconnecting,
+  } = useWhatsApp();
   const [activeMethod, setActiveMethod] = useState<'qr' | 'pairing' | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
@@ -105,6 +114,11 @@ const Connect = () => {
     // Force refetch to update status
     refetch();
   };
+
+  const canManualReconnect = status?.status === 'disconnected' && !!status?.lastSeen;
+  const lastSeenDisplay = status?.lastSeen
+    ? new Date(status.lastSeen).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : null;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -293,6 +307,38 @@ const Connect = () => {
               <p className="text-sm text-green-500 font-medium">
                 WhatsApp connecté avec succès !
               </p>
+            </div>
+          )}
+
+          {canManualReconnect && (
+            <div className="p-4 border border-dashed border-primary/40 rounded-lg bg-primary/5 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-primary">
+                  Session précédente détectée
+                </p>
+                {lastSeenDisplay && (
+                  <p className="text-xs text-muted-foreground">
+                    Dernière activité enregistrée : {lastSeenDisplay}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Relancez automatiquement le bot sans rescanner de code.
+                </p>
+              </div>
+              <Button
+                onClick={() => manualReconnect()}
+                disabled={isReconnecting}
+                className="w-full sm:w-auto"
+              >
+                {isReconnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Reconnexion...
+                  </>
+                ) : (
+                  'Se reconnecter'
+                )}
+              </Button>
             </div>
           )}
 

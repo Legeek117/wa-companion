@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Heart, Eye, Trash2, Bot, Calendar, Sparkles, TrendingUp, Activity } from "lucide-react";
+import { Heart, Eye, Trash2, Bot, Calendar, Sparkles, TrendingUp, Activity, Loader2 } from "lucide-react";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +11,7 @@ import { Loading } from "@/components/Loading";
 
 const Dashboard = () => {
   const { user, isPremium, stats, recentActivity, isLoading, quota } = useDashboard();
-  const { status: whatsappStatus, isConnected, getQR } = useWhatsApp();
+  const { status: whatsappStatus, isConnected, reconnect: manualReconnect, isReconnecting } = useWhatsApp();
   const navigate = useNavigate();
 
   // Format stats for display
@@ -75,6 +75,11 @@ const Dashboard = () => {
     autoresponder: "text-emerald-500",
   };
 
+  const canManualReconnect = !isConnected && !!whatsappStatus?.lastSeen;
+  const lastSeenDisplay = whatsappStatus?.lastSeen
+    ? new Date(whatsappStatus.lastSeen).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return (
     <div className="space-y-3 sm:space-y-4 md:space-y-6 px-2 sm:px-4 md:px-0">
       {/* Header */}
@@ -133,21 +138,44 @@ const Dashboard = () => {
                 </p>
               </div>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9 md:h-10 whitespace-nowrap"
-              onClick={() => {
-                if (!isConnected) {
-                  navigate('/dashboard/connect');
-                } else {
-                  navigate('/dashboard/settings');
-                }
-              }}
-            >
-              {isConnected ? 'Paramètres' : 'Se connecter'}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+              {canManualReconnect && (
+                <Button
+                  className="w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9 md:h-10 whitespace-nowrap"
+                  onClick={() => manualReconnect()}
+                  disabled={isReconnecting}
+                >
+                  {isReconnecting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Reconnexion...
+                    </>
+                  ) : (
+                    'Se reconnecter'
+                  )}
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9 md:h-10 whitespace-nowrap"
+                onClick={() => {
+                  if (!isConnected) {
+                    navigate('/dashboard/connect');
+                  } else {
+                    navigate('/dashboard/settings');
+                  }
+                }}
+              >
+                {isConnected ? 'Paramètres' : 'Se connecter'}
+              </Button>
+            </div>
           </div>
+          {canManualReconnect && lastSeenDisplay && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Dernière activité bot : {lastSeenDisplay}. Cliquez sur « Se reconnecter » pour relancer le bot sans ressaisir de code.
+            </p>
+          )}
         </CardContent>
       </Card>
 

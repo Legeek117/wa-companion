@@ -207,6 +207,7 @@ export const api = {
     getPairingCode: (phoneNumber: string) => apiClient.post('/api/whatsapp/pairing-code', { phoneNumber }),
     getStatus: () => apiClient.get('/api/whatsapp/status'),
     disconnect: () => apiClient.post('/api/whatsapp/disconnect'),
+    reconnect: () => apiClient.post('/api/whatsapp/reconnect'),
   },
 
   // Status

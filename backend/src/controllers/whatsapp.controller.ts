@@ -267,3 +267,43 @@ export const disconnect = async (req: AuthRequest, res: Response, next: NextFunc
     next(error);
   }
 };
+
+/**
+ * Manually trigger a WhatsApp reconnection
+ * POST /api/whatsapp/reconnect
+ */
+export const manualReconnect = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const result = await whatsappService.manualReconnectWhatsApp(req.userId);
+
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+      return;
+    }
+
+    let statusCode = 500;
+    if (result.status === 'no-credentials') {
+      statusCode = 409;
+    } else if (result.status === 'disconnected') {
+      statusCode = 503;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        message: result.message,
+        statusCode,
+      },
+    });
+    return;
+  } catch (error) {
+    next(error);
+  }
+};

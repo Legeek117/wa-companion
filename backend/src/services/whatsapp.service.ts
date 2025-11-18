@@ -2468,6 +2468,75 @@ export const disconnectWhatsApp = async (userId: string): Promise<void> => {
 };
 
 /**
+ * Allow a user to manually trigger a reconnection from the dashboard
+ */
+export const manualReconnectWhatsApp = async (userId: string): Promise<{
+  success: boolean;
+  status: 'connected' | 'connecting' | 'disconnected' | 'no-credentials' | 'error';
+  message: string;
+}> => {
+  try {
+    logger.info(`[WhatsApp] 🔄 Manual reconnect requested for user ${userId}`);
+
+    // Re-enable auto reconnect and clear previous blockers
+    enableAutoReconnect(userId);
+    conflictedSessions.delete(userId);
+    reconnectionAttempts.delete(userId);
+    stopConnectionHealthMonitor(userId);
+    stopKeepAlive(userId);
+    cancelScheduledReconnection(userId);
+
+    const socket = activeSockets.get(userId);
+    if (socket?.user && socket.user.id) {
+      logger.info(`[WhatsApp] User ${userId} already connected, no manual reconnect needed`);
+      return {
+        success: true,
+        status: 'connected',
+        message: 'Le bot est déjà connecté.',
+      };
+    }
+
+    // Ensure latest session files are available locally
+    const sessionPath = getSessionPath(userId);
+    await ensureSessionFromSupabase(userId, sessionPath);
+    const credsPath = join(sessionPath, 'creds.json');
+    if (!existsSync(credsPath)) {
+      logger.warn(`[WhatsApp] No credentials found for manual reconnect, user ${userId}`);
+      return {
+        success: false,
+        status: 'no-credentials',
+        message: 'Aucune session enregistrée. Veuillez régénérer un code de couplage.',
+      };
+    }
+
+    // Attempt immediate reconnect
+    const reconnectStarted = await reconnectWhatsAppIfCredentialsExist(userId);
+    if (reconnectStarted) {
+      logger.info(`[WhatsApp] Manual reconnect started for user ${userId}`);
+      return {
+        success: true,
+        status: 'connecting',
+        message: 'Reconnexion en cours, cela peut prendre quelques secondes.',
+      };
+    }
+
+    logger.warn(`[WhatsApp] Manual reconnect could not start for user ${userId}`);
+    return {
+      success: false,
+      status: 'disconnected',
+      message: 'Impossible de relancer la connexion automatiquement. Réessayez ou reconnectez avec un code.',
+    };
+  } catch (error) {
+    logger.error(`[WhatsApp] Error during manual reconnect for user ${userId}:`, error);
+    return {
+      success: false,
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Erreur inconnue lors de la reconnexion',
+    };
+  }
+};
+
+/**
  * Get active socket for a user
  */
 /**

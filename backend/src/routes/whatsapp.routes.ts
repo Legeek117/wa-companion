@@ -14,6 +14,7 @@ router.post('/pairing-code', apiLimiter, whatsappController.getPairingCode);
 // /status is called frequently to check connection status, use loose limiter
 router.get('/status', looseLimiter, whatsappController.getStatus);
 router.post('/disconnect', apiLimiter, whatsappController.disconnect);
+router.post('/reconnect', apiLimiter, whatsappController.manualReconnect);
 
 export default router;
 
