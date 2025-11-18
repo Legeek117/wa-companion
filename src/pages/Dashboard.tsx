@@ -75,14 +75,12 @@ const Dashboard = () => {
     autoresponder: "text-emerald-500",
   };
 
-  const canManualReconnect = !isConnected && !!whatsappStatus && (
-    whatsappStatus.hasSavedSession ||
-    !!whatsappStatus.lastSeen ||
-    !!whatsappStatus.connectedAt
-  );
-  const lastSeenDisplay = whatsappStatus?.lastSeen
-    ? new Date(whatsappStatus.lastSeen).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const canManualReconnect = !!whatsappStatus?.hasSavedSession;
+  const lastActivity = whatsappStatus?.lastSeen || whatsappStatus?.connectedAt;
+  const lastActivityLabel = lastActivity
+    ? new Date(lastActivity).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : null;
+  const manualReconnectDisabled = isReconnecting || whatsappStatus?.status === 'connecting';
 
   return (
     <div className="space-y-3 sm:space-y-4 md:space-y-6 px-2 sm:px-4 md:px-0">
@@ -147,7 +145,7 @@ const Dashboard = () => {
                 <Button
                   className="w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9 md:h-10 whitespace-nowrap"
                   onClick={() => manualReconnect()}
-                  disabled={isReconnecting}
+                  disabled={manualReconnectDisabled}
                 >
                   {isReconnecting ? (
                     <>
@@ -175,9 +173,12 @@ const Dashboard = () => {
               </Button>
             </div>
           </div>
-          {canManualReconnect && lastSeenDisplay && (
+          {canManualReconnect && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Dernière activité bot : {lastSeenDisplay}. Cliquez sur « Se reconnecter » pour relancer le bot sans ressaisir de code.
+              {lastActivityLabel
+                ? `Dernière activité bot : ${lastActivityLabel}. `
+                : ''}
+              Cliquez sur « Se reconnecter » pour forcer une reconnexion sans regénérer de code.
             </p>
           )}
         </CardContent>

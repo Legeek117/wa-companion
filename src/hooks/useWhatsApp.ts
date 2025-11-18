@@ -84,6 +84,10 @@ export function useWhatsApp() {
         error: response.error,
       });
       if (response.success && response.data) {
+        // If QR code is empty, treat it as an error
+        if (!response.data.qrCode || response.data.qrCode.length === 0) {
+          throw new Error('Le code QR n\'a pas pu être généré. Veuillez réessayer ou utiliser le code de couplage.');
+        }
         return response.data as QRResponse;
       }
       throw new Error(response.error?.message || 'Failed to get QR code');
@@ -94,77 +98,44 @@ export function useWhatsApp() {
         qrCodeLength: data.qrCode?.length || 0,
         sessionId: data.sessionId,
       });
-      if (data.qrCode) {
-        toast.success('QR code généré avec succès !');
-        // Update query cache with QR code and set status to connecting
-        queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
-          ...(old || {}),
-          qrCode: data.qrCode,
-          status: 'connecting' as const,
-        }));
-        // Invalidate to trigger refetch and ensure UI updates
-        queryClient.invalidateQueries({ queryKey: ['whatsapp', 'status'] });
-      } else {
-        toast.info('Génération du QR code en cours...');
-        // Update status to connecting even if QR code is not yet available
-        queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
-          ...(old || {}),
-          status: 'connecting' as const,
-        }));
-        // Poll for QR code status (reduced frequency to avoid rate limiting)
-        let attempts = 0;
-        const maxAttempts = 12; // 12 * 5s = 60 seconds max
-        let pollTimeout: NodeJS.Timeout | null = null;
-        const pollStatus = async () => {
-          // Check if user switched to pairing code (stop polling if so)
-          const currentData = queryClient.getQueryData(['whatsapp', 'status']) as WhatsAppStatus | undefined;
-          if (currentData?.pairingCode) {
-            console.log('[WhatsApp] User switched to pairing code, stopping QR polling');
-            return;
-          }
-          
-          console.log(`[WhatsApp] Polling for QR code, attempt ${attempts + 1}/${maxAttempts}`);
-          try {
-            const result = await refetch();
-            attempts++;
-            const currentStatus = result.data as WhatsAppStatus | undefined;
-            console.log('[WhatsApp] Poll result:', {
-              hasQRCode: !!currentStatus?.qrCode,
-              status: currentStatus?.status,
-              qrCodeLength: currentStatus?.qrCode?.length || 0,
-            });
-            if (currentStatus?.qrCode) {
-              toast.success('QR code généré avec succès !');
-            } else if (attempts < maxAttempts) {
-              pollTimeout = setTimeout(pollStatus, 5000); // Increased from 2s to 5s
-            } else {
-              toast.error('Le QR code n\'a pas pu être généré. Essayez avec le code de couplage.');
-              // Reset status if QR code generation failed
-              queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
-                ...(old || {}),
-                status: 'disconnected' as const,
-                qrCode: undefined,
-              }));
-            }
-          } catch (error) {
-            console.error('[WhatsApp] Error polling for QR code:', error);
-            if (attempts < maxAttempts) {
-              pollTimeout = setTimeout(pollStatus, 5000);
-            } else {
-              queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
-                ...(old || {}),
-                status: 'disconnected' as const,
-                qrCode: undefined,
-              }));
-            }
-          }
-        };
-        pollTimeout = setTimeout(pollStatus, 5000); // Start after 5 seconds
-      }
+      // QR code should always be present if we reach here (checked in mutationFn)
+      toast.success('QR code généré avec succès !');
+      // Update query cache with QR code and set status to connecting
+      queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
+        ...(old || {}),
+        qrCode: data.qrCode,
+        status: 'connecting' as const,
+      }));
+      // Invalidate to trigger refetch and ensure UI updates
+      queryClient.invalidateQueries({ queryKey: ['whatsapp', 'status'] });
     },
     onError: (error: Error) => {
-      console.error('[WhatsApp] Mutation error:', error);
-      toast.error(error.message || 'Erreur lors de la génération');
+      console.error('[WhatsApp] QR code mutation error:', error);
+      
+      // Extract error message from API response if available
+      let errorMessage = error.message || 'Erreur lors de la génération du code QR';
+      
+      // Check if error message contains useful information
+      if (errorMessage.includes('timeout') || errorMessage.includes('n\'a pas pu être généré')) {
+        errorMessage = 'Le code QR n\'a pas pu être généré dans le délai imparti. Essayez avec le code de couplage.';
+      } else if (errorMessage.includes('Internal server error') || errorMessage.includes('500')) {
+        errorMessage = 'Erreur serveur lors de la génération du code QR. Veuillez réessayer dans quelques instants.';
+      } else if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        errorMessage = 'Service non disponible. Veuillez réessayer plus tard.';
+      } else if (errorMessage.includes('Network error') || errorMessage.includes('fetch')) {
+        errorMessage = 'Erreur de connexion. Vérifiez votre connexion internet et réessayez.';
+      }
+      
+      toast.error(errorMessage, {
+        duration: 5000,
+      });
+      
+      // Reset status on error
+      queryClient.setQueryData(['whatsapp', 'status'], (old: WhatsAppStatus | undefined) => ({
+        ...(old || {}),
+        status: 'disconnected' as const,
+        qrCode: undefined,
+      }));
     },
   });
 

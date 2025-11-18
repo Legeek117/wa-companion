@@ -983,11 +983,51 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
           qrCodeReceived = true;
           logger.info(`[WhatsApp] Using stored QR code from database for user ${userId}`);
         } else {
-          logger.warn(`[WhatsApp] No QR code available for user ${userId}`);
-          // Check if socket is still active - if not, there might be a connection issue
-          if (!activeSockets.has(userId)) {
-            logger.warn(`[WhatsApp] Socket is not active for user ${userId}, connection may have failed`);
+          // No QR code found - check socket status to provide better error message
+          const socketStillActive = activeSockets.has(userId);
+          const currentSocket = activeSockets.get(userId);
+          let socketState = 'unknown';
+          
+          if (currentSocket) {
+            try {
+              const socketAny = currentSocket as any;
+              if (socketAny.ws) {
+                socketState = socketAny.ws.readyState === 1 ? 'open' : 
+                             socketAny.ws.readyState === 0 ? 'connecting' :
+                             socketAny.ws.readyState === 2 ? 'closing' :
+                             socketAny.ws.readyState === 3 ? 'closed' : 'unknown';
+              }
+            } catch (e) {
+              socketState = 'error';
+            }
           }
+          
+          logger.error(`[WhatsApp] ❌ No QR code available for user ${userId}`, {
+            socketActive: socketStillActive,
+            socketState,
+            timeout: true,
+          });
+          
+          // Clean up failed connection
+          if (currentSocket) {
+            try {
+              await currentSocket.end(undefined);
+            } catch (e) {
+              // Ignore cleanup errors
+            }
+            activeSockets.delete(userId);
+          }
+          
+          // Update status to disconnected
+          await updateSessionStatus(userId, {
+            status: 'disconnected',
+            qrCode: null,
+          }).catch((err) => {
+            logger.error(`[WhatsApp] Error updating session status after QR timeout:`, err);
+          });
+          
+          // Throw error instead of returning empty string
+          throw new Error('Le code QR n\'a pas pu être généré. Veuillez réessayer ou utiliser le code de couplage.');
         }
       }
     } finally {
@@ -999,6 +1039,18 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
       hasQRCode: !!finalQrCode,
       qrCodeLength: finalQrCode.length,
     });
+
+    // If still no QR code after all checks, throw error
+    if (!finalQrCode || finalQrCode.length === 0) {
+      logger.error(`[WhatsApp] ❌ No QR code generated for user ${userId} after all attempts`);
+      await updateSessionStatus(userId, {
+        status: 'disconnected',
+        qrCode: null,
+      }).catch((err) => {
+        logger.error(`[WhatsApp] Error updating session status:`, err);
+      });
+      throw new Error('Le code QR n\'a pas pu être généré. Veuillez réessayer ou utiliser le code de couplage.');
+    }
 
     return {
       qrCode: finalQrCode,

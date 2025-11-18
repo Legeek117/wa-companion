@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { QrCode, Key, Loader2, CheckCircle2, XCircle, Phone } from "lucide-react";
+import { QrCode, Key, Loader2, CheckCircle2, XCircle, Phone, RefreshCw } from "lucide-react";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { toast } from "sonner";
 
@@ -115,14 +115,12 @@ const Connect = () => {
     refetch();
   };
 
-  const canManualReconnect = status?.status === 'disconnected' && (
-    status?.hasSavedSession ||
-    !!status?.lastSeen ||
-    !!status?.connectedAt
-  );
-  const lastSeenDisplay = status?.lastSeen
-    ? new Date(status.lastSeen).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const showManualReconnect = Boolean(status?.hasSavedSession);
+  const lastActivity = status?.lastSeen || status?.connectedAt;
+  const lastActivityLabel = lastActivity
+    ? new Date(lastActivity).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     : null;
+  const manualReconnectDisabled = isReconnecting || status?.status === 'connecting';
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -134,6 +132,60 @@ const Connect = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Reconnect Method */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 border border-border rounded-lg bg-gradient-to-r from-primary/5 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <RefreshCw className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Reconnecter automatiquement</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Utilise votre dernière session pour relancer le bot instantanément
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => manualReconnect()}
+                disabled={manualReconnectDisabled || !showManualReconnect}
+                variant={showManualReconnect ? 'default' : 'secondary'}
+                className="whitespace-nowrap"
+              >
+                {isReconnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Reconnexion...
+                  </>
+                ) : (
+                  'Se reconnecter'
+                )}
+              </Button>
+            </div>
+
+            {!showManualReconnect && (
+              <div className="p-4 border border-dashed border-border rounded-lg bg-muted/40 text-sm text-muted-foreground">
+                Vous n'avez pas encore connecté de session. Utilisez le QR code ou le code de couplage ci-dessous pour relier votre compte.
+              </div>
+            )}
+
+            {showManualReconnect && lastActivityLabel && (
+              <div className="text-sm text-muted-foreground">
+                Dernière activité détectée : {lastActivityLabel}. La reconnexion reprendra exactement là où vous l'aviez laissée.
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Options alternatives</span>
+            </div>
+          </div>
+
           {/* QR Code Method */}
           <div className="space-y-4">
             <div className="flex items-center justify-between p-4 border border-border rounded-lg">
@@ -314,24 +366,24 @@ const Connect = () => {
             </div>
           )}
 
-          {canManualReconnect && (
+          {showManualReconnect && (
             <div className="p-4 border border-dashed border-primary/40 rounded-lg bg-primary/5 space-y-3">
               <div>
                 <p className="text-sm font-semibold text-primary">
-                  Session précédente détectée
+                  Session déjà enregistrée
                 </p>
-                {lastSeenDisplay && (
+                {lastActivityLabel && (
                   <p className="text-xs text-muted-foreground">
-                    Dernière activité enregistrée : {lastSeenDisplay}
+                    Dernière activité : {lastActivityLabel}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Relancez automatiquement le bot sans rescanner de code.
+                  Cliquez sur « Se reconnecter » pour relancer le bot sans rescanner de code, quelle que soit l’étape actuelle.
                 </p>
               </div>
               <Button
                 onClick={() => manualReconnect()}
-                disabled={isReconnecting}
+                disabled={manualReconnectDisabled}
                 className="w-full sm:w-auto"
               >
                 {isReconnecting ? (
