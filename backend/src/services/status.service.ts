@@ -602,23 +602,16 @@ export const handleStatusUpdate = async (
           normalized: reactionEmoji.normalize('NFC') === reactionEmoji ? 'NFC' : 'other',
         });
 
-        // Essayer de réagir au statut (méthode inspirée d'OVL)
-        // OVL utilise: sendMessage avec react, statusJidList et broadcast: true
+        // Essayer de réagir au statut
         try {
           logger.info(`[Status] 💝 Attempting to like status: ${statusJid} (ID: ${statusId}) with emoji ${reactionEmoji}`);
-          
-          // Méthode OVL: Utiliser statusJidList avec remoteJid et participant, et broadcast: true
-          const statusJidList = [statusMsg.key.remoteJid, statusJid];
           
           await socket.sendMessage(statusMsg.key.remoteJid, {
             react: {
               text: reactionEmoji,
               key: statusMsg.key
             }
-          }, {
-            statusJidList: statusJidList,
-            broadcast: true
-          } as any);
+          });
           
           logger.info(`[Status] ✅ ${reactionEmoji} Reaction sent to status: ${statusJid} (ID: ${statusId})`);
           

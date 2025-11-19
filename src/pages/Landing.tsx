@@ -59,7 +59,7 @@ const Landing = () => {
     },
     {
       question: "Comment fonctionne le paiement Premium ?",
-      answer: "Le paiement Premium est mensuel à 3000f/mois. Vous pouvez annuler à tout moment, et vous gardez l'accès jusqu'à la fin de votre période payée."
+      answer: "Le paiement Premium est mensuel à 1500f/mois. Vous pouvez annuler à tout moment, et vous gardez l'accès jusqu'à la fin de votre période payée."
     },
     {
       question: "Mes données sont-elles sécurisées ?",
@@ -288,7 +288,7 @@ const Landing = () => {
                 <div className="mb-6 sm:mb-8">
                   <h3 className="text-xl sm:text-2xl font-bold mb-2">Plan Premium</h3>
                   <div className="flex items-baseline gap-2 mb-2 sm:mb-3">
-                    <span className="text-4xl sm:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">3000f</span>
+                    <span className="text-4xl sm:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">1500f</span>
                     <span className="text-sm sm:text-base text-muted-foreground">/mois</span>
                   </div>
                   <p className="text-xs sm:text-sm text-muted-foreground">Pour une automatisation complète.</p>

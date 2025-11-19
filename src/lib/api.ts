@@ -1,6 +1,7 @@
 /**
  * API Configuration and Client
  */
+import logger from '@/lib/logger';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://amda-backend-3aji.onrender.com';
 
@@ -79,7 +80,7 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     } else if (isProtected) {
       // Short-circuit without hitting the network for protected routes when unauthenticated
-      console.warn(`[API] Skipping request without token for protected route: ${endpoint}`);
+      logger.warn(`Skipping request without token for protected route ${endpoint}`);
       return {
         success: false,
         error: {
@@ -115,7 +116,7 @@ class ApiClient {
           ? parseInt(retryAfter, 10) * 1000 
           : Math.min(1000 * Math.pow(2, retryCount), 10000); // Max 10 seconds
         
-        console.warn(`[API] Rate limited (429), retrying after ${delay}ms (attempt ${retryCount + 1}/3)`);
+        logger.warn(`API rate limited on ${endpoint}`, { retryCount, delay });
         
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.request<T>(endpoint, options, retryCount + 1);
@@ -126,13 +127,18 @@ class ApiClient {
         if (response.status === 401) {
           this.setToken(null);
         }
-        return {
+        const errorPayload = {
           success: false,
           error: {
             message: data.error?.message || data.message || 'An error occurred',
             statusCode: response.status,
           },
         };
+        logger.warn(`API request failed: ${endpoint}`, {
+          status: response.status,
+          message: errorPayload.error.message,
+        });
+        return errorPayload;
       }
 
       // If response includes a new token, update it automatically (for token refresh)
@@ -148,15 +154,17 @@ class ApiClient {
       // Retry on network errors with exponential backoff (max 3 retries)
       if (retryCount < 3 && error instanceof TypeError && error.message.includes('fetch')) {
         const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Max 5 seconds
-        console.warn(`[API] Network error, retrying after ${delay}ms (attempt ${retryCount + 1}/3)`);
+        logger.warn(`Network error calling ${endpoint}, retrying`, { retryCount, delay });
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.request<T>(endpoint, options, retryCount + 1);
       }
       
+      const errorMessage = error instanceof Error ? error.message : 'Network error';
+      logger.error(`API request failed permanently: ${endpoint}`, { error: errorMessage });
       return {
         success: false,
         error: {
-          message: error instanceof Error ? error.message : 'Network error',
+          message: errorMessage,
           statusCode: 0,
         },
       };

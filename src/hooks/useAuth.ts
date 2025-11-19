@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api, apiClient } from '@/lib/api';
+import logger from '@/lib/logger';
 import { toast } from 'sonner';
 
 export interface User {
@@ -41,7 +42,12 @@ export function useAuth() {
         throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
       // For other errors (network, 500, etc.), don't clear token - just throw error
-      throw new Error(response.error?.message || 'Failed to get user');
+      const message = response.error?.message || 'Failed to get user';
+      logger.error('Auth status request failed', {
+        statusCode: response.error?.statusCode,
+        message,
+      });
+      throw new Error(message);
     },
     retry: (failureCount, error: any) => {
       // Retry up to 3 times, but not for 401 errors

@@ -61,7 +61,7 @@ Netlify redéploiera automatiquement avec les nouvelles modifications.
 
 Pour vérifier que les modifications sont bien présentes :
 
-1. **Vérifiez les prix** : Devraient être à "3000f" et "0f"
+1. **Vérifiez les prix** : Devraient être à "1500f" et "0f"
 2. **Vérifiez les images** : 
    - Hero section : Image du dashboard WhatsApp
    - Section Features : 3 images différentes
@@ -78,7 +78,7 @@ Pour vérifier que les modifications sont bien présentes :
    - Ligne 142 : `src="/dashboard-whatsapp.png"`
    - Ligne 186 : `src="/dashboard-status.png"`
    - Ligne 192 : `src="/dashboard-viewonce.png"`
-   - Ligne 279 : `3000f`
+   - Ligne 279 : `1500f`
 
 3. Vérifiez que le build a bien été fait :
    ```bash

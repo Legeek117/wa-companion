@@ -171,7 +171,7 @@ const Connect = () => {
 
             {showManualReconnect && lastActivityLabel && (
               <div className="text-sm text-muted-foreground">
-                Dernière activité détectée : {lastActivityLabel}. La reconnexion reprendra exactement là où vous l'aviez laissée.
+                Dernière activité détectée : {lastActivityLabel}. La reconnexion reprendra exactement là où vous l'aviez laissée.
               </div>
             )}
           </div>

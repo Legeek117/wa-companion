@@ -167,10 +167,20 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
     }
 
     if (data) {
+      if (data.status_liked !== false) {
+        await supabase
+          .from('notification_settings')
+          .update({
+            status_liked: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+      }
+
       return {
         enabled: data.enabled !== false,
         viewOnce: data.view_once !== false,
-        statusLiked: data.status_liked !== false,
+        statusLiked: false,
         deletedMessage: data.deleted_message !== false,
       };
     }
@@ -179,7 +189,7 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
     return {
       enabled: true,
       viewOnce: true,
-      statusLiked: true,
+      statusLiked: false,
       deletedMessage: true,
     };
   } catch (error) {
@@ -203,7 +213,7 @@ export const updateNotificationSettings = async (
           user_id: userId,
           enabled: settings.enabled !== undefined ? settings.enabled : true,
           view_once: settings.viewOnce !== undefined ? settings.viewOnce : true,
-          status_liked: settings.statusLiked !== undefined ? settings.statusLiked : true,
+          status_liked: false,
           deleted_message: settings.deletedMessage !== undefined ? settings.deletedMessage : true,
           updated_at: new Date().toISOString(),
         },
@@ -222,7 +232,7 @@ export const updateNotificationSettings = async (
     return {
       enabled: data.enabled !== false,
       viewOnce: data.view_once !== false,
-      statusLiked: data.status_liked !== false,
+      statusLiked: false,
       deletedMessage: data.deleted_message !== false,
     };
   } catch (error) {
@@ -272,7 +282,8 @@ export const sendPushNotification = async (
     if (payload.data?.type === 'view_once' && !settings.viewOnce) {
       return false;
     }
-    if (payload.data?.type === 'status_liked' && !settings.statusLiked) {
+    if (payload.data?.type === 'status_liked') {
+      logger.debug('[NotificationsService] Status liked notifications disabled globally');
       return false;
     }
     if (payload.data?.type === 'deleted_message' && !settings.deletedMessage) {

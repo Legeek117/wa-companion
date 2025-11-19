@@ -180,6 +180,28 @@ const reconnectionTimers = new Map<string, NodeJS.Timeout>();
 // Track connection health monitoring intervals
 const connectionHealthMonitors = new Map<string, NodeJS.Timeout>();
 
+const STATUS_RETENTION_MS = 24 * 60 * 60 * 1000; // 24h
+
+const normalizeJid = (jid?: string | null): string | null => {
+  if (!jid || typeof jid !== 'string') {
+    return null;
+  }
+  const withoutDevice = jid.includes(':') ? jid.split(':')[0] : jid;
+  return withoutDevice.split('@')[0] || null;
+};
+
+const isSelfJid = (socket: WASocket | null, jid?: string | null): boolean => {
+  if (!socket || !jid) {
+    return false;
+  }
+  const socketAny = socket as any;
+  const userJid: string | undefined = socket.user?.id || socketAny?.user?.jid;
+  if (!userJid) {
+    return false;
+  }
+  return normalizeJid(userJid) === normalizeJid(jid);
+};
+
 // Maximum reconnection attempts before giving up (increased from 3 to 10)
 const MAX_RECONNECTION_ATTEMPTS = 10;
 const RECONNECTION_COOLDOWN = 30 * 1000; // 30 seconds (reduced from 60s for faster recovery)
@@ -3017,24 +3039,8 @@ export const likeStatus = async (
 
     logger.info(`[WhatsApp] ✅ Status like saved to database for ${finalContactName}`);
 
-    // Envoyer une notification push
-    try {
-      const { sendPushNotification } = await import('./notifications.service');
-      await sendPushNotification(userId, {
-        title: 'Status liké',
-        body: `Status de ${finalContactName} liké avec ${emoji}`,
-        image: mediaUrl || undefined,
-        data: {
-          type: 'status_liked',
-          contactId,
-          contactName: finalContactName,
-          statusId,
-          emoji,
-        },
-      });
-    } catch (notifError) {
-      logger.warn('[WhatsApp] Failed to send push notification:', notifError);
-    }
+    // Notifications push désactivées pour les likes de statuts (trop bruyantes)
+    logger.debug('[WhatsApp] Push notification for status liked skipped (feature disabled)');
   } catch (error) {
     logger.error('[WhatsApp] Error in likeStatus:', error);
     throw error;
@@ -3364,6 +3370,12 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
       return;
     }
 
+    // Skip statuses originating from the bot itself
+    if (isSelfJid(socket, contactId)) {
+      logger.debug(`[WhatsApp] Skipping self status for user ${userId}`);
+      return;
+    }
+
     // Get contact name
     let contactName = contactId.split('@')[0];
     try {
@@ -3395,6 +3407,10 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
     }
 
     const timestamp = message.messageTimestamp ? message.messageTimestamp * 1000 : Date.now();
+    if (Date.now() - timestamp > STATUS_RETENTION_MS) {
+      logger.debug(`[WhatsApp] Skipping expired status ${statusId} for user ${userId}`);
+      return;
+    }
 
     // Determine status type and content
     let type: 'image' | 'video' | 'text' = 'text';
@@ -3471,6 +3487,10 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
 
     // Get or create status list for this user
     let userStatuses = statusCache.get(userId) || [];
+    const cutoff = Date.now() - STATUS_RETENTION_MS;
+    if (userStatuses.length) {
+      userStatuses = userStatuses.filter((status) => status.timestamp > cutoff);
+    }
     
     // Check if status already exists
     const exists = userStatuses.find(s => s.id === statusId);
@@ -4056,8 +4076,11 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
       throw new Error('WhatsApp not connected');
     }
 
+    const cutoff = Date.now() - STATUS_RETENTION_MS;
+
     // First, try to get statuses from cache (collected from messages.upsert)
-    const cachedStatuses = statusCache.get(userId) || [];
+    const cachedStatuses = (statusCache.get(userId) || []).filter((status) => status.timestamp > cutoff);
+    statusCache.set(userId, cachedStatuses);
     
     // Group cached statuses by contact
     const contactsWithStatuses = new Map<string, {

@@ -423,7 +423,7 @@ const Settings = () => {
               </div>
 
               <Button className="w-full bg-premium">
-                Passer à Premium - 3000f/mois
+                Passer à Premium - 1500f/mois
               </Button>
 
               <div className="pt-4 border-t">

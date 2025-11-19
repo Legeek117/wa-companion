@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiClient } from '@/lib/api';
+import logger from '@/lib/logger';
 import { toast } from 'sonner';
 
 export interface WhatsAppStatus {
@@ -52,6 +53,9 @@ export function useWhatsApp() {
         throw new Error(response.error?.message || 'Failed to get WhatsApp status');
       } catch (error) {
         console.error('[WhatsApp] Error fetching status:', error);
+        logger.error('WhatsApp status fetch failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
         throw error;
       }
     },
@@ -111,6 +115,9 @@ export function useWhatsApp() {
     },
     onError: (error: Error) => {
       console.error('[WhatsApp] QR code mutation error:', error);
+      logger.error('QR code mutation error', {
+        error: error.message,
+      });
       
       // Extract error message from API response if available
       let errorMessage = error.message || 'Erreur lors de la génération du code QR';
@@ -207,6 +214,9 @@ export function useWhatsApp() {
             }
           } catch (error) {
             console.error('[WhatsApp] Error polling for pairing code:', error);
+            logger.warn('Pairing code polling error', {
+              error: error instanceof Error ? error.message : String(error),
+            });
             if (attempts < maxAttempts) {
               pollTimeout = setTimeout(pollStatus, 5000);
             } else {
@@ -223,6 +233,7 @@ export function useWhatsApp() {
     },
     onError: (error: Error) => {
       console.error('[WhatsApp] Pairing code mutation error:', error);
+      logger.error('Pairing code mutation error', { error: error.message });
       
       // Extract error message from API response if available
       let errorMessage = error.message || 'Erreur lors de la génération du code de couplage';

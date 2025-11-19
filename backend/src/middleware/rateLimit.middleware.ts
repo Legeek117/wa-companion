@@ -17,7 +17,7 @@ export const apiLimiter = rateLimit({
 // Increased limit to handle polling for QR code and pairing code
 export const looseLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 120, // Increased from 60 to 120 requests per minute (2 per second) to handle polling
+  max: 300, // Allow up to 5 req/sec to reduce 429 while still protecting backend
   message: 'Too many requests, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
@@ -39,5 +39,11 @@ export const whatsappLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 30, // Increased from 10 to 30 requests per minute
   message: 'Too many WhatsApp requests, please try again later.',
+});
+
+export const logsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: 'Too many log events, please try again later.',
 });
 

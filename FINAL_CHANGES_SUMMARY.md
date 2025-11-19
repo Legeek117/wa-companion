@@ -1,6 +1,6 @@
 # 📋 Résumé des Dernières Modifications
 
-## ✅ 1. Prix Premium changé à 3000f
+## ✅ 1. Prix Premium changé à 1500f
 
 **Fichiers modifiés** :
 - ✅ `src/pages/Landing.tsx` - Prix dans la section tarifs et FAQ
@@ -8,9 +8,9 @@
 - ✅ `src/pages/Settings.tsx` - Prix dans les paramètres
 
 **Changements** :
-- `9.99€/mois` → `3000f/mois`
-- `7.99€/mois` → `3000f/mois`
-- `79.99€/an` → `30000f/an` (avec économie de 17%)
+- `9.99€/mois` → `1500f/mois`
+- `7.99€/mois` → `1500f/mois`
+- `79.99€/an` → `15000f/an` (avec économie de 17%)
 
 ## ✅ 2. Images ajoutées sur la page d'accueil
 
@@ -80,12 +80,12 @@ Vous devez ajouter ces 3 images dans le dossier `public/` :
 3. **Tester** :
    - Vérifiez que les images s'affichent correctement sur la page d'accueil
    - Testez le responsive sur mobile, tablette et desktop
-   - Vérifiez que les prix sont bien à 3000f partout
+   - Vérifiez que les prix sont bien à 1500f partout
 
 4. **Commiter et pousser** :
    ```bash
    git add .
-   git commit -m "Update: Premium price to 3000f, add dashboard images to landing page, add logo in hero section"
+   git commit -m "Update: Premium price to 1500f, add dashboard images to landing page, add logo in hero section"
    git push
    ```
 
