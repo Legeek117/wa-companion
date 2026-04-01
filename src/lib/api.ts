@@ -3,7 +3,7 @@
  */
 import logger from '@/lib/logger';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://amda-backend-3aji.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com';
 
 export interface ApiResponse<T = any> {
   success: boolean;
