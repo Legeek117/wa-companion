@@ -101,31 +101,26 @@ async function startServer(): Promise<void> {
             const userId = session.user_id;
             const sessionPath = join(process.cwd(), env.WHATSAPP_SESSION_PATH, userId);
             
-            // Check if credentials file exists
-            const credsPath = join(sessionPath, 'creds.json');
-            if (existsSync(credsPath)) {
-              // Check if already connected before attempting reconnect
-              // reconnectWhatsAppIfCredentialsExist will check this internally too
-              logger.info(`[Startup] Checking if user ${userId} (status: ${session.status}) needs reconnection...`);
-              
-              // Add delay between reconnections (2 seconds per user) to avoid rate limiting
-              const delay = i * 2000;
-              
-              setTimeout(() => {
-                // Reconnect in background (don't wait) - function will skip if already connected
-                reconnectWhatsAppIfCredentialsExist(userId).then((reconnected) => {
-                  if (reconnected) {
-                    logger.info(`✅ [Startup] Successfully reconnected user ${userId} on server startup`);
-                  } else {
-                    logger.debug(`[Startup] User ${userId} did not need reconnection or reconnection is in progress`);
-                  }
-                }).catch((error) => {
-                  logger.error(`[Startup] Error auto-reconnecting user ${userId}:`, error);
-                });
-              }, delay);
-            } else {
-              logger.debug(`[Startup] No credentials found for user ${userId}, skipping auto-reconnect`);
-            }
+            // On Render, files are ephemeral and will NOT exist on startup
+            // We must call reconnectWhatsAppIfCredentialsExist which internally
+            // restores session files from Supabase if needed.
+            logger.info(`[Startup] Checking if user ${userId} (status: ${session.status}) needs reconnection...`);
+            
+            // Add delay between reconnections (2 seconds per user) to avoid rate limiting
+            const delay = i * 2000;
+            
+            setTimeout(() => {
+              // Reconnect in background (don't wait) - function will skip if already connected
+              reconnectWhatsAppIfCredentialsExist(userId).then((reconnected) => {
+                if (reconnected) {
+                  logger.info(`✅ [Startup] Successfully reconnected user ${userId} on server startup`);
+                } else {
+                  logger.debug(`[Startup] User ${userId} could not be reconnected or is already connecting`);
+                }
+              }).catch((error) => {
+                logger.error(`[Startup] Error auto-reconnecting user ${userId}:`, error);
+              });
+            }, delay);
           }
           
           logger.info(`[Startup] Initiated auto-reconnect for ${sessions.length} user(s) with credentials`);
