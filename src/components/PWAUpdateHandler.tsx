@@ -6,8 +6,8 @@ import { RefreshCw } from 'lucide-react';
 
 export function PWAUpdateHandler() {
   const {
-    offlineReady: [offlineReady, setOfflineReady],
-    needUpdate: [needUpdate, setNeedUpdate],
+    offlineReady,
+    needUpdate,
     updateServiceWorker,
   } = useRegisterSW({
     onRegistered(r) {
