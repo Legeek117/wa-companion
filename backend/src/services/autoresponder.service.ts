@@ -47,7 +47,8 @@ const extractQuotedMessage = (message: any): proto.IMessage | null => {
 };
 
 /**
- * Handle incoming messages for autoresponder and View Once commands
+ * Handle incoming messages for View Once commands ONLY
+ * ⚠️ Autoresponder functionality is DISABLED for deployment.
  */
 export const handleIncomingMessage = async (
   userId: string,
@@ -272,140 +273,34 @@ export const getAutoresponderConfig = async (userId: string) => {
 
 /**
  * Activate autoresponder mode
+ * ⚠️ DÉSACTIVÉ POUR LE DÉPLOIEMENT
  */
-export const activateMode = async (userId: string, mode: string, message?: string) => {
-  try {
-    // Check if config exists
-    const { data: existing } = await supabase
-      .from('autoresponder_config')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('mode', mode)
-      .single();
-
-    if (existing) {
-      // Update existing config
-      const { error } = await supabase
-        .from('autoresponder_config')
-        .update({
-          enabled: true,
-          message: message || existing.message,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-        .eq('mode', mode);
-
-      if (error) throw error;
-    } else {
-      // Create new config
-      const defaultMessage = mode === 'offline' 
-        ? '🤖 Répondeur automatique\n\nBonjour ! Je ne suis pas disponible pour le moment.\nLaissez-moi un message, je vous répondrai dès que possible.\n\nMerci de votre compréhension !'
-        : '⏰ Mode Occupé\n\nJe suis actuellement occupé(e) et ne peux pas répondre.\nJe reviendrai vers vous dès que possible.\n\nMerci de patienter !';
-
-      const { error } = await supabase
-        .from('autoresponder_config')
-        .insert({
-          user_id: userId,
-          mode,
-          enabled: true,
-          message: message || defaultMessage,
-        });
-
-      if (error) throw error;
-    }
-
-    // Deactivate other modes
-    await supabase
-      .from('autoresponder_config')
-      .update({
-        enabled: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .neq('mode', mode);
-
-    logger.info(`[Autoresponder] Activated mode ${mode} for user ${userId}`);
-  } catch (error: any) {
-    logger.error('[Autoresponder] Error activating mode:', error);
-    throw error;
-  }
+export const activateMode = async (_userId: string, _mode: string, _message?: string) => {
+  logger.info(`[Autoresponder] activateMode called but feature is disabled for deployment`);
+  return;
 };
 
 /**
  * Deactivate autoresponder mode
+ * ⚠️ DÉSACTIVÉ POUR LE DÉPLOIEMENT
  */
-export const deactivateMode = async (userId: string, mode: string) => {
-  try {
-    const { error } = await supabase
-      .from('autoresponder_config')
-      .update({
-        enabled: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('mode', mode);
-
-    if (error) throw error;
-
-    logger.info(`[Autoresponder] Deactivated mode ${mode} for user ${userId}`);
-  } catch (error: any) {
-    logger.error('[Autoresponder] Error deactivating mode:', error);
-    throw error;
-  }
+export const deactivateMode = async (_userId: string, _mode: string) => {
+  logger.info(`[Autoresponder] deactivateMode called but feature is disabled for deployment`);
+  return;
 };
 
 /**
  * Update contact filter for autoresponder
+ * ⚠️ DÉSACTIVÉ POUR LE DÉPLOIEMENT
  */
 export const updateContactFilter = async (
-  userId: string,
-  contactId: string,
-  contactName: string,
-  enabled: boolean,
-  customMessage?: string
+  _userId: string,
+  _contactId: string,
+  _contactName: string,
+  _enabled: boolean,
+  _customMessage?: string
 ) => {
-  try {
-    // Check if contact config exists
-    const { data: existing } = await supabase
-      .from('autoresponder_contacts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('contact_id', contactId)
-      .single();
-
-    if (existing) {
-      // Update existing
-      const { error } = await supabase
-        .from('autoresponder_contacts')
-        .update({
-          enabled,
-          custom_message: customMessage || null,
-          contact_name: contactName,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-        .eq('contact_id', contactId);
-
-      if (error) throw error;
-    } else {
-      // Create new
-      const { error } = await supabase
-        .from('autoresponder_contacts')
-        .insert({
-          user_id: userId,
-          contact_id: contactId,
-          contact_name: contactName,
-          enabled,
-          custom_message: customMessage || null,
-        });
-
-      if (error) throw error;
-    }
-
-    logger.info(`[Autoresponder] Updated contact filter for ${contactId} (user ${userId})`);
-  } catch (error: any) {
-    logger.error('[Autoresponder] Error updating contact filter:', error);
-    throw error;
-  }
+  logger.info(`[Autoresponder] updateContactFilter called but feature is disabled for deployment`);
+  return;
 };
 
