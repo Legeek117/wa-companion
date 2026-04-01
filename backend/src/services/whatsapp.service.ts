@@ -3601,18 +3601,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
       });
       logger.info(`[Status] ✅ handleStatusUpdate completed for user ${userId}`);
 
-      // 🔥 DÉTECTER ET STOCKER LES STATUS (inspiré du code de référence)
-      for (const message of update.messages) {
-        // Vérifier si c'est un status (remoteJid === 'status@broadcast')
-        if (message.key?.remoteJid === 'status@broadcast') {
-          try {
-            logger.info(`[WhatsApp] 📸 Status détecté dans messages.upsert pour user ${userId}`);
-            await processAndStoreStatus(userId, socket, message);
-          } catch (error) {
-            logger.error(`[WhatsApp] Error processing status from messages.upsert:`, error);
-          }
-        }
-      }
+      // Status processing loop removed - Statuses are disabled as per user request
 
       for (const message of update.messages) {
         logger.info(`[WhatsApp] 📥 Processing message for user ${userId}:`, {
