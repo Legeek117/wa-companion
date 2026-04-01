@@ -469,12 +469,7 @@ const downloadViewOnceFromQuoted = async (
     const extension = viewOnceData.type === 'video' ? 'mp4' : (viewOnceData.type === 'audio' ? 'mp3' : 'jpg');
     const filename = `${userId}_${timestamp}_${random}.${extension}`;
 
-    // Upload vers Supabase Storage (ou local en fallback)
-    const { uploadMedia } = await import('./media.service');
-    const mimeType = viewOnceData.type === 'video' ? 'video/mp4' : (viewOnceData.type === 'audio' ? 'audio/mp3' : 'image/jpeg');
-    const mediaUrl = await uploadMedia(buffer, filename, mimeType, 'view-once', userId);
-    
-    logger.info(`[ViewOnce] 💾 Saved: ${mediaUrl}`);
+    logger.info(`[ViewOnce] ✅ Buffer ready: ${buffer.length} bytes`);
 
     return {
       success: true,
@@ -596,15 +591,10 @@ export const captureViewOnceFromQuoted = async (
     
     logger.info(`[ViewOnce] ✅ Download successful: ${downloadResult.buffer.length} bytes`);
 
-    // 5. Upload vers Supabase Storage (ou local en fallback)
-    // Le buffer est déjà téléchargé, on l'upload maintenant
+    // 5. Upload vers Supabase Storage
     const { uploadMedia } = await import('./media.service');
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 10);
-    const extension = viewOnceData.type === 'video' ? 'mp4' : (viewOnceData.type === 'audio' ? 'mp3' : 'jpg');
-    const filename = `${userId}_${timestamp}_${random}.${extension}`;
     const mimeType = viewOnceData.type === 'video' ? 'video/mp4' : (viewOnceData.type === 'audio' ? 'audio/mp3' : 'image/jpeg');
-    const mediaUrl = await uploadMedia(downloadResult.buffer, filename, mimeType, 'view-once', userId);
+    const mediaUrl = await uploadMedia(downloadResult.buffer, downloadResult.filename!, mimeType, 'view-once', userId);
 
     // 6. Sauvegarder en base de données
     const fileSize = downloadResult.buffer.length;

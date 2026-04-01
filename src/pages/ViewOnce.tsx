@@ -11,7 +11,7 @@ import { useViewOnce } from "@/hooks/useViewOnce";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "@/components/Loading";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiResponse } from "@/lib/api";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -78,7 +78,7 @@ const ViewOnce = () => {
 
   const handleDownload = async (captureId: string) => {
     try {
-      const response = await api.viewOnce.download(captureId);
+      const response = await api.viewOnce.download(captureId) as ApiResponse<{ mediaUrl: string }>;
       if (response.success && response.data?.mediaUrl) {
         // Create a temporary link to download
         const link = document.createElement('a');

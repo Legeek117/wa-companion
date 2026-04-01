@@ -3554,6 +3554,13 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         updateKeys: update ? Object.keys(update) : [],
       });
       
+      // IMPORTANT: Only process 'notify' updates to avoid double-processing
+      // Baileys sends 'append' messages for ephemeral messages or slow connections
+      if (update.type === 'append') {
+        logger.debug(`[WhatsApp] Skipping 'append' update for user ${userId}`);
+        return;
+      }
+      
       // Update lastSeen when messages are received - this indicates the session is active
       // This is important for detecting connection status even after server restart
       await updateSessionStatus(userId, { 
