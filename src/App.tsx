@@ -24,6 +24,7 @@ import Help from "./pages/Help";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import NotFound from "./pages/NotFound";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
+import { PWAUpdateHandler } from "./components/PWAUpdateHandler";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           <PWAInstallBanner />
+          <PWAUpdateHandler />
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
