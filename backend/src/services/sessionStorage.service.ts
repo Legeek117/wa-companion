@@ -7,6 +7,10 @@ import { logger } from '../config/logger';
 const STORAGE_BUCKET = env.SUPABASE_STORAGE_BUCKET?.trim();
 const supabase = getSupabaseClient();
 
+// Debounce map to store timers per user
+const syncDebounceTimers = new Map<string, NodeJS.Timeout>();
+const SYNC_DEBOUNCE_MS = 5000; // 5 seconds debounce
+
 const isStorageEnabled = (): boolean => {
   return !!STORAGE_BUCKET;
 };
@@ -143,6 +147,30 @@ export const syncSessionToSupabase = async (userId: string, sessionPath: string)
   } catch (error) {
     logger.warn(`[SessionStorage] Failed to sync session to Supabase for user ${userId}:`, error);
   }
+};
+
+/**
+ * Debounced version of syncSessionToSupabase to prevent flooding
+ */
+export const debouncedSyncSessionToSupabase = (userId: string, sessionPath: string): void => {
+  if (!isStorageEnabled()) return;
+
+  // Clear existing timer if any
+  if (syncDebounceTimers.has(userId)) {
+    clearTimeout(syncDebounceTimers.get(userId)!);
+  }
+
+  // Set new timer
+  const timer = setTimeout(async () => {
+    try {
+      await syncSessionToSupabase(userId, sessionPath);
+      syncDebounceTimers.delete(userId);
+    } catch (error) {
+      logger.error(`[SessionStorage] Error in debounced sync for ${userId}:`, error);
+    }
+  }, SYNC_DEBOUNCE_MS);
+
+  syncDebounceTimers.set(userId, timer);
 };
 
 export const ensureSessionFromSupabase = async (userId: string, sessionPath: string): Promise<boolean> => {

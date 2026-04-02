@@ -18,6 +18,7 @@ import {
   ensureSessionFromSupabase,
   removeSessionFromSupabase,
   syncSessionToSupabase,
+  debouncedSyncSessionToSupabase,
 } from './sessionStorage.service';
 // ⚠️ DÉSACTIVÉ : handleViewOnceMessage ne fonctionne plus depuis 2024
 // Les View Once ne sont plus accessibles directement, uniquement via quoted messages
@@ -412,7 +413,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
     const persistCreds = async () => {
       try {
         await saveCreds();
-        await syncSessionToSupabase(userId, sessionPath);
+        debouncedSyncSessionToSupabase(userId, sessionPath);
       } catch (error) {
         logger.warn(`[WhatsApp] Error persisting credentials for user ${userId}:`, error);
       }
@@ -672,7 +673,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
                   const persistRestartCreds = async () => {
                     try {
                       await newSaveCreds();
-                      await syncSessionToSupabase(userId, sessionPath);
+                      debouncedSyncSessionToSupabase(userId, sessionPath);
                     } catch (error) {
                       logger.warn(`[WhatsApp] Error persisting credentials during restart for user ${userId}:`, error);
                     }
@@ -1177,7 +1178,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
     const persistCreds = async () => {
       try {
         await saveCreds();
-        await syncSessionToSupabase(userId, sessionPath);
+        debouncedSyncSessionToSupabase(userId, sessionPath);
       } catch (error) {
         logger.warn(`[WhatsApp] Error persisting credentials (pairing) for user ${userId}:`, error);
       }
@@ -1454,7 +1455,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
                   const persistRestartCreds = async () => {
                     try {
                       await newSaveCreds();
-                      await syncSessionToSupabase(userId, sessionPath);
+                      debouncedSyncSessionToSupabase(userId, sessionPath);
                     } catch (error) {
                       logger.warn(`[WhatsApp] Error persisting credentials during restart (pairing):`, error);
                     }
@@ -3754,7 +3755,7 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
     const persistCreds = async () => {
       try {
         await saveCreds();
-        await syncSessionToSupabase(userId, sessionPath);
+        debouncedSyncSessionToSupabase(userId, sessionPath);
       } catch (error) {
         logger.warn(`[WhatsApp] Error persisting credentials during auto-reconnect for user ${userId}:`, error);
       }
