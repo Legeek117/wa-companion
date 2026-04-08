@@ -25,6 +25,7 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import NotFound from "./pages/NotFound";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
 import { PWAUpdateHandler } from "./components/PWAUpdateHandler";
+import KeepAlive from "./components/KeepAlive";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +61,7 @@ const App = () => (
           </Routes>
           <PWAInstallBanner />
           <PWAUpdateHandler />
+          <KeepAlive />
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
