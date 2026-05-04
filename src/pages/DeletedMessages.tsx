@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com';
+const API_URL = (import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com').replace(/[\/\.]+$/, '');
 
 // Helper function to build full media URL
 const buildMediaUrl = (mediaUrl: string | null): string | null => {

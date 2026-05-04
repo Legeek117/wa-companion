@@ -26,7 +26,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com';
+const API_URL = (import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com').replace(/[\/\.]+$/, '');
 
 // Helper function to build full media URL
 const buildMediaUrl = (mediaUrl: string | null): string | null => {

@@ -9,7 +9,7 @@ interface FrontendLogPayload {
   timestamp: string;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com';
+const API_URL = (import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com').replace(/[\/\.]+$/, '');
 const LOG_ENDPOINT = `${API_URL}/api/logs/frontend`;
 
 const getToken = (): string | null => {

@@ -11,7 +11,10 @@ const KeepAlive = () => {
     
     const pingBackend = async () => {
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com';
+        let apiUrl = import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com';
+        // Clean URL: remove trailing slashes or dots
+        apiUrl = apiUrl.replace(/[\/\.]+$/, '');
+        
         const response = await fetch(`${apiUrl}/health`, {
           method: 'GET',
           // Use mode 'no-cors' if we just want to trigger activity without needing the response body

@@ -69,7 +69,11 @@ app.use(
       
       // In production, only allow the configured frontend URL
       if (env.NODE_ENV === 'production') {
-        const allowedOrigins = [env.FRONTEND_URL, ...additionalOrigins].filter(Boolean);
+        const allowedOrigins = [
+          env.FRONTEND_URL,
+          'https://amdabot.netlify.app',
+          ...additionalOrigins
+        ].filter(Boolean);
         if (allowedOrigins.includes(origin)) {
           logger.info(`[CORS] ✅ Allowing production origin: ${origin}`);
           return callback(null, true);
