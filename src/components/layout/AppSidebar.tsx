@@ -20,6 +20,7 @@ import {
   Trash2,
   Settings,
   Sparkles,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,7 @@ const desktopMenuItems = [
   { title: "Upgrade Premium", url: "/dashboard/upgrade", icon: Crown },
   { title: "Aide & Support", url: "/dashboard/help", icon: HelpCircle },
   { title: "Paramètres", url: "/dashboard/settings", icon: Settings },
+  { title: "Admin", url: "/dashboard/admin", icon: Shield, admin: true },
 ];
 
 // Bottom navigation items for mobile
@@ -103,7 +105,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild>
                       <NavLink
                         to={item.url}
-                        end
+                        end={item.url !== "/dashboard/admin"}
                         className="flex items-center gap-3 px-4 py-2 rounded-lg transition-colors hover:bg-sidebar-accent relative"
                         activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
                       >

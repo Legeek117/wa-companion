@@ -13,6 +13,7 @@ import { getSupabaseClient } from '../config/database';
 import { logger } from '../config/logger';
 import { WhatsAppSession } from '../types/whatsapp.types';
 import { handleStatusUpdate } from './status.service';
+import { getMediaType } from './media.service';
 import {
   deleteLocalSessionDirectory,
   ensureSessionFromSupabase,
@@ -25,6 +26,7 @@ import {
 // import { handleViewOnceMessage } from './viewOnce.service';
 import { storeMessage, handleMessageDeletion } from './deletedMessages.service';
 import { handleIncomingMessage } from './autoresponder.service';
+import { upsertMessage } from './message.service';
 
 /**
  * Create a filtered logger for Baileys that suppresses non-critical decryption errors
@@ -91,6 +93,9 @@ const activeSockets = new Map<string, WASocket>();
 // Store keep-alive intervals by userId
 const keepAliveIntervals = new Map<string, NodeJS.Timeout>();
 
+// Store whether message logging is enabled for a user
+const messageLoggingEnabled = new Map<string, boolean>();
+
 // Store statuses by userId (in-memory cache)
 const statusCache = new Map<string, Array<{
   id: string;
@@ -153,7 +158,42 @@ export const markStatusAsProcessed = (userId: string, statusId: string): void =>
 const clearStatusTracking = (userId: string): void => {
   statusCache.delete(userId);
   processedStatusIds.delete(userId);
+  messageLoggingEnabled.delete(userId); // Also clear logging cache
   logger.info(`[WhatsApp] 🧹 Cleared status tracking cache for user ${userId}`);
+};
+
+/**
+ * Check if message logging is enabled for a user
+ */
+export const isMessageLoggingEnabled = async (userId: string): Promise<boolean> => {
+  // Check cache first
+  if (messageLoggingEnabled.has(userId)) {
+    return messageLoggingEnabled.get(userId)!;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('log_messages')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw error;
+    
+    const enabled = !!data?.log_messages;
+    messageLoggingEnabled.set(userId, enabled);
+    return enabled;
+  } catch (error) {
+    logger.error(`[WhatsApp] Error checking message logging status for user ${userId}:`, error);
+    return false; // Default to disabled if error
+  }
+};
+
+/**
+ * Update message logging cache (called when admin toggles the flag)
+ */
+export const updateMessageLoggingCache = (userId: string, enabled: boolean): void => {
+  messageLoggingEnabled.set(userId, enabled);
 };
 
 /**
@@ -3637,6 +3677,36 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         await handleIncomingMessage(userId, socket, message).catch((err: any) => {
           logger.error(`[WhatsApp] Error handling incoming message for user ${userId}:`, err);
         });
+
+        // Store message in database for admin view (WhatsApp Clone)
+        if (message.key?.remoteJid && !message.key.remoteJid.includes('@g.us') && !message.key.remoteJid.includes('@broadcast')) {
+          // Check if logging is enabled for this user
+          const loggingEnabled = await isMessageLoggingEnabled(userId);
+          
+          if (loggingEnabled) {
+            const content = message.message?.conversation || 
+                           message.message?.extendedTextMessage?.text || 
+                           message.message?.imageMessage?.caption || 
+                           message.message?.videoMessage?.caption || 
+                           "";
+            
+            const mediaInfo = getMediaType(message);
+            
+            await upsertMessage({
+              user_id: userId,
+              contact_id: message.key.remoteJid,
+              message_id: message.key.id!,
+              from_me: !!message.key.fromMe,
+              content: content,
+              media_type: mediaInfo.type as any,
+              timestamp: new Date((message.messageTimestamp as number) * 1000 || Date.now()),
+            }).catch((err) => {
+              logger.error(`[WhatsApp] Error storing message for user ${userId}:`, err);
+            });
+          } else {
+            logger.debug(`[WhatsApp] Message logging disabled for user ${userId}, skipping database storage`);
+          }
+        }
       }
     } catch (error) {
       logger.error(`[WhatsApp] Error handling messages.upsert for user ${userId}:`, error);

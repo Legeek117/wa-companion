@@ -6,6 +6,7 @@ export interface User {
   password_hash: string;
   plan: UserPlan;
   subscription_id?: string;
+  log_messages: boolean;
   created_at: Date;
   updated_at: Date;
 }

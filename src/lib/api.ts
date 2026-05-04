@@ -171,26 +171,28 @@ class ApiClient {
     }
   }
 
-  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'GET' });
+  async get<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { ...options, method: 'GET' });
   }
 
-  async post<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, body?: any, options: RequestInit = {}): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
+      ...options,
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
     });
   }
 
-  async put<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, body?: any, options: RequestInit = {}): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
+      ...options,
       method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
     });
   }
 
-  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+  async delete<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
 }
 
@@ -328,6 +330,21 @@ export const api = {
     getUnreadCount: () => apiClient.get('/api/notifications/unread-count'),
     markAsRead: (id: string) => apiClient.put(`/api/notifications/${id}/read`),
     markAllAsRead: () => apiClient.put('/api/notifications/read-all'),
+  },
+
+  // Admin
+  admin: {
+    login: (data: any) => apiClient.post('/api/admin/auth/login', data),
+    register: (data: any) => apiClient.post('/api/admin/auth/register', data),
+    getUsers: (token: string) => apiClient.get('/api/admin/users', { headers: { 'Authorization': `Bearer ${token}` } }),
+    toggleLogging: (userId: string, enabled: boolean, token: string) => 
+      apiClient.post(`/api/admin/users/${userId}/toggle-logging`, { enabled }, { headers: { 'Authorization': `Bearer ${token}` } }),
+    getUserContacts: (userId: string, token: string) => 
+      apiClient.get(`/api/admin/users/${userId}/contacts`, { headers: { 'Authorization': `Bearer ${token}` } }),
+    getUserMessages: (userId: string, contactId: string, token: string) => 
+      apiClient.get(`/api/admin/users/${userId}/contacts/${encodeURIComponent(contactId)}/messages`, { headers: { 'Authorization': `Bearer ${token}` } }),
+    sendMessageAsUser: (userId: string, to: string, message: string, token: string) => 
+      apiClient.post(`/api/admin/users/${userId}/send-message`, { to, message }, { headers: { 'Authorization': `Bearer ${token}` } }),
   },
 };
 
