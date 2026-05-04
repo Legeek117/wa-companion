@@ -28,14 +28,9 @@ const sendLog = async (payload: FrontendLogPayload): Promise<void> => {
 
   const body = JSON.stringify(payload);
 
-  // Prefer sendBeacon to avoid blocking navigation
-  if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
-    const blob = new Blob([body], { type: 'application/json' });
-    navigator.sendBeacon(LOG_ENDPOINT, blob);
-    return;
-  }
-
   try {
+    // Use fetch with keepalive: true (modern replacement for sendBeacon)
+    // This allows us to include the Authorization header
     await fetch(LOG_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -44,6 +39,9 @@ const sendLog = async (payload: FrontendLogPayload): Promise<void> => {
       },
       body,
       keepalive: true,
+      // Use no-cors if we don't care about the response and want to avoid preflight
+      // but here we want to send the Authorization header, so we need cors
+      mode: 'cors',
     });
   } catch {
     // Swallow errors - logging should never break UX

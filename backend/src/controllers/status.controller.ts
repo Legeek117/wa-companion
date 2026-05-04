@@ -394,13 +394,16 @@ export const getStatusLikes = async (req: AuthRequest, res: Response): Promise<v
     logger.error('[Status] Error getting likes:', {
       error,
       message: error?.message,
+      code: error?.code,
+      details: error?.details,
       stack: error?.stack,
       userId: req.userId,
     });
     res.status(500).json({
       success: false,
       error: { 
-        message: error?.message || 'Internal server error', 
+        message: `Erreur lors de la récupération des likes: ${error?.message || 'Internal server error'}`,
+        code: error?.code,
         statusCode: 500 
       },
     });
