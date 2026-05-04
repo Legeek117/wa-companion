@@ -222,6 +222,7 @@ export const getUserById = async (userId: string): Promise<User | null> => {
     password_hash: user.password_hash,
     plan: user.plan as UserPlan,
     subscription_id: user.subscription_id || undefined,
+    log_messages: user.log_messages ?? false,
     created_at: new Date(user.created_at),
     updated_at: new Date(user.updated_at),
   };
@@ -247,6 +248,7 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
     password_hash: user.password_hash,
     plan: user.plan as UserPlan,
     subscription_id: user.subscription_id || undefined,
+    log_messages: user.log_messages ?? false,
     created_at: new Date(user.created_at),
     updated_at: new Date(user.updated_at),
   };
