@@ -12,11 +12,21 @@ import { Loading } from "@/components/Loading";
 
 const Admin = () => {
   const { useUsers, useToggleLogging, logout, adminToken } = useAdmin();
-  const { data: users, isLoading } = useUsers();
+  const { data: users, isLoading, error } = useUsers();
   const navigate = useNavigate();
 
   if (!adminToken) return <Navigate to="/admin/auth" replace />;
   if (isLoading) return <Loading />;
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-8 px-4 text-center">
+        <h2 className="text-2xl font-bold text-destructive mb-4">Erreur de chargement</h2>
+        <p className="text-muted-foreground mb-6">{(error as any)?.message || "Impossible de récupérer la liste des utilisateurs."}</p>
+        <Button onClick={() => window.location.reload()}>Réessayer</Button>
+      </div>
+    );
+  }
 
   const usersList = (users as any[]) || [];
 

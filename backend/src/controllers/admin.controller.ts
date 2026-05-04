@@ -119,10 +119,17 @@ export const adminRegister = async (req: Request, res: Response): Promise<void> 
       .single();
 
     if (error) {
+      logger.error('[Admin] Register DB error:', error);
       if (error.code === '23505') {
         res.status(409).json({ success: false, error: { message: 'Cet email est déjà utilisé' } });
       } else {
-        throw error;
+        res.status(500).json({ 
+          success: false, 
+          error: { 
+            message: `Erreur base de données: ${error.message}`,
+            code: error.code
+          } 
+        });
       }
       return;
     }
@@ -269,15 +276,37 @@ async function migrateAllFiles(): Promise<void> {
  */
 export const getAllUsers = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const { data: users, error } = await supabase
+    const { data: users, error: usersError } = await supabase
       .from('users')
       .select('id, email, plan, log_messages, created_at');
 
-    if (error) throw error;
+    if (usersError) {
+      logger.error('[Admin] Error fetching users:', usersError);
+      res.status(500).json({
+        success: false,
+        error: { 
+          message: `Erreur lors de la récupération des utilisateurs: ${usersError.message}`,
+          code: usersError.code 
+        },
+      });
+      return;
+    }
 
-    const { data: sessions } = await supabase
+    if (!users) {
+      res.status(200).json({
+        success: true,
+        data: [],
+      });
+      return;
+    }
+
+    const { data: sessions, error: sessionsError } = await supabase
       .from('whatsapp_sessions')
       .select('user_id, status, last_seen');
+
+    if (sessionsError) {
+      logger.warn('[Admin] Error fetching sessions (non-fatal):', sessionsError);
+    }
 
     const usersWithStatus = users.map(user => {
       const session = sessions?.find(s => s.user_id === user.id);
@@ -293,10 +322,10 @@ export const getAllUsers = async (req: AdminRequest, res: Response): Promise<voi
       data: usersWithStatus,
     });
   } catch (error) {
-    logger.error('[Admin] Error getting all users:', error);
+    logger.error('[Admin] Fatal error in getAllUsers:', error);
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to get users' },
+      error: { message: 'Erreur interne du serveur' },
     });
   }
 };

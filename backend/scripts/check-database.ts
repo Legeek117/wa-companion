@@ -12,6 +12,9 @@ async function checkDatabase() {
 
   const tables = [
     'users',
+    'admins',
+    'contacts',
+    'whatsapp_messages',
     'status_likes',
     'status_auto_like_config',
     'quotas',

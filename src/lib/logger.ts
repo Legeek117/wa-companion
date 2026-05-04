@@ -9,7 +9,8 @@ interface FrontendLogPayload {
   timestamp: string;
 }
 
-const LOG_ENDPOINT = '/api/logs/frontend';
+const API_URL = import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com';
+const LOG_ENDPOINT = `${API_URL}/api/logs/frontend`;
 
 const getToken = (): string | null => {
   if (typeof window === 'undefined') {
