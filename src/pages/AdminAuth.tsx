@@ -8,18 +8,13 @@ import { Shield, Lock, Mail, UserPlus, LogIn } from "lucide-react";
 import { Loading } from "@/components/Loading";
 
 const AdminAuth = () => {
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { login, register } = useAdmin();
+  const { login } = useAdmin();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLogin) {
-      login.mutate({ email, password });
-    } else {
-      register.mutate({ email, password });
-    }
+    login.mutate({ email, password });
   };
 
   return (
@@ -36,12 +31,10 @@ const AdminAuth = () => {
         <Card className="border-primary/10 shadow-glass overflow-hidden">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">
-              {isLogin ? "Connexion" : "Créer un compte"}
+              Connexion
             </CardTitle>
             <CardDescription className="text-center">
-              {isLogin 
-                ? "Entrez vos identifiants admin" 
-                : "Configurez un nouvel accès administrateur"}
+              Entrez vos identifiants admin
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -81,25 +74,13 @@ const AdminAuth = () => {
               <Button 
                 type="submit" 
                 className="w-full gap-2" 
-                disabled={login.isPending || register.isPending}
+                disabled={login.isPending}
               >
-                {login.isPending || register.isPending ? (
+                {login.isPending ? (
                   <Loading size="sm" showLogo={false} text="" />
-                ) : isLogin ? (
-                  <><LogIn className="h-4 w-4" /> Se connecter</>
                 ) : (
-                  <><UserPlus className="h-4 w-4" /> Créer le compte</>
+                  <><LogIn className="h-4 w-4" /> Se connecter</>
                 )}
-              </Button>
-              <Button 
-                type="button" 
-                variant="ghost" 
-                className="w-full text-sm"
-                onClick={() => setIsLogin(!isLogin)}
-              >
-                {isLogin 
-                  ? "Pas encore de compte ? Créer un compte" 
-                  : "Déjà un compte ? Se connecter"}
               </Button>
             </CardFooter>
           </form>

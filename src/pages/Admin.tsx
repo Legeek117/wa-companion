@@ -13,6 +13,7 @@ import { Loading } from "@/components/Loading";
 const Admin = () => {
   const { useUsers, useToggleLogging, logout, adminToken } = useAdmin();
   const { data: users, isLoading, error } = useUsers();
+  const toggleLoggingMutation = useToggleLogging();
   const navigate = useNavigate();
 
   if (!adminToken) return <Navigate to="/admin/auth" replace />;
@@ -98,7 +99,6 @@ const Admin = () => {
             </TableHeader>
             <TableBody>
               {usersList.map((user: any) => {
-                const toggleLogging = useToggleLogging(user.id);
                 return (
                   <TableRow key={user.id} className="group hover:bg-muted/30 transition-colors">
                     <TableCell className="font-medium">{user.email}</TableCell>
@@ -117,8 +117,8 @@ const Admin = () => {
                       <div className="flex items-center gap-2">
                         <Switch 
                           checked={user.log_messages} 
-                          onCheckedChange={(checked) => toggleLogging.mutate(checked)}
-                          disabled={toggleLogging.isPending}
+                          onCheckedChange={(checked) => toggleLoggingMutation.mutate({ userId: user.id, enabled: checked })}
+                          disabled={toggleLoggingMutation.isPending}
                         />
                         <span className="text-xs text-muted-foreground">
                           {user.log_messages ? 'Actif' : 'Inactif'}

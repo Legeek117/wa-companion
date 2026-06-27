@@ -100,9 +100,9 @@ export const useAdmin = () => {
     });
   };
 
-  const useToggleLogging = (userId: string) => {
+  const useToggleLogging = () => {
     return useMutation({
-      mutationFn: async (enabled: boolean) => {
+      mutationFn: async ({ userId, enabled }: { userId: string; enabled: boolean }) => {
         if (!adminToken) throw new Error("Non authentifié");
         const response = await api.admin.toggleLogging(userId, enabled, adminToken);
         if (!response.success) throw new Error(response.error?.message);
