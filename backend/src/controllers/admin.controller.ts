@@ -67,7 +67,23 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       .eq('email', email.toLowerCase())
       .single();
 
-    if (error || !admin) {
+    if (error) {
+      if (error.code === 'PGRST116') { // Not found
+        res.status(401).json({ success: false, error: { message: 'Email ou mot de passe incorrect' } });
+      } else {
+        logger.error('[Admin] Login DB error:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: { 
+            message: `Erreur base de données: ${error.message}`,
+            code: error.code
+          } 
+        });
+      }
+      return;
+    }
+
+    if (!admin) {
       res.status(401).json({ success: false, error: { message: 'Email ou mot de passe incorrect' } });
       return;
     }

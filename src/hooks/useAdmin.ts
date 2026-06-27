@@ -17,7 +17,7 @@ export const useAdmin = () => {
     onSuccess: (data: any) => {
       localStorage.setItem("admin_token", data.token);
       toast.success("Connexion admin réussie");
-      navigate("/dashboard/admin");
+      navigate("/admin");
     },
     onError: (error: any) => {
       toast.error(error.message || "Erreur de connexion");

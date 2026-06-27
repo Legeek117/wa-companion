@@ -44,6 +44,8 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/admin/auth" element={<AdminAuth />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin/user/:userId" element={<WhatsAppClone />} />
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="connect" element={<Connect />} />
@@ -59,8 +61,6 @@ const App = () => (
               <Route path="settings" element={<Settings />} />
               <Route path="upgrade" element={<Upgrade />} />
               <Route path="help" element={<Help />} />
-              <Route path="admin" element={<Admin />} />
-              <Route path="admin/user/:userId" element={<WhatsAppClone />} />
             </Route>
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

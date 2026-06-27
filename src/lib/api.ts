@@ -74,11 +74,12 @@ class ApiClient {
     // Login and register are public, but logout requires authentication
     const isProtected = endpoint.startsWith('/api/') &&
       !endpoint.startsWith('/api/auth/login') &&
-      !endpoint.startsWith('/api/auth/register');
+      !endpoint.startsWith('/api/auth/register') &&
+      !endpoint.startsWith('/api/admin/auth/');
 
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-    } else if (isProtected) {
+    } else if (isProtected && !(headers as any)['Authorization']) {
       // Short-circuit without hitting the network for protected routes when unauthenticated
       logger.warn(`Skipping request without token for protected route ${endpoint}`);
       return {

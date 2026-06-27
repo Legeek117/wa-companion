@@ -67,7 +67,7 @@ if (!self.define) {
     });
   };
 }
-define(['./workbox-e755d862'], (function (workbox) { 'use strict';
+define(['./workbox-9be7b0db'], (function (workbox) { 'use strict';
 
   importScripts("/firebase-messaging-sw.js");
   self.skipWaiting();
@@ -83,17 +83,25 @@ define(['./workbox-e755d862'], (function (workbox) { 'use strict';
     "revision": "3ca0b8505b4bec776b69afdba2768812"
   }, {
     "url": "index.html",
-    "revision": "0.965or7e6i5"
+    "revision": "0.jht7a8kepuo"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
     allowlist: [/^\/$/]
   }));
-  workbox.registerRoute(/^https:\/\/api\./i, new workbox.NetworkFirst({
+  workbox.registerRoute(/^https:\/\/.*\/api\/auth\//i, new workbox.NetworkOnly({
+    plugins: [new workbox.CacheableResponsePlugin({
+      statuses: [0, 200]
+    })]
+  }), 'GET');
+  workbox.registerRoute(/^https:\/\/.*\/api\//i, new workbox.NetworkFirst({
     "cacheName": "api-cache",
+    "matchOptions": {
+      "ignoreSearch": false
+    },
     plugins: [new workbox.ExpirationPlugin({
       maxEntries: 50,
-      maxAgeSeconds: 86400
+      maxAgeSeconds: 300
     }), new workbox.CacheableResponsePlugin({
       statuses: [0, 200]
     })]
