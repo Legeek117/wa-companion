@@ -1,87 +1,89 @@
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
-
-const supabase = getSupabaseClient();
 
 /**
  * Get analytics overview
  */
 export const getAnalyticsOverview = async (userId: string) => {
   try {
-    // Get status likes stats
-    const { count: totalStatusLikes } = await supabase
-      .from('status_likes')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
-
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const fourteenDaysAgo = new Date();
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
-    const { count: recentStatusLikes } = await supabase
-      .from('status_likes')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('liked_at', sevenDaysAgo.toISOString());
+    // Get status likes stats
+    const totalStatusLikes = await prisma.statusLike.count({
+      where: { userId },
+    });
 
-    const { count: previousStatusLikes } = await supabase
-      .from('status_likes')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('liked_at', fourteenDaysAgo.toISOString())
-      .lt('liked_at', sevenDaysAgo.toISOString());
+    const recentStatusLikes = await prisma.statusLike.count({
+      where: {
+        userId,
+        likedAt: { gte: sevenDaysAgo },
+      },
+    });
+
+    const previousStatusLikes = await prisma.statusLike.count({
+      where: {
+        userId,
+        likedAt: {
+          gte: fourteenDaysAgo,
+          lt: sevenDaysAgo,
+        },
+      },
+    });
 
     // Get view once stats
-    const { count: totalViewOnce } = await supabase
-      .from('view_once_captures')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+    const totalViewOnce = await prisma.viewOnceCapture.count({
+      where: { userId },
+    });
 
-    const { count: recentViewOnce } = await supabase
-      .from('view_once_captures')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('captured_at', sevenDaysAgo.toISOString());
+    const recentViewOnce = await prisma.viewOnceCapture.count({
+      where: {
+        userId,
+        capturedAt: { gte: sevenDaysAgo },
+      },
+    });
 
     // Get deleted messages stats
-    const { count: totalDeletedMessages } = await supabase
-      .from('deleted_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+    const totalDeletedMessages = await prisma.deletedMessage.count({
+      where: { userId },
+    });
 
-    const { count: recentDeletedMessages } = await supabase
-      .from('deleted_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('deleted_at', sevenDaysAgo.toISOString());
+    const recentDeletedMessages = await prisma.deletedMessage.count({
+      where: {
+        userId,
+        deletedAt: { gte: sevenDaysAgo },
+      },
+    });
 
     // Get autoresponder active configs
-    const { count: activeAutoresponder } = await supabase
-      .from('autoresponder_configs')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('enabled', true);
+    const activeAutoresponder = await prisma.autoresponderConfig.count({
+      where: {
+        userId,
+        enabled: true,
+      },
+    });
 
     return {
       overview: {
         statusLikes: {
-          total: totalStatusLikes || 0,
-          recent: recentStatusLikes || 0,
-          trend: (recentStatusLikes || 0) - (previousStatusLikes || 0),
+          total: totalStatusLikes,
+          recent: recentStatusLikes,
+          trend: recentStatusLikes - previousStatusLikes,
         },
         viewOnce: {
-          total: totalViewOnce || 0,
-          recent: recentViewOnce || 0,
+          total: totalViewOnce,
+          recent: recentViewOnce,
           trend: 0, // TODO: Calculate trend
         },
         deletedMessages: {
-          total: totalDeletedMessages || 0,
-          recent: recentDeletedMessages || 0,
+          total: totalDeletedMessages,
+          recent: recentDeletedMessages,
           trend: 0, // TODO: Calculate trend
         },
         autoresponder: {
-          active: activeAutoresponder || 0,
+          active: activeAutoresponder,
         },
       },
     };
@@ -100,18 +102,20 @@ export const getStatusAnalytics = async (userId: string) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: likes } = await supabase
-      .from('status_likes')
-      .select('liked_at')
-      .eq('user_id', userId)
-      .gte('liked_at', thirtyDaysAgo.toISOString());
+    const likes = await prisma.statusLike.findMany({
+      where: {
+        userId,
+        likedAt: { gte: thirtyDaysAgo },
+      },
+      select: { likedAt: true },
+    });
 
     // Group by day
     const dailyData: { date: string; count: number }[] = [];
     const counts: Record<string, number> = {};
 
-    likes?.forEach((like) => {
-      const date = new Date(like.liked_at).toISOString().split('T')[0];
+    likes.forEach((like) => {
+      const date = new Date(like.likedAt).toISOString().split('T')[0];
       counts[date] = (counts[date] || 0) + 1;
     });
 
@@ -127,7 +131,7 @@ export const getStatusAnalytics = async (userId: string) => {
 
     return {
       dailyData,
-      total: likes?.length || 0,
+      total: likes.length,
     };
   } catch (error: any) {
     logger.error('[Analytics] Error getting status analytics:', error);
@@ -143,18 +147,23 @@ export const getViewOnceAnalytics = async (userId: string) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: captures } = await supabase
-      .from('view_once_captures')
-      .select('captured_at, media_type')
-      .eq('user_id', userId)
-      .gte('captured_at', thirtyDaysAgo.toISOString());
+    const captures = await prisma.viewOnceCapture.findMany({
+      where: {
+        userId,
+        capturedAt: { gte: thirtyDaysAgo },
+      },
+      select: {
+        capturedAt: true,
+        mediaType: true,
+      },
+    });
 
     // Group by day and type
     const dailyData: { date: string; count: number }[] = [];
     const counts: Record<string, number> = {};
 
-    captures?.forEach((capture) => {
-      const date = new Date(capture.captured_at).toISOString().split('T')[0];
+    captures.forEach((capture) => {
+      const date = new Date(capture.capturedAt).toISOString().split('T')[0];
       counts[date] = (counts[date] || 0) + 1;
     });
 
@@ -170,7 +179,7 @@ export const getViewOnceAnalytics = async (userId: string) => {
 
     return {
       dailyData,
-      total: captures?.length || 0,
+      total: captures.length,
     };
   } catch (error: any) {
     logger.error('[Analytics] Error getting view once analytics:', error);
@@ -186,18 +195,20 @@ export const getDeletedMessagesAnalytics = async (userId: string) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: messages } = await supabase
-      .from('deleted_messages')
-      .select('deleted_at')
-      .eq('user_id', userId)
-      .gte('deleted_at', thirtyDaysAgo.toISOString());
+    const messages = await prisma.deletedMessage.findMany({
+      where: {
+        userId,
+        deletedAt: { gte: thirtyDaysAgo },
+      },
+      select: { deletedAt: true },
+    });
 
     // Group by day
     const dailyData: { date: string; count: number }[] = [];
     const counts: Record<string, number> = {};
 
-    messages?.forEach((msg) => {
-      const date = new Date(msg.deleted_at).toISOString().split('T')[0];
+    messages.forEach((msg) => {
+      const date = new Date(msg.deletedAt).toISOString().split('T')[0];
       counts[date] = (counts[date] || 0) + 1;
     });
 
@@ -213,14 +224,10 @@ export const getDeletedMessagesAnalytics = async (userId: string) => {
 
     return {
       dailyData,
-      total: messages?.length || 0,
+      total: messages.length,
     };
   } catch (error: any) {
     logger.error('[Analytics] Error getting deleted messages analytics:', error);
     throw error;
   }
 };
-
-
-
-

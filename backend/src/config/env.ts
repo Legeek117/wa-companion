@@ -12,12 +12,11 @@ interface EnvConfig {
   RENDER_KEEP_ALIVE_URL?: string;
   RENDER_KEEP_ALIVE_INTERVAL_MS: number;
 
-  // Database - Supabase
-  SUPABASE_URL: string;
-  SUPABASE_ANON_KEY: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
+  // Database - PostgreSQL
   DATABASE_URL: string;
-  SUPABASE_STORAGE_BUCKET?: string;
+
+  // Storage - Local filesystem
+  UPLOADS_PATH: string;
 
   // Redis
   REDIS_URL: string;
@@ -100,19 +99,18 @@ export const env: EnvConfig = {
   NODE_ENV: getEnvVar('NODE_ENV', 'development'),
   PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : getEnvNumber('PORT', 3000),
   API_URL: getEnvVar('API_URL', 'http://localhost:3000'),
-  FRONTEND_URL: getEnvVar('FRONTEND_URL', 'http://localhost:8081'),
+  FRONTEND_URL: getEnvVar('FRONTEND_URL', 'http://localhost:5173'),
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-    : [],
+    : ['http://localhost:5173'],
   RENDER_KEEP_ALIVE_URL: process.env.RENDER_KEEP_ALIVE_URL,
   RENDER_KEEP_ALIVE_INTERVAL_MS: getEnvNumber('RENDER_KEEP_ALIVE_INTERVAL_MS', 10 * 60 * 1000),
 
-  // Database - Supabase
-  SUPABASE_URL: getEnvVar('SUPABASE_URL'),
-  SUPABASE_ANON_KEY: getEnvVar('SUPABASE_ANON_KEY'),
-  SUPABASE_SERVICE_ROLE_KEY: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),
-  DATABASE_URL: getEnvVar('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/amda'),
-  SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET,
+  // Database - PostgreSQL
+  DATABASE_URL: getEnvVar('DATABASE_URL'),
+
+  // Storage - Local filesystem
+  UPLOADS_PATH: getEnvVar('UPLOADS_PATH', './uploads'),
 
   // Redis
   REDIS_URL: getEnvVar('REDIS_URL', 'redis://localhost:6379'),

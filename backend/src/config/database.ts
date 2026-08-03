@@ -1,36 +1,20 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { env } from './env';
+import { PrismaClient } from '@prisma/client';
 
-let supabaseClient: SupabaseClient | null = null;
+let prisma: PrismaClient;
 
-export function getSupabaseClient(): SupabaseClient {
-  if (!supabaseClient) {
-    supabaseClient = createClient(
-      env.SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY, // Use service role for backend operations
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient();
+} else {
+  if (!global.prisma) {
+    global.prisma = new PrismaClient();
   }
-  return supabaseClient;
+  prisma = global.prisma;
 }
 
-export function getSupabaseAnonClient(): SupabaseClient {
-  return createClient(
-    env.SUPABASE_URL,
-    env.SUPABASE_ANON_KEY,
-    {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-      },
-    }
-  );
+export default prisma;
+
+// Type augmentation for global.prisma in development
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
 }
-
-export default getSupabaseClient;
-

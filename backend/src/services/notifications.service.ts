@@ -1,8 +1,6 @@
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
 import * as admin from 'firebase-admin';
-
-const supabase = getSupabaseClient();
 
 // Initialize Firebase Admin (will be done in a separate file)
 let firebaseAdmin: admin.app.App | null = null;
@@ -38,7 +36,7 @@ export const initializeFirebaseAdmin = (): void => {
     // You need to download the service account key from Firebase Console
     // and set it as an environment variable or in a config file
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
-    
+
     if (!serviceAccount) {
       logger.warn('[NotificationsService] Firebase service account not configured. Push notifications will be disabled.');
       return;
@@ -60,68 +58,22 @@ export const initializeFirebaseAdmin = (): void => {
  */
 export const saveFCMToken = async (userId: string, token: string, deviceInfo?: any): Promise<void> => {
   try {
-    // Check if table exists by trying a simple query first
-    const { error: checkError } = await supabase
-      .from('fcm_tokens')
-      .select('id')
-      .limit(1);
-
-    if (checkError) {
-      if (checkError.code === '42P01') { // Table does not exist
-        logger.error('[NotificationsService] Table fcm_tokens does not exist. Please run the SQL schema.');
-        throw new Error('Table fcm_tokens does not exist. Please run the database migration.');
-      }
-      // If it's another error, continue (might be empty table)
-    }
-
-    // First, try to delete any existing token for this user to avoid conflicts
-    const { error: deleteError } = await supabase
-      .from('fcm_tokens')
-      .delete()
-      .eq('user_id', userId);
-
-    if (deleteError && deleteError.code !== '42P01') {
-      logger.warn('[NotificationsService] Error deleting existing FCM token (non-critical):', deleteError);
-    }
-
-    // Then insert the new token
-    const { error } = await supabase
-      .from('fcm_tokens')
-      .insert({
-        user_id: userId,
+    // Use upsert to handle duplicate token gracefully
+    await prisma.fcmToken.upsert({
+      where: { token },
+      create: {
+        userId,
         token,
-        device_info: deviceInfo || {},
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+        deviceInfo: deviceInfo || null,
+      },
+      update: {
+        userId,
+        deviceInfo: deviceInfo || null,
+        updatedAt: new Date(),
+      },
+    });
 
-    if (error) {
-      // If insert fails due to unique constraint on token, try update
-      if (error.code === '23505') { // Unique violation
-        const { error: updateError } = await supabase
-          .from('fcm_tokens')
-          .update({
-            user_id: userId,
-            device_info: deviceInfo || {},
-            updated_at: new Date().toISOString(),
-          })
-          .eq('token', token);
-
-        if (updateError) {
-          logger.error('[NotificationsService] Error updating FCM token:', updateError);
-          throw updateError;
-        }
-        logger.info(`[NotificationsService] FCM token updated for user ${userId}`);
-      } else if (error.code === '42P01') {
-        logger.error('[NotificationsService] Table fcm_tokens does not exist. Please run the SQL schema.');
-        throw new Error('Table fcm_tokens does not exist. Please run the database migration.');
-      } else {
-        logger.error('[NotificationsService] Error saving FCM token:', error);
-        throw error;
-      }
-    } else {
-      logger.info(`[NotificationsService] FCM token saved for user ${userId}`);
-    }
+    logger.info(`[NotificationsService] FCM token saved for user ${userId}`);
   } catch (error) {
     logger.error('[NotificationsService] Error saving FCM token:', error);
     throw error;
@@ -133,15 +85,9 @@ export const saveFCMToken = async (userId: string, token: string, deviceInfo?: a
  */
 export const deleteFCMToken = async (userId: string): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('fcm_tokens')
-      .delete()
-      .eq('user_id', userId);
-
-    if (error) {
-      logger.error('[NotificationsService] Error deleting FCM token:', error);
-      throw error;
-    }
+    await prisma.fcmToken.deleteMany({
+      where: { userId },
+    });
 
     logger.info(`[NotificationsService] FCM token deleted for user ${userId}`);
   } catch (error) {
@@ -155,33 +101,26 @@ export const deleteFCMToken = async (userId: string): Promise<void> => {
  */
 export const getNotificationSettings = async (userId: string): Promise<NotificationSettings> => {
   try {
-    const { data, error } = await supabase
-      .from('notification_settings')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    let settings = await prisma.notificationSettings.findUnique({
+      where: { userId },
+    });
 
-    if (error && error.code !== 'PGRST116') {
-      logger.error('[NotificationsService] Error fetching notification settings:', error);
-      throw error;
-    }
-
-    if (data) {
-      if (data.status_liked !== false) {
-        await supabase
-          .from('notification_settings')
-          .update({
-            status_liked: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId);
+    if (settings) {
+      // Ensure statusLiked is always false
+      if (settings.statusLiked !== false) {
+        await prisma.notificationSettings.update({
+          where: { userId },
+          data: {
+            statusLiked: false,
+          },
+        });
       }
 
       return {
-        enabled: data.enabled !== false,
-        viewOnce: data.view_once !== false,
+        enabled: settings.enabled !== false,
+        viewOnce: settings.viewOnce !== false,
         statusLiked: false,
-        deletedMessage: data.deleted_message !== false,
+        deletedMessage: settings.deletedMessage !== false,
       };
     }
 
@@ -206,34 +145,28 @@ export const updateNotificationSettings = async (
   settings: Partial<NotificationSettings>
 ): Promise<NotificationSettings> => {
   try {
-    const { data, error } = await supabase
-      .from('notification_settings')
-      .upsert(
-        {
-          user_id: userId,
-          enabled: settings.enabled !== undefined ? settings.enabled : true,
-          view_once: settings.viewOnce !== undefined ? settings.viewOnce : true,
-          status_liked: false,
-          deleted_message: settings.deletedMessage !== undefined ? settings.deletedMessage : true,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'user_id',
-        }
-      )
-      .select('*')
-      .single();
-
-    if (error) {
-      logger.error('[NotificationsService] Error updating notification settings:', error);
-      throw error;
-    }
+    const updated = await prisma.notificationSettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        enabled: settings.enabled !== undefined ? settings.enabled : true,
+        viewOnce: settings.viewOnce !== undefined ? settings.viewOnce : true,
+        statusLiked: false,
+        deletedMessage: settings.deletedMessage !== undefined ? settings.deletedMessage : true,
+      },
+      update: {
+        enabled: settings.enabled !== undefined ? settings.enabled : undefined,
+        viewOnce: settings.viewOnce !== undefined ? settings.viewOnce : undefined,
+        statusLiked: false,
+        deletedMessage: settings.deletedMessage !== undefined ? settings.deletedMessage : undefined,
+      },
+    });
 
     return {
-      enabled: data.enabled !== false,
-      viewOnce: data.view_once !== false,
+      enabled: updated.enabled !== false,
+      viewOnce: updated.viewOnce !== false,
       statusLiked: false,
-      deletedMessage: data.deleted_message !== false,
+      deletedMessage: updated.deletedMessage !== false,
     };
   } catch (error) {
     logger.error('[NotificationsService] Error updating notification settings:', error);
@@ -246,17 +179,12 @@ export const updateNotificationSettings = async (
  */
 export const getUserFCMTokens = async (userId: string): Promise<string[]> => {
   try {
-    const { data, error } = await supabase
-      .from('fcm_tokens')
-      .select('token')
-      .eq('user_id', userId);
+    const tokens = await prisma.fcmToken.findMany({
+      where: { userId },
+      select: { token: true },
+    });
 
-    if (error) {
-      logger.error('[NotificationsService] Error fetching FCM tokens:', error);
-      return [];
-    }
-
-    return data?.map((row) => row.token) || [];
+    return tokens.map((row) => row.token);
   } catch (error) {
     logger.error('[NotificationsService] Error getting FCM tokens:', error);
     return [];
@@ -357,7 +285,9 @@ export const sendPushNotification = async (
       });
 
       if (invalidTokens.length > 0) {
-        await supabase.from('fcm_tokens').delete().in('token', invalidTokens);
+        await prisma.fcmToken.deleteMany({
+          where: { token: { in: invalidTokens } },
+        });
         logger.info(`[NotificationsService] Removed ${invalidTokens.length} invalid FCM tokens`);
       }
     }
@@ -381,29 +311,18 @@ export const createNotification = async (
   data?: any
 ): Promise<string | null> => {
   try {
-    const { data: notification, error } = await supabase
-      .from('notifications')
-      .insert({
-        user_id: userId,
+    const notification = await prisma.notification.create({
+      data: {
+        userId,
         type,
         title,
         body,
-        image_url: imageUrl || null,
+        imageUrl: imageUrl || null,
         data: data || null,
         read: false,
-      })
-      .select('id')
-      .single();
-
-    if (error) {
-      // If table doesn't exist, log warning but don't throw
-      if (error.code === '42P01') {
-        logger.warn('[NotificationsService] Notifications table does not exist. Please run the SQL migration.');
-        return null;
-      }
-      logger.error('[NotificationsService] Error creating notification:', error);
-      throw error;
-    }
+      },
+      select: { id: true },
+    });
 
     logger.info(`[NotificationsService] Created notification ${notification.id} for user ${userId}`);
     return notification.id;
@@ -431,48 +350,24 @@ export const getNotifications = async (
   createdAt: string;
 }>> => {
   try {
-    let query = supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId,
+        ...(unreadOnly && { read: false }),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
 
-    if (unreadOnly) {
-      query = query.eq('read', false);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      // If table doesn't exist, return empty array (don't log as error)
-      if (error.code === '42P01') {
-        logger.debug('[NotificationsService] Notifications table does not exist. Please run the SQL migration.');
-        return [];
-      }
-      // If rate limit error (429), log as warning and return empty array
-      if (error.code === 'PGRST301' || error.message?.includes('rate limit') || error.message?.includes('429')) {
-        logger.warn('[NotificationsService] Rate limit reached while fetching notifications. Returning empty array.');
-        return [];
-      }
-      // For other errors, log but don't throw (return empty array to avoid breaking the app)
-      logger.warn('[NotificationsService] Error fetching notifications:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-      });
-      return [];
-    }
-
-    return (data || []).map((n: any) => ({
+    return notifications.map((n) => ({
       id: n.id,
       type: n.type,
       title: n.title,
       body: n.body,
-      imageUrl: n.image_url,
+      imageUrl: n.imageUrl || undefined,
       data: n.data,
       read: n.read,
-      createdAt: n.created_at,
+      createdAt: n.createdAt.toISOString(),
     }));
   } catch (error: any) {
     // Catch any unexpected errors and return empty array
@@ -489,21 +384,15 @@ export const getNotifications = async (
  */
 export const markNotificationAsRead = async (userId: string, notificationId: string): Promise<boolean> => {
   try {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('id', notificationId)
-      .eq('user_id', userId);
+    const result = await prisma.notification.updateMany({
+      where: {
+        id: notificationId,
+        userId,
+      },
+      data: { read: true },
+    });
 
-    if (error) {
-      if (error.code === '42P01') {
-        return false;
-      }
-      logger.error('[NotificationsService] Error marking notification as read:', error);
-      return false;
-    }
-
-    return true;
+    return result.modifiedCount > 0;
   } catch (error) {
     logger.error('[NotificationsService] Error marking notification as read:', error);
     return false;
@@ -515,19 +404,13 @@ export const markNotificationAsRead = async (userId: string, notificationId: str
  */
 export const markAllNotificationsAsRead = async (userId: string): Promise<boolean> => {
   try {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('user_id', userId)
-      .eq('read', false);
-
-    if (error) {
-      if (error.code === '42P01') {
-        return false;
-      }
-      logger.error('[NotificationsService] Error marking all notifications as read:', error);
-      return false;
-    }
+    await prisma.notification.updateMany({
+      where: {
+        userId,
+        read: false,
+      },
+      data: { read: true },
+    });
 
     return true;
   } catch (error) {
@@ -541,24 +424,16 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<boolea
  */
 export const getUnreadNotificationCount = async (userId: string): Promise<number> => {
   try {
-    const { count, error } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('read', false);
+    const count = await prisma.notification.count({
+      where: {
+        userId,
+        read: false,
+      },
+    });
 
-    if (error) {
-      if (error.code === '42P01') {
-        return 0;
-      }
-      logger.error('[NotificationsService] Error getting unread count:', error);
-      return 0;
-    }
-
-    return count || 0;
+    return count;
   } catch (error) {
     logger.error('[NotificationsService] Error getting unread count:', error);
     return 0;
   }
 };
-

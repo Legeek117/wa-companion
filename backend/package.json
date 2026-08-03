@@ -14,7 +14,10 @@
     "generate-secrets": "node scripts/generate-jwt-secrets.js",
     "check-db": "ts-node scripts/check-database.ts",
     "test-deleted": "ts-node scripts/test-deleted-messages.ts",
-    "migrate-cloudinary": "ts-node scripts/migrate-supabase-to-cloudinary.ts"
+    "migrate-cloudinary": "ts-node scripts/migrate-supabase-to-cloudinary.ts",
+    "prisma:migrate": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "prisma:generate": "prisma generate"
   },
   "keywords": [
     "whatsapp",
@@ -26,7 +29,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@supabase/supabase-js": "^2.38.0",
+    "@prisma/client": "^5.7.1",
     "@types/multer": "^2.0.0",
     "@types/node-cron": "^3.0.11",
     "@whiskeysockets/baileys": "^6.7.21",
@@ -51,6 +54,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@prisma/cli": "^5.7.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",

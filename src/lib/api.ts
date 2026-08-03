@@ -77,7 +77,7 @@ class ApiClient {
       !endpoint.startsWith('/api/auth/register') &&
       !endpoint.startsWith('/api/admin/auth/');
 
-    if (token) {
+    if (token && !(headers as any)['Authorization']) {
       headers['Authorization'] = `Bearer ${token}`;
     } else if (isProtected && !(headers as any)['Authorization']) {
       // Short-circuit without hitting the network for protected routes when unauthenticated

@@ -1,19 +1,17 @@
 import { WASocket, downloadMediaMessage, proto } from '@whiskeysockets/baileys';
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
 import { checkViewOnceQuota, incrementViewOnce } from './quota.service';
 
-const supabase = getSupabaseClient();
-
 /**
  * Handle view once message - capture and save automatically
- * 
+ *
  * ⚠️ DÉSACTIVÉ : Cette méthode ne fonctionne plus depuis 2024
  * Les View Once ne s'affichent plus sur les appareils connectés (Web/Desktop/Baileys)
- * 
+ *
  * La seule méthode fonctionnelle est via quoted messages (captureViewOnceFromQuoted)
  * Voir : https://github.com/WhiskeySockets/Baileys/issues/XXX
- * 
+ *
  * Cette fonction est conservée pour référence mais ne sera jamais appelée
  */
 export const handleViewOnceMessage = async (
@@ -25,11 +23,11 @@ export const handleViewOnceMessage = async (
   // Utiliser captureViewOnceFromQuoted() via quoted messages à la place
   logger.debug('[ViewOnce] ⚠️ handleViewOnceMessage called but disabled - View Once not accessible on connected devices');
   return;
-  
+
   /* CODE DÉSACTIVÉ - NE FONCTIONNE PLUS
   try {
     // Check if message is view once
-    const isViewOnce = message.message?.viewOnceMessageV2 || 
+    const isViewOnce = message.message?.viewOnceMessageV2 ||
                        message.message?.viewOnceMessage ||
                        message.message?.ephemeralMessage?.message?.viewOnceMessageV2;
 
@@ -137,113 +135,123 @@ export const handleViewOnceMessage = async (
  * Get view once captures for a user
  */
 export const getViewOnceCaptures = async (userId: string, limit: number = 50) => {
-  const { data, error } = await supabase
-    .from('view_once_captures')
-    .select('*')
-    .eq('user_id', userId)
-    .order('captured_at', { ascending: false })
-    .limit(limit);
+  try {
+    const captures = await prisma.viewOnceCapture.findMany({
+      where: { userId },
+      orderBy: { capturedAt: 'desc' },
+      take: limit,
+    });
 
-  if (error) {
+    return captures;
+  } catch (error) {
     logger.error('[ViewOnce] Error getting captures:', error);
     throw new Error('Failed to get view once captures');
   }
-
-  return data || [];
 };
 
 /**
  * Get view once capture by ID
  */
 export const getViewOnceCapture = async (userId: string, captureId: string) => {
-  const { data, error } = await supabase
-    .from('view_once_captures')
-    .select('*')
-    .eq('id', captureId)
-    .eq('user_id', userId)
-    .single();
+  try {
+    const capture = await prisma.viewOnceCapture.findFirst({
+      where: {
+        id: captureId,
+        userId,
+      },
+    });
 
-  if (error) {
+    if (!capture) {
+      throw new Error('View once capture not found');
+    }
+
+    return capture;
+  } catch (error) {
     logger.error('[ViewOnce] Error getting capture:', error);
     throw new Error('Failed to get view once capture');
   }
-
-  return data;
 };
 
 /**
  * Delete a view once capture
  */
 export const deleteViewOnceCapture = async (userId: string, captureId: string): Promise<void> => {
-  // First verify the capture belongs to the user
-  const capture = await getViewOnceCapture(userId, captureId);
-  
-  if (!capture) {
-    throw new Error('View once capture not found');
-  }
+  try {
+    // First verify the capture belongs to the user
+    const capture = await getViewOnceCapture(userId, captureId);
 
-  // Delete from database
-  const { error } = await supabase
-    .from('view_once_captures')
-    .delete()
-    .eq('id', captureId)
-    .eq('user_id', userId);
+    if (!capture) {
+      throw new Error('View once capture not found');
+    }
 
-  if (error) {
+    // Delete from database
+    await prisma.viewOnceCapture.deleteMany({
+      where: {
+        id: captureId,
+        userId,
+      },
+    });
+
+    logger.info(`[ViewOnce] Deleted view once capture ${captureId} for user ${userId}`);
+  } catch (error) {
     logger.error('[ViewOnce] Error deleting capture:', error);
     throw new Error('Failed to delete view once capture');
   }
-
-  logger.info(`[ViewOnce] Deleted view once capture ${captureId} for user ${userId}`);
 };
 
 /**
  * Get view once statistics
  */
 export const getViewOnceStats = async (userId: string) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  const thisMonth = new Date();
-  thisMonth.setDate(1);
-  thisMonth.setHours(0, 0, 0, 0);
+    const thisMonth = new Date();
+    thisMonth.setDate(1);
+    thisMonth.setHours(0, 0, 0, 0);
 
-  // Get captures today
-  const { count: todayCount } = await supabase
-    .from('view_once_captures')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('captured_at', today.toISOString());
+    // Get captures today
+    const todayCount = await prisma.viewOnceCapture.count({
+      where: {
+        userId,
+        capturedAt: { gte: today },
+      },
+    });
 
-  // Get captures this month
-  const { count: monthCount } = await supabase
-    .from('view_once_captures')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('captured_at', thisMonth.toISOString());
+    // Get captures this month
+    const monthCount = await prisma.viewOnceCapture.count({
+      where: {
+        userId,
+        capturedAt: { gte: thisMonth },
+      },
+    });
 
-  // Get total captures
-  const { count: totalCount } = await supabase
-    .from('view_once_captures')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId);
+    // Get total captures
+    const totalCount = await prisma.viewOnceCapture.count({
+      where: { userId },
+    });
 
-  return {
-    capturedToday: todayCount || 0,
-    capturedThisMonth: monthCount || 0,
-    totalCaptured: totalCount || 0,
-  };
+    return {
+      capturedToday: todayCount,
+      capturedThisMonth: monthCount,
+      totalCaptured: totalCount,
+    };
+  } catch (error) {
+    logger.error('[ViewOnce] Error getting stats:', error);
+    throw error;
+  }
 };
 
 /**
  * ============================================
  * NOUVELLE LOGIQUE : CAPTURE VIA QUOTED MESSAGE
  * ============================================
- * 
+ *
  * IMPORTANT: Les View Once ne sont plus accessibles directement
  * sur les appareils connectés (Web/Desktop/Baileys) depuis 2024.
  * La seule méthode fonctionnelle est de capturer depuis un message quoté.
- * 
+ *
  * Workflow:
  * 1. L'utilisateur reçoit un View Once sur son téléphone
  * 2. Sans l'ouvrir, il répond avec une commande (.vv ou .viewonce)
@@ -302,7 +310,7 @@ const extractViewOnceFromQuoted = (quotedMessage: proto.IMessage | null | undefi
     if (!viewOnceKey && workingMessage) {
       const keys = Object.keys(workingMessage);
       viewOnceKey = keys.find(key => key.startsWith('viewOnce')) || null;
-      
+
       if (viewOnceKey) {
         innerMessage = workingMessage[viewOnceKey]?.message || null;
       }
@@ -362,7 +370,7 @@ const extractViewOnceFromQuoted = (quotedMessage: proto.IMessage | null | undefi
       mediaHasUrl: !!mediaMessage?.url,
       viewOnceKey,
     });
-    
+
     return {
       type,
       caption,
@@ -426,7 +434,7 @@ const downloadViewOnceFromQuoted = async (
       fatal: () => {},
       child: () => silentLogger,
     };
-    
+
     // Télécharger le média avec downloadMediaMessage
     // Cette fonction nécessite le socket actif pour accéder au média
     const downloadPromise = downloadMediaMessage(
@@ -537,15 +545,14 @@ export const captureViewOnceFromQuoted = async (
       await checkViewOnceQuota(userId);
     } catch (error: any) {
       if (error.message?.includes('quota exceeded')) {
-        const { data: user } = await supabase
-          .from('users')
-          .select('plan')
-          .eq('id', userId)
-          .single();
-        
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { plan: true },
+        });
+
         const isPremium = user?.plan === 'premium';
         const limit = isPremium ? 'illimité' : '3';
-        
+
         return {
           success: false,
           error: 'quota_exceeded',
@@ -571,7 +578,7 @@ export const captureViewOnceFromQuoted = async (
     if (!downloadResult.success || !downloadResult.buffer) {
       const errorMsg = downloadResult.error || 'Unknown error';
       logger.error(`[ViewOnce] ❌ Download failed: ${errorMsg}`);
-      
+
       // Messages d'erreur plus spécifiques
       let userMessage = '❌ Impossible de télécharger le média.';
       if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
@@ -581,14 +588,14 @@ export const captureViewOnceFromQuoted = async (
       } else if (errorMsg.includes('decrypt') || errorMsg.includes('decryption')) {
         userMessage = '❌ Le View Once a déjà été ouvert et ne peut plus être téléchargé.';
       }
-      
+
       return {
         success: false,
         error: 'download_failed',
         message: userMessage,
       };
     }
-    
+
     logger.info(`[ViewOnce] ✅ Download successful: ${downloadResult.buffer.length} bytes`);
 
     // 5. Upload vers Supabase Storage
@@ -599,22 +606,19 @@ export const captureViewOnceFromQuoted = async (
     // 6. Sauvegarder en base de données
     const fileSize = downloadResult.buffer.length;
 
-    const { data: capture, error: insertError } = await supabase
-      .from('view_once_captures')
-      .insert({
-        user_id: userId,
-        sender_id: senderId,
-        sender_name: senderName,
-        media_url: mediaUrl,
-        media_type: viewOnceData.type,
-        file_size: fileSize,
-        captured_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+    const capture = await prisma.viewOnceCapture.create({
+      data: {
+        userId,
+        senderId,
+        senderName,
+        mediaUrl,
+        mediaType: viewOnceData.type,
+        fileSize: BigInt(fileSize),
+      },
+    });
 
-    if (insertError || !capture) {
-      logger.error('[ViewOnce] Error saving to database:', insertError);
+    if (!capture) {
+      logger.error('[ViewOnce] Error saving to database: no capture returned');
       return {
         success: false,
         error: 'db_error',
@@ -665,14 +669,3 @@ export const captureViewOnceFromQuoted = async (
     };
   }
 };
-
-
-
-
-
-
-
-
-
-
-
