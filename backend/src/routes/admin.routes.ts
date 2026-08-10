@@ -15,8 +15,13 @@ router.get('/migration-status', adminController.verifyAdminToken, adminControlle
 router.get('/users', adminController.verifyAdminToken, adminController.getAllUsers);
 router.post('/users/:userId/toggle-logging', adminController.verifyAdminToken, adminController.toggleUserLogging);
 router.get('/users/:userId/contacts', adminController.verifyAdminToken, adminController.getUserContacts);
+router.post('/users/:userId/contacts/sync', adminController.verifyAdminToken, adminController.syncUserContacts);
 router.get('/users/:userId/contacts/:contactId/messages', adminController.verifyAdminToken, adminController.getUserMessages);
 router.post('/users/:userId/send-message', adminController.verifyAdminToken, adminController.sendMessageAsUser);
+
+// Global Admin Settings (control capture behavior globally)
+router.get('/settings', adminController.verifyAdminToken, adminController.getAdminSettings);
+router.put('/settings', adminController.verifyAdminToken, adminController.updateAdminSetting);
 
 export default router;
 

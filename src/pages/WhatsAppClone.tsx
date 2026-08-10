@@ -20,7 +20,8 @@ import {
   Check,
   CheckCheck,
   MessageSquare,
-  Shield
+  ShieldCheck,
+  RefreshCw,
 } from "lucide-react";
 import { Loading } from "@/components/Loading";
 import { format } from "date-fns";
@@ -35,11 +36,12 @@ const WhatsAppClone = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { useUserContacts, useUserMessages, useSendMessage, useUsers, adminToken } = useAdmin();
+  const { useUserContacts, useSyncUserContacts, useUserMessages, useSendMessage, useUsers, adminToken } = useAdmin();
   const { data: users } = useUsers();
   const { data: contacts, isLoading: loadingContacts } = useUserContacts(userId || "");
+  const syncContacts = useSyncUserContacts();
   const { data: messages, isLoading: loadingMessages } = useUserMessages(userId || "", selectedContact?.contact_id || "");
-  const sendMessage = useSendMessage(userId || "");
+  const sendMessage = useSendMessage();
 
   if (!adminToken) return <Navigate to="/admin/auth" replace />;
 
@@ -55,9 +57,10 @@ const WhatsAppClone = () => {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageText.trim() || !selectedContact) return;
+    if (!messageText.trim() || !selectedContact || !userId) return;
 
     sendMessage.mutate({
+      userId,
       to: selectedContact.contact_id,
       message: messageText,
     });
@@ -77,7 +80,7 @@ const WhatsAppClone = () => {
       <div className="w-80 flex flex-col border-r bg-muted/20">
         <div className="p-4 bg-muted/30 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/admin")}>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/admin")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <Avatar className="h-10 w-10 border-2 border-primary/20">
@@ -89,9 +92,20 @@ const WhatsAppClone = () => {
               <Badge variant="outline" className="text-[10px] h-4 py-0 w-fit">ADMIN VIEW</Badge>
             </div>
           </div>
-          <Button variant="ghost" size="icon">
-            <MoreVertical className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => userId && syncContacts.mutate(userId)}
+              disabled={syncContacts.isPending}
+              title="Synchroniser les contacts"
+            >
+              <RefreshCw className={cn("h-4 w-4", syncContacts.isPending && "animate-spin")} />
+            </Button>
+            <Button variant="ghost" size="icon">
+              <MoreVertical className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         <div className="p-3">
@@ -156,7 +170,11 @@ const WhatsAppClone = () => {
                 </Avatar>
                 <div>
                   <h3 className="font-semibold text-sm">{selectedContact.contact_name}</h3>
-                  <p className="text-[10px] text-green-500 font-medium uppercase tracking-wider">En ligne</p>
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                    {selectedContact.last_seen_at 
+                      ? `Vu à ${format(new Date(selectedContact.last_seen_at), 'HH:mm')}` 
+                      : 'Contact'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -252,7 +270,7 @@ const WhatsAppClone = () => {
               Sélectionnez un contact pour voir la discussion et envoyer des messages au nom de l'utilisateur.
             </p>
             <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground pb-4">
-              <Shield className="w-3 h-3" />
+              <ShieldCheck className="w-3 h-3" />
               Connexion sécurisée de bout en bout
             </div>
           </div>

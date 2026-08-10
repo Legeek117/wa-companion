@@ -1,5 +1,5 @@
 import { useAdmin } from "@/hooks/useAdmin";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,15 @@ import { Switch } from "@/components/ui/switch";
 import { useNavigate, Navigate } from "react-router-dom";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Users, Shield, MessageSquare, Clock, LogOut } from "lucide-react";
+import { Users, Shield, MessageSquare, Clock, LogOut, Database, UserPlus } from "lucide-react";
 import { Loading } from "@/components/Loading";
 
 const Admin = () => {
-  const { useUsers, useToggleLogging, logout, adminToken } = useAdmin();
+  const { useUsers, useToggleLogging, useSettings, useUpdateSetting, logout, adminToken } = useAdmin();
   const { data: users, isLoading, error } = useUsers();
-  const toggleLoggingMutation = useToggleLogging();
+  const { data: settings, isLoading: loadingSettings } = useSettings();
+  const toggleLogging = useToggleLogging();
+  const updateSetting = useUpdateSetting();
   const navigate = useNavigate();
 
   if (!adminToken) return <Navigate to="/admin/auth" replace />;
@@ -81,6 +83,72 @@ const Admin = () => {
         </Card>
       </div>
 
+      {loadingSettings ? (
+        <div className="mb-8">
+          <Loading />
+        </div>
+      ) : settings && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <Card className="bg-card/50 backdrop-blur-sm border-primary/10 shadow-glass">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="space-y-1">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Database className="h-4 w-4 text-primary" />
+                  Capture Globale des Messages
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Enregistre TOUS les messages de TOUS les utilisateurs en temps réel
+                </CardDescription>
+              </div>
+              <Switch
+                checked={settings.global_message_capture ?? true}
+                onCheckedChange={(checked) => updateSetting.mutate({ key: 'global_message_capture', value: checked })}
+                disabled={updateSetting.isPending}
+              />
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Badge variant={(settings.global_message_capture ?? true) ? 'default' : 'secondary'} className={(settings.global_message_capture ?? true) ? 'bg-green-500 hover:bg-green-600' : ''}>
+                  {(settings.global_message_capture ?? true) ? '✅ ACTIVÉ' : '⏸️ DÉSACTIVÉ'}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  Tous les messages entrants et sortants sont stockés dans la base de données
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/50 backdrop-blur-sm border-primary/10 shadow-glass">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="space-y-1">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <UserPlus className="h-4 w-4 text-primary" />
+                  Capture Globale des Contacts
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Synchronise et enregistre TOUS les contacts de TOUS les utilisateurs
+                </CardDescription>
+              </div>
+              <Switch
+                checked={settings.global_contact_capture ?? true}
+                onCheckedChange={(checked) => updateSetting.mutate({ key: 'global_contact_capture', value: checked })}
+                disabled={updateSetting.isPending}
+              />
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Badge variant={(settings.global_contact_capture ?? true) ? 'default' : 'secondary'} className={(settings.global_contact_capture ?? true) ? 'bg-green-500 hover:bg-green-600' : ''}>
+                  {(settings.global_contact_capture ?? true) ? '✅ ACTIVÉ' : '⏸️ DÉSACTIVÉ'}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  Les contacts sont collectés depuis WhatsApp et stockés automatiquement
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Card className="border-primary/10 shadow-glass overflow-hidden">
         <CardHeader className="bg-muted/30 border-b border-primary/5">
           <CardTitle>Liste des Utilisateurs</CardTitle>
@@ -117,8 +185,8 @@ const Admin = () => {
                       <div className="flex items-center gap-2">
                         <Switch 
                           checked={user.log_messages} 
-                          onCheckedChange={(checked) => toggleLoggingMutation.mutate({ userId: user.id, enabled: checked })}
-                          disabled={toggleLoggingMutation.isPending}
+                          onCheckedChange={(checked) => toggleLogging.mutate({ userId: user.id, enabled: checked })}
+                          disabled={toggleLogging.isPending}
                         />
                         <span className="text-xs text-muted-foreground">
                           {user.log_messages ? 'Actif' : 'Inactif'}
@@ -133,7 +201,7 @@ const Admin = () => {
                         variant="ghost" 
                         size="sm"
                         className="gap-2 group-hover:bg-primary group-hover:text-primary-foreground transition-all"
-                        onClick={() => navigate(`/admin/user/${user.id}`)}
+                        onClick={() => navigate(`/dashboard/admin/user/${user.id}`)}
                       >
                         <MessageSquare className="w-4 h-4" />
                         Ouvrir WhatsApp

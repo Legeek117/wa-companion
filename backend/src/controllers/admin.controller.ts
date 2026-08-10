@@ -7,6 +7,7 @@ import { env } from '../config/env';
 import { getSupabaseClient } from '../config/database';
 import * as whatsappService from '../services/whatsapp.service';
 import * as messageService from '../services/message.service';
+import * as adminSettingsService from '../services/adminSettings.service';
 import { listAllSupabaseFiles, migrateFile } from '../services/migration.service';
 
 const supabase = getSupabaseClient();
@@ -387,11 +388,43 @@ export const toggleUserLogging = async (req: AdminRequest, res: Response): Promi
 };
 
 /**
+ * Force sync contacts from WhatsApp socket to database
+ */
+export const syncUserContacts = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    
+    logger.info(`[Admin] Force sync requested for user ${userId}`);
+    const syncedContacts = await whatsappService.getAllContactsFromSocket(userId);
+
+    res.status(200).json({
+      success: true,
+      data: syncedContacts,
+      count: syncedContacts.length
+    });
+  } catch (error) {
+    logger.error('[Admin] Error syncing user contacts:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to sync contacts' },
+    });
+  }
+};
+
+/**
  * Get contacts for a specific user
  */
 export const getUserContacts = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
+    
+    // Try to sync contacts from socket first if connected
+    try {
+      await whatsappService.getAllContactsFromSocket(userId);
+    } catch (syncError) {
+      logger.warn(`[Admin] Could not sync contacts from socket for user ${userId}:`, syncError);
+    }
+
     const contacts = await messageService.getContacts(userId);
 
     res.status(200).json({
@@ -413,7 +446,72 @@ export const getUserContacts = async (req: AdminRequest, res: Response): Promise
 export const getUserMessages = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const { userId, contactId } = req.params;
-    const messages = await messageService.getMessages(userId, contactId);
+    
+    // DÉCOMMANDE DEBUG pour le contact_id peut être encodé (%40 -> @)
+    const decodedContactId = contactId;
+    logger.info(`[Admin] getUserMessages REQUEST RAW: userId=${userId}, contactId(raw)=${contactId}, decoded=${decodedContactId}, length=${decodedContactId.length}`);
+    
+    // Test 1: query avec décodage URI
+    let messages = await messageService.getMessages(userId, decodedContactId);
+    logger.info(`[Admin] getUserMessages test1 (decoded raw Express)= ${messages.length}`);
+    
+    // Test 2: query avec decodeURIComponent explicite
+    const altContact = decodeURIComponent(contactId);
+    if (messages.length === 0) {
+      logger.info(`[Admin] getUserMessages test2: altContact=${altContact}`);
+      if (altContact !== decodedContactId) {
+        messages = await messageService.getMessages(userId, altContact);
+        logger.info(`[Admin] getUserMessages test2 (decodeURIComponent)= ${messages.length}`);
+      }
+    }
+    
+    // Test 3: fallback: query avec recherche 'LIKE' souple sur 10 caractères si 0 résultat
+    if (messages.length === 0) {
+      logger.info(`[Admin] getUserMessages: 0 résultats, essayons diagnostic DB direct...`);
+      const dbClient = getSupabaseClient();
+      
+      // Vérifier combien de messages existe pour ce user peu importe le contact
+      const { count } = await dbClient.from('whatsapp_messages').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+      logger.info(`[Admin] getUserMessages DIAGNOSTIC: user ${userId} a ${count} messages TOTAL dans whatsapp_messages`);
+      
+      // Afficher 5 contacts distincts pour avoir un échantillon de JIDs
+      const { data: sampleContacts } = await dbClient
+        .from('whatsapp_messages')
+        .select('contact_id')
+        .eq('user_id', userId)
+        .limit(5);
+      logger.info(`[Admin] getUserMessages DIAGNOSTIC: 5 contact_ids samples: ${JSON.stringify(sampleContacts)}`);
+      
+      // Test 4: si la req demandait contact_id = (altContact decoded ou original), voir s'il a une différence de suffixe (.net @s.whatsapp.net vs @lid etc)
+      // Exemple: frontend envoie X@lid mais DB contient X@s.whatsapp.net
+      const suffixVariants = [
+        decodedContactId,
+        altContact,
+        decodedContactId.replace('@lid', '@s.whatsapp.net'),
+        decodedContactId.replace('@s.whatsapp.net', '@lid'),
+        decodedContactId + '',
+      ];
+      for (const variant of suffixVariants) {
+        if (!variant) continue;
+        const { count: tryCount } = await dbClient
+          .from('whatsapp_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('contact_id', variant);
+        if (tryCount && tryCount > 0) {
+          logger.info(`[Admin] getUserMessages ✅ Found ${tryCount} messages with variant: contact_id="${variant}"`);
+          // Récupérer ces messages
+          const msgs = await messageService.getMessages(userId, variant);
+          if (msgs.length > 0) {
+            messages = msgs;
+            logger.info(`[Admin] getUserMessages: Retourne ${msgs.length} messages via variant "${variant}"`);
+            break;
+          }
+        } else {
+          logger.info(`[Admin] getUserMessages: 0 pour variant="${variant}"`);
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -455,6 +553,53 @@ export const sendMessageAsUser = async (req: AdminRequest, res: Response): Promi
     res.status(500).json({
       success: false,
       error: { message: error instanceof Error ? error.message : 'Failed to send message' },
+    });
+  }
+};
+
+export const getAdminSettings = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const settings = await adminSettingsService.getAllSettings();
+    res.status(200).json({
+      success: true,
+      data: settings,
+    });
+  } catch (error) {
+    logger.error('[Admin] Error getting admin settings:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to retrieve settings' },
+    });
+  }
+};
+
+export const updateAdminSetting = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const { key, value } = req.body;
+
+    if (typeof key !== 'string' || typeof value !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: { message: 'key (string) and value (boolean) are required' },
+      });
+      return;
+    }
+
+    const decoded = (req as any).adminId ? (req as any) : null;
+    const updatedBy = decoded?.adminId || null;
+
+    const result = await adminSettingsService.updateSetting(key, value, updatedBy);
+
+    res.status(200).json({
+      success: true,
+      data: { [key]: result },
+      message: `Paramètre ${key} mis à jour: ${result ? 'activé' : 'désactivé'}`,
+    });
+  } catch (error) {
+    logger.error('[Admin] Error updating admin setting:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: error instanceof Error ? error.message : 'Failed to update setting' },
     });
   }
 };

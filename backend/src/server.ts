@@ -4,7 +4,7 @@ import { logger } from './config/logger';
 import { getRedisClient } from './config/redis';
 import { getSupabaseClient } from './config/database';
 import { logEnvironmentStatus, checkEnvironmentVariables } from './config/check-env';
-import { reconnectWhatsAppIfCredentialsExist } from './services/whatsapp.service';
+import { reconnectAllSessionsForAllUsers } from './services/whatsapp.service';
 import { initializeFirebaseAdmin } from './services/notifications.service';
 import { initializePairingQueue } from './services/pairingQueue.service';
 import { existsSync } from 'fs';
@@ -76,61 +76,14 @@ async function startServer(): Promise<void> {
       }
     }
 
-    // Auto-reconnect WhatsApp sessions if credentials exist
-    // Only reconnect if not already connected to avoid interrupting active connections
+    // Auto-reconnect ALL WhatsApp sessions on startup (CRITICAL for message capture)
+    // Without active sockets connected to WhatsApp, NO new messages can be captured
     if (env.NODE_ENV !== 'test') {
-      try {
-        logger.info('🔄 Checking for existing WhatsApp sessions to reconnect...');
-        const supabase = getSupabaseClient();
-        
-        // Get all users with WhatsApp sessions (regardless of status)
-        // This ensures we reconnect even if status was reset to disconnected after server restart
-        const { data: sessions, error } = await supabase
-          .from('whatsapp_sessions')
-          .select('user_id, status');
-        
-        if (error) {
-          logger.warn('Error fetching WhatsApp sessions for auto-reconnect:', error);
-        } else if (sessions && sessions.length > 0) {
-          logger.info(`Found ${sessions.length} WhatsApp session(s) to check for auto-reconnect`);
-          
-          // Reconnect each user if credentials exist
-          // Add a small delay between reconnections to avoid overwhelming WhatsApp servers
-          for (let i = 0; i < sessions.length; i++) {
-            const session = sessions[i];
-            const userId = session.user_id;
-            const sessionPath = join(process.cwd(), env.WHATSAPP_SESSION_PATH, userId);
-            
-            // On Render, files are ephemeral and will NOT exist on startup
-            // We must call reconnectWhatsAppIfCredentialsExist which internally
-            // restores session files from Supabase if needed.
-            logger.info(`[Startup] Checking if user ${userId} (status: ${session.status}) needs reconnection...`);
-            
-            // Add delay between reconnections (2 seconds per user) to avoid rate limiting
-            const delay = i * 2000;
-            
-            setTimeout(() => {
-              // Reconnect in background (don't wait) - function will skip if already connected
-              reconnectWhatsAppIfCredentialsExist(userId).then((reconnected) => {
-                if (reconnected) {
-                  logger.info(`✅ [Startup] Successfully reconnected user ${userId} on server startup`);
-                } else {
-                  logger.debug(`[Startup] User ${userId} could not be reconnected or is already connecting`);
-                }
-              }).catch((error) => {
-                logger.error(`[Startup] Error auto-reconnecting user ${userId}:`, error);
-              });
-            }, delay);
-          }
-          
-          logger.info(`[Startup] Initiated auto-reconnect for ${sessions.length} user(s) with credentials`);
-        } else {
-          logger.info('No existing WhatsApp sessions found for auto-reconnect');
-        }
-      } catch (error) {
-        logger.warn('Error during WhatsApp auto-reconnect check:', error);
-        // Don't fail server startup if auto-reconnect fails
-      }
+      setTimeout(async () => {
+        logger.info('🔄 [Startup] Starting auto-reconnect for ALL WhatsApp sessions...');
+        const result = await reconnectAllSessionsForAllUsers();
+        logger.info(`🏁 [Startup] Auto-reconnect done: ${result.reconnected}/${result.total} sessions reconnected`);
+      }, 3000);
     }
 
     // Scheduled statuses feature is DISABLED
@@ -228,8 +181,14 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err: Error) => {
-  logger.error('Uncaught Exception:', err);
-  process.exit(1);
+  logger.error('💣 Uncaught Exception (SURVIVING):', {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+  });
+  // DO NOT crash - keep the server alive for admin functionality
+  // This is critical because reconnection attempts might throw and we don't
+  // want the admin features to go down just because one socket is misbehaving
 });
 
 // Graceful shutdown

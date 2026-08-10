@@ -74,10 +74,11 @@ function getEnvVar(key: string, defaultValue?: string): string {
   
   // Check for placeholder values
   if (
-    value.includes('your-') ||
+    (value.includes('your-') ||
     value.includes('placeholder') ||
     value.includes('change-in-production') ||
-    ((key.includes('KEY') || key.includes('SECRET')) && (value === '' || value.trim() === ''))
+    ((key.includes('KEY') || key.includes('SECRET')) && (value === '' || value.trim() === ''))) &&
+    !value.startsWith('sb_publishable_')
   ) {
     console.warn(`\n⚠️  Warning: ${key} appears to have a placeholder value`);
     console.warn(`   Please update your .env file with a real value\n`);

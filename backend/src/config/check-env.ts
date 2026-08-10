@@ -49,11 +49,12 @@ export function checkEnvironmentVariables(): {
       status = 'missing';
       missing.push(key);
     } else if (
-      value.includes('your-') ||
+      (value.includes('your-') ||
       value.includes('placeholder') ||
       value.includes('change-in-production') ||
       value === '' ||
-      value.trim() === ''
+      value.trim() === '') &&
+      !value.startsWith('sb_publishable_')
     ) {
       status = 'placeholder';
       placeholders.push(key);

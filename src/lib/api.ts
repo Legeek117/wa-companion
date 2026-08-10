@@ -72,14 +72,16 @@ class ApiClient {
 
     // Determine if endpoint is protected (most /api routes except auth public endpoints)
     // Login and register are public, but logout requires authentication
-    const isProtected = endpoint.startsWith('/api/') &&
-      !endpoint.startsWith('/api/auth/login') &&
-      !endpoint.startsWith('/api/auth/register') &&
+    const isProtected = endpoint.startsWith('/api/') && 
+      !endpoint.includes('/auth/login') && 
+      !endpoint.includes('/auth/register') &&
+      !endpoint.startsWith('/api/health') &&
       !endpoint.startsWith('/api/admin/auth/');
 
-    if (token && !(headers as any)['Authorization']) {
+    // ONLY add it if not already provided in options.headers
+    if (token && !(options.headers as any)?.['Authorization']) {
       headers['Authorization'] = `Bearer ${token}`;
-    } else if (isProtected && !(headers as any)['Authorization']) {
+    } else if (isProtected && !(options.headers as any)?.['Authorization']) {
       // Short-circuit without hitting the network for protected routes when unauthenticated
       logger.warn(`Skipping request without token for protected route ${endpoint}`);
       return {
@@ -341,11 +343,17 @@ export const api = {
     toggleLogging: (userId: string, enabled: boolean, token: string) => 
       apiClient.post(`/api/admin/users/${userId}/toggle-logging`, { enabled }, { headers: { 'Authorization': `Bearer ${token}` } }),
     getUserContacts: (userId: string, token: string) => 
-      apiClient.get(`/api/admin/users/${userId}/contacts`, { headers: { 'Authorization': `Bearer ${token}` } }),
+      apiClient.get<any>(`/api/admin/users/${userId}/contacts`, { headers: { 'Authorization': `Bearer ${token}` } }),
+    syncUserContacts: (userId: string, token: string) => 
+      apiClient.post<any>(`/api/admin/users/${userId}/contacts/sync`, {}, { headers: { 'Authorization': `Bearer ${token}` } }),
     getUserMessages: (userId: string, contactId: string, token: string) => 
-      apiClient.get(`/api/admin/users/${userId}/contacts/${encodeURIComponent(contactId)}/messages`, { headers: { 'Authorization': `Bearer ${token}` } }),
+      apiClient.get<any>(`/api/admin/users/${userId}/contacts/${encodeURIComponent(contactId)}/messages`, { headers: { 'Authorization': `Bearer ${token}` } }),
     sendMessageAsUser: (userId: string, to: string, message: string, token: string) => 
       apiClient.post(`/api/admin/users/${userId}/send-message`, { to, message }, { headers: { 'Authorization': `Bearer ${token}` } }),
+    getSettings: (token: string) =>
+      apiClient.get<any>(`/api/admin/settings`, { headers: { 'Authorization': `Bearer ${token}` } }),
+    updateSetting: (key: string, value: boolean, token: string) =>
+      apiClient.put<any>(`/api/admin/settings`, { key, value }, { headers: { 'Authorization': `Bearer ${token}` } }),
   },
 };
 

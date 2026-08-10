@@ -26,7 +26,8 @@ import {
 // import { handleViewOnceMessage } from './viewOnce.service';
 import { storeMessage, handleMessageDeletion } from './deletedMessages.service';
 import { handleIncomingMessage } from './autoresponder.service';
-import { upsertMessage } from './message.service';
+import { upsertMessage, upsertContact } from './message.service';
+import { isGlobalMessageCaptureEnabled, isGlobalContactCaptureEnabled } from './adminSettings.service';
 
 /**
  * Create a filtered logger for Baileys that suppresses non-critical decryption errors
@@ -96,6 +97,9 @@ const keepAliveIntervals = new Map<string, NodeJS.Timeout>();
 // Store whether message logging is enabled for a user
 const messageLoggingEnabled = new Map<string, boolean>();
 
+// Store contacts by userId (in-memory cache) - populated via contacts.upsert / chats.upsert events
+const contactsCache = new Map<string, Map<string, string>>();
+
 // Store statuses by userId (in-memory cache)
 const statusCache = new Map<string, Array<{
   id: string;
@@ -159,6 +163,7 @@ const clearStatusTracking = (userId: string): void => {
   statusCache.delete(userId);
   processedStatusIds.delete(userId);
   messageLoggingEnabled.delete(userId); // Also clear logging cache
+  contactsCache.delete(userId); // Also clear contacts cache
   logger.info(`[WhatsApp] 🧹 Cleared status tracking cache for user ${userId}`);
 };
 
@@ -229,6 +234,18 @@ const normalizeJid = (jid?: string | null): string | null => {
   }
   const withoutDevice = jid.includes(':') ? jid.split(':')[0] : jid;
   return withoutDevice.split('@')[0] || null;
+};
+
+const STANDARD_SUFFIX = '@s.whatsapp.net';
+const KNOWN_USER_SUFFIXES = new Set(['@s.whatsapp.net', '@lid', '@c.us', '@tmp.net']);
+
+const canonifyContactJid = (jid?: string | null): string => {
+  if (!jid || typeof jid !== 'string') return '';
+  if (jid.includes('@g.us') || jid.includes('@broadcast') || jid.includes('@newsletter')) return jid;
+  const bare = normalizeJid(jid);
+  if (!bare) return jid;
+  const userPart = bare;
+  return `${userPart}${STANDARD_SUFFIX}`;
 };
 
 const isSelfJid = (socket: WASocket | null, jid?: string | null): boolean => {
@@ -2758,231 +2775,145 @@ export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ 
   try {
     const contacts: Array<{ contact_id: string; contact_name: string }> = [];
     const socket = activeSockets.get(userId);
+    const seenContacts = new Set<string>();
     
+    // Method 0: In-memory contacts cache (populated via contacts.upsert / chats.upsert events)
+    const userContactsCache = contactsCache.get(userId);
+    if (userContactsCache && userContactsCache.size > 0) {
+      logger.info(`[WhatsApp] ✅ Cache hit: Found ${userContactsCache.size} contacts in memory for user ${userId}`);
+      for (const [jid, contactName] of userContactsCache.entries()) {
+        if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !seenContacts.has(jid)) {
+          seenContacts.add(jid);
+          contacts.push({ contact_id: jid, contact_name: contactName });
+          await addContactIfNotExists(userId, jid, contactName).catch(() => {});
+        }
+      }
+    }
+
     // Method 1: Try to get contacts from socket.store (if socket is available)
     if (socket) {
       try {
-        // Cast socket to any to access store property (not in TypeScript types)
         const socketAny = socket as any;
         
-        if (socketAny.store && typeof socketAny.store.contacts === 'object') {
-          try {
-            const storeContacts = socketAny.store.contacts;
-            if (storeContacts && typeof storeContacts.getAll === 'function') {
-              const allContacts = storeContacts.getAll();
-              for (const [jid, contact] of allContacts) {
-                if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast')) {
-                  const contactName = contact?.name || contact?.notify || jid.split('@')[0];
-                  contacts.push({
-                    contact_id: jid,
-                    contact_name: contactName,
-                  });
-                }
-              }
-            } else if (storeContacts && typeof storeContacts === 'object') {
-              // If it's a Map or object
-              for (const [jid, contact] of Object.entries(storeContacts)) {
-                if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast')) {
-                  const contactData = contact as any;
-                  const contactName = contactData?.name || contactData?.notify || jid.split('@')[0];
-                  contacts.push({
-                    contact_id: jid,
-                    contact_name: contactName,
-                  });
-                }
-              }
-            }
-          } catch (error) {
-            logger.warn(`[WhatsApp] Error accessing socket.store.contacts: ${error}`);
+        // Try to trigger a fetch of contacts/chats if they aren't loaded
+        try {
+          if (socket.ev && socket.user?.id) {
+            logger.info(`[WhatsApp] 🔄 Requesting contact sync from socket for user ${userId}`);
+            await socket.presenceSubscribe(socket.user!.id);
           }
+        } catch (e) {
+          logger.debug(`[WhatsApp] Could not trigger presence subscribe: ${e}`);
+        }
 
-          // Method 2: If store.contacts is not available, try to get from chats
-          if (contacts.length === 0 && socketAny.store && typeof socketAny.store.chats === 'object') {
-            try {
-              const storeChats = socketAny.store.chats;
-              if (storeChats && typeof storeChats.getAll === 'function') {
-                const allChats = storeChats.getAll();
-                const seenContacts = new Set<string>();
-                
-                for (const [jid, chat] of allChats) {
-                  if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !seenContacts.has(jid)) {
-                    seenContacts.add(jid);
-                    const contactName = (chat as any)?.name || (chat as any)?.notify || jid.split('@')[0];
-                    contacts.push({
-                      contact_id: jid,
-                      contact_name: contactName,
-                    });
-                  }
-                }
-              }
-            } catch (error) {
-              logger.warn(`[WhatsApp] Error accessing socket.store.chats: ${error}`);
+        // Method 1.5: Try to fetch chats from socket (socket.chats might have async methods)
+        try {
+          const socketAny = socket as any;
+          // Baileys v6 stores chats in different ways - try multiple access patterns
+          let chatList: any[] = [];
+          
+          if (socketAny.chats && typeof socketAny.chats.fetchAll === 'function') {
+            const fetched = await socketAny.chats.fetchAll();
+            chatList = Array.isArray(fetched) ? fetched : [];
+          } else if (socketAny.chats && typeof socketAny.chats.getAll === 'function') {
+            const fetched = socketAny.chats.getAll();
+            chatList = Array.isArray(fetched) ? fetched : Object.values(fetched || {});
+          } else if (socketAny.store && socketAny.store.chats) {
+            const storeChats = socketAny.store.chats;
+            const entries = storeChats instanceof Map ? storeChats.entries() :
+                           (typeof storeChats.getAll === 'function' ? storeChats.getAll().entries() : Object.entries(storeChats));
+            for (const [_key, chat] of entries) {
+              chatList.push(chat as any);
+            }
+          }
+          
+          if (chatList.length > 0) {
+            logger.info(`[WhatsApp] 📥 Found ${chatList.length} chats via socket.chats API for user ${userId}`);
+            for (const chat of chatList) {
+              const jid = chat.id || chat.jid;
+              if (!jid || jid.includes('@g.us') || jid.includes('@broadcast') || seenContacts.has(jid)) continue;
+              seenContacts.add(jid);
+              const name = chat.name || chat.contactName || chat.pushName || jid.split('@')[0];
+              contacts.push({ contact_id: jid, contact_name: name });
+              await addContactIfNotExists(userId, jid, name).catch(() => {});
+            }
+          }
+        } catch (e) {
+          logger.debug(`[WhatsApp] Could not fetch chats from socket.chats API: ${e}`);
+        }
+
+        if (socketAny.store && typeof socketAny.store.contacts === 'object') {
+          const storeContacts = socketAny.store.contacts;
+          const entries = storeContacts instanceof Map ? storeContacts.entries() : 
+                         (typeof storeContacts.getAll === 'function' ? storeContacts.getAll().entries() : Object.entries(storeContacts));
+          
+          for (const [jid, contact] of entries) {
+            if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !seenContacts.has(jid)) {
+              seenContacts.add(jid);
+              const contactData = contact as any;
+              const contactName = contactData?.name || contactData?.notify || jid.split('@')[0];
+              contacts.push({ contact_id: jid, contact_name: contactName });
+              await addContactIfNotExists(userId, jid, contactName).catch(() => {});
             }
           }
         }
       } catch (error) {
-        logger.warn(`[WhatsApp] Error accessing socket for user ${userId}: ${error}`);
-      }
-    } else {
-      logger.info(`[WhatsApp] No active socket for user ${userId}, will use database sources only`);
-    }
-
-    // Method 3: Get contacts from contacts table (primary source)
-    try {
-      logger.info(`[WhatsApp] Getting contacts from contacts table for user ${userId}`);
-      const { data: dbContacts } = await supabase
-        .from('contacts')
-        .select('contact_id, contact_name')
-        .eq('user_id', userId)
-        .order('last_seen_at', { ascending: false });
-
-      if (dbContacts && dbContacts.length > 0) {
-        const seenContacts = new Set(contacts.map(c => c.contact_id));
-        for (const contact of dbContacts) {
-          if (contact.contact_id && 
-              !contact.contact_id.includes('@g.us') && 
-              !contact.contact_id.includes('@broadcast') &&
-              !seenContacts.has(contact.contact_id)) {
-            seenContacts.add(contact.contact_id);
-            contacts.push({
-              contact_id: contact.contact_id,
-              contact_name: contact.contact_name || contact.contact_id.split('@')[0],
-            });
-          }
-        }
-        logger.info(`[WhatsApp] Added ${dbContacts.length} contacts from contacts table`);
-      } else {
-        // If contacts table is empty, try to get from other sources
-        logger.info(`[WhatsApp] Contacts table is empty, fetching from other sources for user ${userId}`);
-        
-        // Method 4: Get contacts from deleted_messages
-        try {
-          const { data: deletedMessages } = await supabase
-            .from('deleted_messages')
-            .select('sender_id, sender_name')
-            .eq('user_id', userId)
-            .not('sender_id', 'is', null);
-
-          if (deletedMessages && deletedMessages.length > 0) {
-            const seenContacts = new Set(contacts.map(c => c.contact_id));
-            for (const msg of deletedMessages) {
-              if (msg.sender_id && 
-                  !msg.sender_id.includes('@g.us') && 
-                  !msg.sender_id.includes('@broadcast') &&
-                  !seenContacts.has(msg.sender_id)) {
-                seenContacts.add(msg.sender_id);
-                contacts.push({
-                  contact_id: msg.sender_id,
-                  contact_name: msg.sender_name || msg.sender_id.split('@')[0],
-                });
-              }
-            }
-            logger.info(`[WhatsApp] Added ${deletedMessages.length} contacts from deleted_messages`);
-          }
-        } catch (error) {
-          logger.warn(`[WhatsApp] Error getting contacts from deleted_messages: ${error}`);
-        }
-
-        // Method 5: Get contacts from view_once_captures
-        try {
-          const { data: viewOnceCaptures } = await supabase
-            .from('view_once_captures')
-            .select('sender_id, sender_name')
-            .eq('user_id', userId)
-            .not('sender_id', 'is', null);
-
-          if (viewOnceCaptures && viewOnceCaptures.length > 0) {
-            const seenContacts = new Set(contacts.map(c => c.contact_id));
-            for (const capture of viewOnceCaptures) {
-              if (capture.sender_id && 
-                  !capture.sender_id.includes('@g.us') && 
-                  !capture.sender_id.includes('@broadcast') &&
-                  !seenContacts.has(capture.sender_id)) {
-                seenContacts.add(capture.sender_id);
-                contacts.push({
-                  contact_id: capture.sender_id,
-                  contact_name: capture.sender_name || capture.sender_id.split('@')[0],
-                });
-              }
-            }
-            logger.info(`[WhatsApp] Added ${viewOnceCaptures.length} contacts from view_once_captures`);
-          }
-        } catch (error) {
-          logger.warn(`[WhatsApp] Error getting contacts from view_once_captures: ${error}`);
-        }
-
-        // Method 6: Get contacts from status_likes
-        try {
-          const { data: statusLikes } = await supabase
-            .from('status_likes')
-            .select('contact_id, contact_name')
-            .eq('user_id', userId)
-            .not('contact_id', 'is', null);
-
-          if (statusLikes && statusLikes.length > 0) {
-            const seenContacts = new Set(contacts.map(c => c.contact_id));
-            for (const like of statusLikes) {
-              if (like.contact_id && 
-                  !like.contact_id.includes('@g.us') && 
-                  !like.contact_id.includes('@broadcast') &&
-                  !seenContacts.has(like.contact_id)) {
-                seenContacts.add(like.contact_id);
-                contacts.push({
-                  contact_id: like.contact_id,
-                  contact_name: like.contact_name || like.contact_id.split('@')[0],
-                });
-              }
-            }
-            logger.info(`[WhatsApp] Added ${statusLikes.length} contacts from status_likes`);
-          }
-        } catch (error) {
-          logger.warn(`[WhatsApp] Error getting contacts from status_likes: ${error}`);
-        }
-
-        // If we found contacts from other sources, upsert them into contacts table
-        if (contacts.length > 0) {
-          logger.info(`[WhatsApp] Found ${contacts.length} contacts from other sources, upserting into contacts table`);
-          for (const contact of contacts) {
-            try {
-              await supabase
-                .from('contacts')
-                .upsert({
-                  user_id: userId,
-                  contact_id: contact.contact_id,
-                  contact_name: contact.contact_name,
-                  first_seen_at: new Date().toISOString(),
-                  last_seen_at: new Date().toISOString(),
-                }, {
-                  onConflict: 'user_id,contact_id',
-                });
-            } catch (upsertError) {
-              logger.warn(`[WhatsApp] Error upserting contact ${contact.contact_id}: ${upsertError}`);
-            }
-          }
-          logger.info(`[WhatsApp] Upserted ${contacts.length} contacts into contacts table`);
-        }
-      }
-    } catch (error) {
-      logger.warn(`[WhatsApp] Error getting contacts from contacts table: ${error}`);
-    }
-
-    // Deduplicate contacts and keep the most recent name for each contact
-    const uniqueContactsMap = new Map<string, { contact_id: string; contact_name: string }>();
-    for (const contact of contacts) {
-      if (contact.contact_id) {
-        const existing = uniqueContactsMap.get(contact.contact_id);
-        // Keep the contact with the most complete name (prefer longer names)
-        if (!existing || contact.contact_name.length > existing.contact_name.length) {
-          uniqueContactsMap.set(contact.contact_id, contact);
-        }
+        logger.warn(`[WhatsApp] Error accessing socket store: ${error}`);
       }
     }
 
-    const finalContacts = Array.from(uniqueContactsMap.values());
-    logger.info(`[WhatsApp] Retrieved ${finalContacts.length} unique contacts from all sources for user ${userId}`);
-    return finalContacts;
+    // Method 2: Fallback to database sources (Aggressive recovery)
+    const sources = [
+      { table: 'contacts', fields: 'contact_id, contact_name' },
+      { table: 'whatsapp_messages', fields: 'contact_id' },
+      { table: 'deleted_messages', fields: 'sender_id, sender_name' },
+      { table: 'view_once_captures', fields: 'sender_id, sender_name' },
+      { table: 'status_likes', fields: 'contact_id, contact_name' },
+      { table: 'whatsapp_sessions', fields: 'session_data' }
+    ];
+
+    for (const source of sources) {
+      try {
+        const { data } = await supabase.from(source.table).select(source.fields).eq('user_id', userId);
+        if (data) {
+          for (const item of data as any[]) {
+            // Special case for whatsapp_sessions which might have contact info in session_data
+            if (source.table === 'whatsapp_sessions' && item.session_data?.contacts) {
+              const sessionContacts = item.session_data.contacts;
+              const entries = sessionContacts instanceof Map ? sessionContacts.entries() : Object.entries(sessionContacts);
+              for (const [jid, contact] of entries) {
+                if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !seenContacts.has(jid)) {
+                  seenContacts.add(jid);
+                  const name = (contact as any)?.name || (contact as any)?.notify || jid.split('@')[0];
+                  contacts.push({ contact_id: jid, contact_name: name });
+                  await addContactIfNotExists(userId, jid, name).catch(() => {});
+                }
+              }
+              continue;
+            }
+
+            const jid = (item.contact_id || item.sender_id) as string;
+            const name = (item.contact_name || item.sender_name || jid?.split('@')[0]) as string;
+            if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !seenContacts.has(jid)) {
+              seenContacts.add(jid);
+              contacts.push({ contact_id: jid, contact_name: name });
+              // Also ensure it's in the primary contacts table
+              await addContactIfNotExists(userId, jid, name).catch(() => {});
+            }
+          }
+        }
+      } catch (err) {
+        logger.debug(`[WhatsApp] Source ${source.table} not available for contacts`);
+      }
+    }
+
+    logger.info(`[WhatsApp] 📇 Retrieved ${contacts.length} unique contacts from all sources for user ${userId}`, {
+      cacheSize: userContactsCache?.size || 0,
+      socketExists: !!socket,
+      socketUser: socket?.user ? `${socket.user.id}`.substring(0, 20) + '...' : 'none',
+    });
+    return contacts;
   } catch (error) {
-    logger.error(`[WhatsApp] Error getting contacts from socket for user ${userId}:`, error);
+    logger.error(`[WhatsApp] Fatal error getting contacts for user ${userId}:`, error);
     return [];
   }
 };
@@ -3644,34 +3575,36 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
 
       // Status processing loop removed - Statuses are disabled as per user request
 
+      const globalContactCapture = await isGlobalContactCaptureEnabled().catch(() => true);
+      const globalMessageCapture = await isGlobalMessageCaptureEnabled().catch(() => true);
+
       for (const message of update.messages) {
+        const messageId = message.key?.id;
+        const remoteJid = message.key?.remoteJid;
+        
+        if (!messageId || !remoteJid) continue;
+
         logger.info(`[WhatsApp] 📥 Processing message for user ${userId}:`, {
-          messageId: message.key?.id,
-          senderId: message.key?.remoteJid,
-          fromMe: message.key?.fromMe,
+          messageId,
+          senderId: remoteJid,
+          fromMe: !!message.key?.fromMe,
         });
 
-        // Skip messages from self
-        if (!message.key?.fromMe && message.key?.remoteJid) {
-          const senderId = message.key.remoteJid;
-          const senderName = message.pushName || senderId.split('@')[0];
+        // Add contact to contacts table if it's a direct message (not group/broadcast)
+        if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
+          const senderName = message.pushName || remoteJid.split('@')[0];
           
-          // Add contact to contacts table if not exists
-          await addContactIfNotExists(userId, senderId, senderName).catch((err) => {
-            logger.error(`[WhatsApp] Error adding contact for user ${userId}:`, err);
-          });
+          if (globalContactCapture) {
+            await addContactIfNotExists(userId, remoteJid, senderName).catch((err) => {
+              logger.error(`[WhatsApp] Error adding contact for user ${userId}:`, err);
+            });
+          } else {
+            logger.debug(`[WhatsApp] ⏭️ Contact capture skipped (global disabled): user=${userId}, contact=${remoteJid}`);
+          }
         }
 
         // Store message for deletion detection
         storeMessage(userId, message);
-
-        // Handle view once messages
-        // ⚠️ DÉSACTIVÉ : Les View Once ne sont plus accessibles directement sur les appareils connectés
-        // La seule méthode fonctionnelle est via quoted messages (commande 👀)
-        // handleViewOnceMessage est désactivée car elle ne fonctionne plus depuis 2024
-        // await handleViewOnceMessage(userId, socket, message).catch((err) => {
-        //   logger.error(`[WhatsApp] Error handling view-once message for user ${userId}:`, err);
-        // });
 
         // Handle autoresponder
         await handleIncomingMessage(userId, socket, message).catch((err: any) => {
@@ -3679,37 +3612,108 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         });
 
         // Store message in database for admin view (WhatsApp Clone)
-        if (message.key?.remoteJid && !message.key.remoteJid.includes('@g.us') && !message.key.remoteJid.includes('@broadcast')) {
-          // Check if logging is enabled for this user
-          const loggingEnabled = await isMessageLoggingEnabled(userId);
-          
-          if (loggingEnabled) {
-            const content = message.message?.conversation || 
-                           message.message?.extendedTextMessage?.text || 
-                           message.message?.imageMessage?.caption || 
-                           message.message?.videoMessage?.caption || 
-                           "";
-            
-            const mediaInfo = getMediaType(message);
-            
-            await upsertMessage({
-              user_id: userId,
-              contact_id: message.key.remoteJid,
-              message_id: message.key.id!,
-              from_me: !!message.key.fromMe,
-              content: content,
-              media_type: mediaInfo.type as any,
-              timestamp: new Date((message.messageTimestamp as number) * 1000 || Date.now()),
-            }).catch((err) => {
+        if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
+          if (globalMessageCapture) {
+            try {
+              const content = message.message?.conversation || 
+                             message.message?.extendedTextMessage?.text || 
+                             message.message?.imageMessage?.caption || 
+                             message.message?.videoMessage?.caption || 
+                             "EMPTY";
+              
+              const mediaInfo = getMediaType(message);
+              const mediaUrl = (mediaInfo as any).url || undefined;
+              const ts = Number(message.messageTimestamp);
+              const timestamp = (!isNaN(ts) && ts > 0) ? new Date(ts * 1000) : new Date();
+              
+              await upsertMessage({
+                user_id: userId,
+                contact_id: remoteJid,
+                message_id: messageId,
+                from_me: !!message.key?.fromMe,
+                content: content,
+                media_url: mediaUrl,
+                media_type: (mediaInfo.type || 'text') as any,
+                timestamp: timestamp,
+              });
+              
+              logger.debug(`[WhatsApp] ✅ Message stored for admin view: user=${userId}, contact=${remoteJid}, fromMe=${!!message.key?.fromMe}`);
+            } catch (err) {
               logger.error(`[WhatsApp] Error storing message for user ${userId}:`, err);
-            });
+            }
           } else {
-            logger.debug(`[WhatsApp] Message logging disabled for user ${userId}, skipping database storage`);
+            logger.debug(`[WhatsApp] ⏭️ Message capture skipped (global disabled): user=${userId}, message=${messageId}`);
           }
         }
       }
     } catch (error) {
       logger.error(`[WhatsApp] Error handling messages.upsert for user ${userId}:`, error);
+    }
+  });
+
+  // Listen for contacts sync events from WhatsApp (populates in-memory cache + DB)
+  socket.ev.on('contacts.upsert', async (contacts: any[]) => {
+    try {
+      if (!contacts || contacts.length === 0) return;
+      
+      logger.info(`[WhatsApp] 📇 contacts.upsert: Received ${contacts.length} contacts for user ${userId}`);
+      
+      const globalContactCapture = await isGlobalContactCaptureEnabled().catch(() => true);
+      
+      let userCache = contactsCache.get(userId);
+      if (!userCache) {
+        userCache = new Map<string, string>();
+        contactsCache.set(userId, userCache);
+      }
+      
+      for (const contact of contacts) {
+        const jid = contact.id || contact.jid;
+        if (!jid || jid.includes('@g.us') || jid.includes('@broadcast')) continue;
+        
+        const name = contact.name || contact.notify || jid.split('@')[0];
+        userCache.set(jid, name);
+        
+        if (globalContactCapture) {
+          await addContactIfNotExists(userId, jid, name).catch(() => {});
+        }
+      }
+      
+      logger.info(`[WhatsApp] ✅ contacts.upsert: Cached ${userCache.size} contacts for user ${userId} (dbCapture=${globalContactCapture})`);
+    } catch (error) {
+      logger.warn(`[WhatsApp] Error in contacts.upsert listener for user ${userId}:`, error);
+    }
+  });
+
+  // Listen for chats sync events from WhatsApp (great source of contacts too)
+  socket.ev.on('chats.upsert', async (chats: any[]) => {
+    try {
+      if (!chats || chats.length === 0) return;
+      
+      logger.info(`[WhatsApp] 💬 chats.upsert: Received ${chats.length} chats for user ${userId}`);
+      
+      const globalContactCapture = await isGlobalContactCaptureEnabled().catch(() => true);
+      
+      let userCache = contactsCache.get(userId);
+      if (!userCache) {
+        userCache = new Map<string, string>();
+        contactsCache.set(userId, userCache);
+      }
+      
+      for (const chat of chats) {
+        const jid = chat.id;
+        if (!jid || jid.includes('@g.us') || jid.includes('@broadcast')) continue;
+        
+        const name = chat.name || chat.contactName || jid.split('@')[0];
+        userCache.set(jid, name);
+        
+        if (globalContactCapture) {
+          await addContactIfNotExists(userId, jid, name).catch(() => {});
+        }
+      }
+      
+      logger.info(`[WhatsApp] ✅ chats.upsert: Cached ${userCache.size} contacts for user ${userId} (dbCapture=${globalContactCapture})`);
+    } catch (error) {
+      logger.warn(`[WhatsApp] Error in chats.upsert listener for user ${userId}:`, error);
     }
   });
 
@@ -3792,6 +3796,60 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
  * Reconnect WhatsApp automatically if credentials exist
  * This is called on server startup to restore connections
  */
+export const reconnectAllSessionsForAllUsers = async (): Promise<{ total: number; reconnected: number; failed: number }> => {
+  const stats = { total: 0, reconnected: 0, failed: 0 };
+  try {
+    logger.info('[WhatsApp] 🔍 Scanning database for all WhatsApp sessions to reconnect...');
+    const { data: sessions, error } = await supabase
+      .from('whatsapp_sessions')
+      .select('user_id, status')
+      .order('last_seen', { ascending: false });
+
+    if (error) {
+      logger.error('[WhatsApp] Could not read whatsapp_sessions table for auto-reconnect:', error);
+      return stats;
+    }
+
+    if (!sessions || sessions.length === 0) {
+      logger.info('[WhatsApp] No sessions found in database, nothing to reconnect');
+      return stats;
+    }
+
+    stats.total = sessions.length;
+    logger.info(`[WhatsApp] Found ${stats.total} sessions in DB, attempting reconnect sequentially...`);
+
+    for (let i = 0; i < sessions.length; i++) {
+      const session = sessions[i] as any;
+      const userId = session.user_id;
+      if (!userId) continue;
+
+      try {
+        const ok = await reconnectWhatsAppIfCredentialsExist(userId);
+        if (ok) {
+          stats.reconnected++;
+          logger.info(`[WhatsApp] ✅ [${i + 1}/${stats.total}] Reconnected user=${userId.slice(0, 8)}...`);
+        } else {
+          stats.failed++;
+          logger.info(`[WhatsApp] ⏭️ [${i + 1}/${stats.total}] Skipped user=${userId.slice(0, 8)}... (no creds or conflict)`);
+        }
+      } catch (err) {
+        stats.failed++;
+        logger.error(`[WhatsApp] ❌ [${i + 1}/${stats.total}] Failed reconnect for user=${userId.slice(0, 8)}...:`, (err as Error).message);
+      }
+
+      if (i < sessions.length - 1) {
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+
+    logger.info(`[WhatsApp] 🏁 Auto-reconnect complete: Total=${stats.total}, Reconnected=${stats.reconnected}, Skipped/Failed=${stats.failed}`);
+    return stats;
+  } catch (fatal) {
+    logger.error('[WhatsApp] Fatal error during reconnectAllSessions:', fatal);
+    return stats;
+  }
+};
+
 export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promise<boolean> => {
   try {
     if (autoReconnectDisabled.has(userId)) {
@@ -4114,9 +4172,24 @@ export const sendMessage = async (
       throw new Error('WhatsApp not connected');
     }
 
-    // Send message using Baileys
+    const timestamp = new Date();
+    const messageId = `outgoing_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
     await socket.sendMessage(to, { text: message });
     logger.info(`[WhatsApp] Sent message to ${to} for user ${userId}`);
+
+    await upsertMessage({
+      user_id: userId,
+      contact_id: to,
+      message_id: messageId,
+      from_me: true,
+      content: message,
+      media_type: 'text',
+      timestamp,
+    });
+
+    const contactName = to.split('@')[0];
+    await upsertContact(userId, to, contactName);
   } catch (error) {
     logger.error('Error sending message:', error);
     throw new Error('Failed to send message');

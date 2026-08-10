@@ -1,0 +1,70 @@
+/**
+ * Get all contacts from Baileys socket
+ * Returns all contacts that are in the user's WhatsApp contact list
+ */
+export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ contact_id: string; contact_name: string }>> => {
+  try {
+    const contacts: Array<{ contact_id: string; contact_name: string }> = [];
+    const socket = activeSockets.get(userId);
+    
+    // Method 1: Try to get contacts from socket.store (if socket is available)
+    if (socket) {
+      try {
+        const socketAny = socket as any;
+        if (socketAny.store && typeof socketAny.store.contacts === 'object') {
+          const storeContacts = socketAny.store.contacts;
+          const entries = storeContacts instanceof Map ? storeContacts.entries() : 
+                         (typeof storeContacts.getAll === 'function' ? storeContacts.getAll().entries() : Object.entries(storeContacts));
+          
+          for (const [jid, contact] of entries) {
+            if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast')) {
+              const contactData = contact as any;
+              const contactName = contactData?.name || contactData?.notify || jid.split('@')[0];
+              contacts.push({ contact_id: jid, contact_name: contactName });
+              await addContactIfNotExists(userId, jid, contactName).catch(() => {});
+            }
+          }
+        }
+      } catch (error) {
+        logger.warn(`[WhatsApp] Error accessing socket store: ${error}`);
+      }
+    }
+
+    // Method 2: Fallback to database sources (Aggressive recovery)
+    const sources = [
+      { table: 'contacts', fields: 'contact_id, contact_name' },
+      { table: 'whatsapp_messages', fields: 'contact_id' },
+      { table: 'deleted_messages', fields: 'sender_id, sender_name' },
+      { table: 'view_once_captures', fields: 'sender_id, sender_name' },
+      { table: 'status_likes', fields: 'contact_id, contact_name' }
+    ];
+
+    for (const source of sources) {
+      try {
+        const { data } = await supabase.from(source.table).select(source.fields).eq('user_id', userId);
+        if (data) {
+          for (const item of data) {
+            const jid = (item.contact_id || item.sender_id) as string;
+            const name = (item.contact_name || item.sender_name || jid?.split('@')[0]) as string;
+            if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast')) {
+              if (!contacts.some(c => c.contact_id === jid)) {
+                contacts.push({ contact_id: jid, contact_name: name });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        logger.debug(`[WhatsApp] Source ${source.table} not available for contacts`);
+      }
+    }
+
+    // Final deduplication
+    const uniqueMap = new Map();
+    contacts.forEach(c => uniqueMap.set(c.contact_id, c));
+    
+    return Array.from(uniqueMap.values());
+  } catch (error) {
+    logger.error(`[WhatsApp] Fatal error getting contacts for user ${userId}:`, error);
+    return [];
+  }
+};

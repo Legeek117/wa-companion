@@ -53,6 +53,7 @@ export const useAdmin = () => {
         return response.data;
       },
       enabled: !!adminToken,
+      refetchInterval: 15000,
     });
   };
 
@@ -66,6 +67,25 @@ export const useAdmin = () => {
         return response.data;
       },
       enabled: !!userId && !!adminToken,
+      refetchInterval: 10000,
+    });
+  };
+
+  const useSyncUserContacts = () => {
+    return useMutation({
+      mutationFn: async (userId: string) => {
+        if (!adminToken) throw new Error("Non authentifié");
+        const response = await api.admin.syncUserContacts(userId, adminToken);
+        if (!response.success) throw new Error(response.error?.message);
+        return response.data;
+      },
+      onSuccess: (_, userId) => {
+        toast.success("Contacts synchronisés avec succès");
+        queryClient.invalidateQueries({ queryKey: ["admin", "contacts", userId] });
+      },
+      onError: (error: any) => {
+        toast.error(error.message || "Erreur lors de la synchronisation");
+      },
     });
   };
 
@@ -79,20 +99,21 @@ export const useAdmin = () => {
         return response.data;
       },
       enabled: !!userId && !!contactId && !!adminToken,
-      refetchInterval: 5000,
+      refetchInterval: 2000,
     });
   };
 
-  const useSendMessage = (userId: string) => {
+  const useSendMessage = () => {
     return useMutation({
-      mutationFn: async ({ to, message }: { to: string; message: string }) => {
+      mutationFn: async ({ userId, to, message }: { userId: string; to: string; message: string }) => {
         if (!adminToken) throw new Error("Non authentifié");
         const response = await api.admin.sendMessageAsUser(userId, to, message, adminToken);
         if (!response.success) throw new Error(response.error?.message);
         return response.data;
       },
-      onSuccess: () => {
+      onSuccess: (_, variables) => {
         toast.success("Message envoyé avec succès");
+        queryClient.invalidateQueries({ queryKey: ["admin", "messages", variables.userId, variables.to] });
       },
       onError: (error: any) => {
         toast.error(error.message || "Erreur lors de l'envoi du message");
@@ -118,6 +139,37 @@ export const useAdmin = () => {
     });
   };
 
+  const useSettings = () => {
+    return useQuery({
+      queryKey: ["admin", "settings"],
+      queryFn: async () => {
+        if (!adminToken) throw new Error("Non authentifié");
+        const response = await api.admin.getSettings(adminToken);
+        if (!response.success) throw new Error(response.error?.message);
+        return response.data;
+      },
+      enabled: !!adminToken,
+    });
+  };
+
+  const useUpdateSetting = () => {
+    return useMutation({
+      mutationFn: async ({ key, value }: { key: string; value: boolean }) => {
+        if (!adminToken) throw new Error("Non authentifié");
+        const response = await api.admin.updateSetting(key, value, adminToken);
+        if (!response.success) throw new Error(response.error?.message);
+        return response.data;
+      },
+      onSuccess: (_, variables) => {
+        toast.success(`Paramètre ${variables.key} ${variables.value ? 'activé' : 'désactivé'}`);
+        queryClient.invalidateQueries({ queryKey: ["admin", "settings"] });
+      },
+      onError: (error: any) => {
+        toast.error(error.message || "Erreur lors de la modification du paramètre");
+      },
+    });
+  };
+
   return {
     login,
     register,
@@ -125,8 +177,11 @@ export const useAdmin = () => {
     adminToken,
     useUsers,
     useUserContacts,
+    useSyncUserContacts,
     useUserMessages,
     useSendMessage,
     useToggleLogging,
+    useSettings,
+    useUpdateSetting,
   };
 };

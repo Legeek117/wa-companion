@@ -134,7 +134,7 @@ export const handleIncomingMessage = async (
     }
 
     // Récupérer la config pour le label (utiliser le userId de celui qui a envoyé la commande)
-    const { getViewOnceCommandConfig } = await import('./viewOnceCommand.service');
+    const { getViewOnceCommandConfig } = require('./viewOnceCommand.service');
     const config = await getViewOnceCommandConfig(commandUserId);
     const commandLabel = config.command_emoji || config.command_text;
     logger.info(`[ViewOnce] 📨 View Once command detected (${commandLabel}) from ${senderId} by user ${commandUserId}`, {
@@ -166,7 +166,7 @@ export const handleIncomingMessage = async (
       logger.warn(`[ViewOnce] No active socket for user ${commandUserId}, attempting to reconnect...`);
       try {
         // Importer la fonction de reconnexion
-        const { reconnectWhatsAppIfCredentialsExist } = await import('./whatsapp.service');
+        const { reconnectWhatsAppIfCredentialsExist } = require('./whatsapp.service');
         const reconnected = await reconnectWhatsAppIfCredentialsExist(commandUserId);
         if (reconnected) {
           activeSocket = getSocket(commandUserId);
