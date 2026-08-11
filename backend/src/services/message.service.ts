@@ -1,5 +1,6 @@
 import { getSupabaseClient } from '../config/database';
 import { logger } from '../config/logger';
+import { canonifyContactJid } from './whatsapp.service';
 
 const supabase = getSupabaseClient();
 
@@ -23,7 +24,7 @@ export const upsertMessage = async (message: WhatsAppMessage): Promise<void> => 
       .from('whatsapp_messages')
       .upsert({
         user_id: message.user_id,
-        contact_id: message.contact_id,
+        contact_id: canonifyContactJid(message.contact_id) || message.contact_id,
         message_id: message.message_id,
         from_me: message.from_me,
         content: message.content,
@@ -51,16 +52,19 @@ export const upsertContact = async (userId: string, contactId: string, contactNa
       return;
     }
     
-    const finalName = contactName && contactName !== contactId.split('@')[0]
+    const canonicalJid = canonifyContactJid(contactId);
+    if (!canonicalJid) return;
+    
+    const finalName = contactName && contactName !== canonicalJid.split('@')[0]
       ? contactName
-      : contactId.split('@')[0];
+      : canonicalJid.split('@')[0];
     const now = new Date().toISOString();
 
     const { error } = await supabase
       .from('contacts')
       .upsert({
         user_id: userId,
-        contact_id: contactId,
+        contact_id: canonicalJid,
         contact_name: finalName,
         last_seen_at: now,
       }, {
@@ -68,13 +72,13 @@ export const upsertContact = async (userId: string, contactId: string, contactNa
       });
 
     if (error) {
-      logger.debug(`[MessageService] Primary upsert failed, trying manual fallback for ${contactId}: ${error.message}`);
+      logger.debug(`[MessageService] Primary upsert failed, trying manual fallback for ${canonicalJid}: ${error.message}`);
       // Fallback: try insert then update
       const { error: insErr } = await supabase
         .from('contacts')
         .insert({
           user_id: userId,
-          contact_id: contactId,
+          contact_id: canonicalJid,
           contact_name: finalName,
           last_seen_at: now,
         });
@@ -83,7 +87,7 @@ export const upsertContact = async (userId: string, contactId: string, contactNa
           .from('contacts')
           .update({ contact_name: finalName, last_seen_at: now })
           .eq('user_id', userId)
-          .eq('contact_id', contactId);
+          .eq('contact_id', canonicalJid);
       }
     }
   } catch (error) {
@@ -97,11 +101,12 @@ export const upsertContact = async (userId: string, contactId: string, contactNa
  */
 export const getMessages = async (userId: string, contactId: string, limit: number = 500) => {
   try {
+    const canonicalJid = canonifyContactJid(contactId) || contactId;
     const { data, error } = await supabase
       .from('whatsapp_messages')
       .select('*')
       .eq('user_id', userId)
-      .eq('contact_id', contactId)
+      .eq('contact_id', canonicalJid)
       .order('timestamp', { ascending: false })
       .limit(limit);
 
@@ -131,7 +136,10 @@ export const getMessages = async (userId: string, contactId: string, limit: numb
 const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?: string): Promise<void> => {
   try {
     if (!jid || jid.includes('@g.us') || jid.includes('@broadcast')) return;
-    const finalName = name && name !== jid.split('@')[0] ? name : jid.split('@')[0];
+    const canonicalJid = canonifyContactJid(jid);
+    if (!canonicalJid) return;
+    
+    const finalName = name && name !== canonicalJid.split('@')[0] ? name : canonicalJid.split('@')[0];
     const now = lastSeen || new Date().toISOString();
 
     // 1. Try the standard upsert with first_seen_at
@@ -141,7 +149,7 @@ const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?
         .from('contacts')
         .upsert({
           user_id: userId,
-          contact_id: jid,
+          contact_id: canonicalJid,
           contact_name: finalName,
           first_seen_at: now,
           last_seen_at: now,
@@ -156,7 +164,7 @@ const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?
           .from('contacts')
           .upsert({
             user_id: userId,
-            contact_id: jid,
+            contact_id: canonicalJid,
             contact_name: finalName,
             last_seen_at: now,
           }, { onConflict: 'user_id, contact_id' });
@@ -171,7 +179,7 @@ const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?
           .from('contacts')
           .insert({
             user_id: userId,
-            contact_id: jid,
+            contact_id: canonicalJid,
             contact_name: finalName,
             last_seen_at: now,
           });
@@ -184,7 +192,7 @@ const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?
             .from('contacts')
             .update({ contact_name: finalName, last_seen_at: now })
             .eq('user_id', userId)
-            .eq('contact_id', jid);
+            .eq('contact_id', canonicalJid);
           done = true;
         } catch (_) {}
       }

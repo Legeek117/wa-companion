@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { env } from '../config/env';
 import { getSupabaseClient } from '../config/database';
 import { logger } from '../config/logger';
+import { liveLogService } from './liveLog.service';
 import { WhatsAppSession } from '../types/whatsapp.types';
 import { handleStatusUpdate } from './status.service';
 import { getMediaType } from './media.service';
@@ -239,7 +240,7 @@ const normalizeJid = (jid?: string | null): string | null => {
 const STANDARD_SUFFIX = '@s.whatsapp.net';
 const KNOWN_USER_SUFFIXES = new Set(['@s.whatsapp.net', '@lid', '@c.us', '@tmp.net']);
 
-const canonifyContactJid = (jid?: string | null): string => {
+export const canonifyContactJid = (jid?: string | null): string => {
   if (!jid || typeof jid !== 'string') return '';
   if (jid.includes('@g.us') || jid.includes('@broadcast') || jid.includes('@newsletter')) return jid;
   const bare = normalizeJid(jid);
@@ -589,6 +590,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
           // Store in memory FIRST (before database save)
           qrCodes.set(userId, qrCodeImage);
           logger.info(`[WhatsApp] QR code stored in memory for user ${userId}`);
+          liveLogService.emitLog('info', `🔲 QR Code généré (en attente de scan)`, userId, { userId });
           
           // Save to database (non-blocking)
           updateSessionStatus(userId, {
@@ -2718,17 +2720,21 @@ export const addContactIfNotExists = async (
       return; // Skip groups and broadcasts
     }
 
+    const canonicalJid = canonifyContactJid(contactId);
+    
+    if (!canonicalJid) return;
+
     // Check if contact already exists
     const { data: existingContact } = await supabase
       .from('contacts')
       .select('id, contact_name')
       .eq('user_id', userId)
-      .eq('contact_id', contactId)
+      .eq('contact_id', canonicalJid)
       .single();
 
     if (existingContact) {
       // Update last_seen_at and contact_name if it has changed
-      if (existingContact.contact_name !== contactName && contactName && contactName !== contactId.split('@')[0]) {
+      if (existingContact.contact_name !== contactName && contactName && contactName !== canonicalJid.split('@')[0]) {
         await supabase
           .from('contacts')
           .update({
@@ -2736,8 +2742,8 @@ export const addContactIfNotExists = async (
             last_seen_at: new Date().toISOString(),
           })
           .eq('user_id', userId)
-          .eq('contact_id', contactId);
-        logger.debug(`[WhatsApp] Updated contact ${contactId} name to ${contactName}`);
+          .eq('contact_id', canonicalJid);
+        logger.debug(`[WhatsApp] Updated contact ${canonicalJid} name to ${contactName}`);
       } else {
         // Just update last_seen_at
         await supabase
@@ -2746,7 +2752,7 @@ export const addContactIfNotExists = async (
             last_seen_at: new Date().toISOString(),
           })
           .eq('user_id', userId)
-          .eq('contact_id', contactId);
+          .eq('contact_id', canonicalJid);
       }
     } else {
       // Insert new contact
@@ -2754,12 +2760,12 @@ export const addContactIfNotExists = async (
         .from('contacts')
         .insert({
           user_id: userId,
-          contact_id: contactId,
-          contact_name: contactName || contactId.split('@')[0],
+          contact_id: canonicalJid,
+          contact_name: contactName || canonicalJid.split('@')[0],
           first_seen_at: new Date().toISOString(),
           last_seen_at: new Date().toISOString(),
         });
-      logger.debug(`[WhatsApp] Added new contact ${contactId} (${contactName})`);
+      logger.debug(`[WhatsApp] Added new contact ${canonicalJid} (${contactName})`);
     }
   } catch (error) {
     // Log but don't throw - we don't want to break message processing
@@ -3525,6 +3531,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         type: update.type,
         updateKeys: update ? Object.keys(update) : [],
       });
+      liveLogService.emitLog('info', `📨 Nouveau(x) message(s) reçu(s)`, userId, { count: update.messages?.length || 0, type: update.type });
       
       // IMPORTANT: Only process 'notify' updates to avoid double-processing
       // Baileys sends 'append' messages for ephemeral messages or slow connections
@@ -3592,7 +3599,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
 
         // Add contact to contacts table if it's a direct message (not group/broadcast)
         if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
-          const senderName = message.pushName || remoteJid.split('@')[0];
+          const senderName = (!message.key?.fromMe && message.pushName) ? message.pushName : remoteJid.split('@')[0];
           
           if (globalContactCapture) {
             await addContactIfNotExists(userId, remoteJid, senderName).catch((err) => {
@@ -3969,6 +3976,7 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
 
         if (connection === 'open') {
           logger.info(`[WhatsApp] ✅ Successfully auto-reconnected user ${userId}`);
+          liveLogService.emitLog('info', `✅ Connexion WhatsApp établie`, userId, { userId });
           // Clear conflict status and reconnection attempts on successful connection
           conflictedSessions.delete(userId);
           reconnectionAttempts.delete(userId);

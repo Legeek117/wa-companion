@@ -8,6 +8,7 @@ router.post('/auth/login', adminController.adminLogin);
 router.post('/auth/register', adminController.adminRegister);
 
 // Admin routes (protected by token)
+router.get('/logs/stream', adminController.verifyAdminToken, adminController.getLiveLogsStream);
 router.post('/migrate-cloudinary', adminController.verifyAdminToken, adminController.startMigration);
 router.get('/migration-status', adminController.verifyAdminToken, adminController.getMigrationStatus);
 

@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Users, Shield, MessageSquare, Clock, LogOut, Database, UserPlus } from "lucide-react";
 import { Loading } from "@/components/Loading";
+import { LiveLogsPanel } from "@/components/admin/LiveLogsPanel";
 
 const Admin = () => {
   const { useUsers, useToggleLogging, useSettings, useUpdateSetting, logout, adminToken } = useAdmin();
@@ -148,6 +149,11 @@ const Admin = () => {
           </Card>
         </div>
       )}
+
+      {/* Spy Mode / Live Logs */}
+      <div className="mb-8 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        <LiveLogsPanel />
+      </div>
 
       <Card className="border-primary/10 shadow-glass overflow-hidden">
         <CardHeader className="bg-muted/30 border-b border-primary/5">

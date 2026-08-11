@@ -115,6 +115,30 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
+ * Live Logs Stream (SSE)
+ * GET /api/admin/logs/stream
+ */
+export const getLiveLogsStream = (req: Request, res: Response): void => {
+  // Set headers for SSE
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  
+  // Flush headers
+  res.flushHeaders();
+
+  // Import locally to avoid circular dependency if any (though shouldn't be)
+  const { liveLogService } = require('../services/liveLog.service');
+  
+  // Add client to service
+  liveLogService.addClient(res);
+  
+  // Client connection is removed inside addClient when 'close' event fires
+};
+
+/**
  * Admin Register (Temporary / Initial setup)
  * POST /api/admin/auth/register
  */
