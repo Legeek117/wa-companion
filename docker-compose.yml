@@ -61,9 +61,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       # ── URLs publiques ──
-      API_URL: https://amda.159.223.162.195.nip.io
+      API_URL: https://amda.159-223-162-195.nip.io
       FRONTEND_URL: https://amdabot.netlify.app
-      ALLOWED_ORIGINS: https://amdabot.netlify.app,https://amda.159.223.162.195.nip.io,http://amda.159.223.162.195.nip.io
+      ALLOWED_ORIGINS: https://amdabot.netlify.app,https://amda.159-223-162-195.nip.io,http://amda.159-223-162-195.nip.io
       # ── Database & Redis ──
       DATABASE_URL: postgresql://postgres:S4HmEb69@postgres:5432/amda
       REDIS_URL: redis://redis:6379
