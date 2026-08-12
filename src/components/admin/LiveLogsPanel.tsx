@@ -12,7 +12,7 @@ export interface LogEvent {
   details?: any;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "https://amda.159-223-162-195.nip.io";
 
 export const LiveLogsPanel = () => {
   const { adminToken } = useAdmin();
