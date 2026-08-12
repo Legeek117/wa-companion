@@ -28,6 +28,9 @@ RUN npm run prisma:generate
 # ─────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
+# Installer OpenSSL 3 (requis par Prisma)
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Créer un utilisateur non-root
