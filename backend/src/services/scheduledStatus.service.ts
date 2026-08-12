@@ -1,21 +1,15 @@
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
-
-const supabase = getSupabaseClient();
 
 /**
  * Get scheduled statuses for a user
  */
 export const getScheduledStatuses = async (userId: string) => {
   try {
-    const { data, error } = await supabase
-      .from('scheduled_statuses')
-      .select('*')
-      .eq('user_id', userId)
-      .order('scheduled_at', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
+    return await prisma.scheduledStatus.findMany({
+      where: { userId },
+      orderBy: { scheduledAt: 'asc' }
+    });
   } catch (error: any) {
     logger.error('[ScheduledStatus] Error getting scheduled statuses:', error);
     throw error;
@@ -27,15 +21,9 @@ export const getScheduledStatuses = async (userId: string) => {
  */
 export const getScheduledStatusById = async (userId: string, id: string) => {
   try {
-    const { data, error } = await supabase
-      .from('scheduled_statuses')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('id', id)
-      .single();
-
-    if (error) throw error;
-    return data;
+    return await prisma.scheduledStatus.findFirst({
+      where: { userId, id }
+    });
   } catch (error: any) {
     logger.error('[ScheduledStatus] Error getting scheduled status:', error);
     throw error;
@@ -48,25 +36,18 @@ export const getScheduledStatusById = async (userId: string, id: string) => {
 export const createScheduledStatus = async (
   userId: string,
   mediaUrl: string,
-  mediaType: string,
   scheduledAt: string,
   caption?: string
 ) => {
   try {
-    const { data: status, error } = await supabase
-      .from('scheduled_statuses')
-      .insert({
-        user_id: userId,
-        media_url: mediaUrl,
-        media_type: mediaType,
-        scheduled_at: scheduledAt,
+    return await prisma.scheduledStatus.create({
+      data: {
+        userId,
+        mediaUrl,
+        scheduledAt: new Date(scheduledAt),
         caption: caption || null,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return status;
+      }
+    });
   } catch (error: any) {
     logger.error('[ScheduledStatus] Error creating scheduled status:', error);
     throw error;
@@ -80,30 +61,25 @@ export const updateScheduledStatus = async (
   userId: string,
   id: string,
   mediaUrl?: string,
-  mediaType?: string,
   scheduledAt?: string,
   caption?: string
 ) => {
   try {
-    const updateData: any = {
-      updated_at: new Date().toISOString(),
-    };
-    
-    if (mediaUrl !== undefined) updateData.media_url = mediaUrl;
-    if (mediaType !== undefined) updateData.media_type = mediaType;
-    if (scheduledAt !== undefined) updateData.scheduled_at = scheduledAt;
+    const updateData: any = {};
+    if (mediaUrl !== undefined) updateData.mediaUrl = mediaUrl;
+    if (scheduledAt !== undefined) updateData.scheduledAt = new Date(scheduledAt);
     if (caption !== undefined) updateData.caption = caption || null;
 
-    const { data: status, error } = await supabase
-      .from('scheduled_statuses')
-      .update(updateData)
-      .eq('user_id', userId)
-      .eq('id', id)
-      .select()
-      .single();
+    // First ensure it belongs to the user
+    const exists = await prisma.scheduledStatus.findFirst({
+      where: { id, userId }
+    });
+    if (!exists) throw new Error('Status not found or access denied');
 
-    if (error) throw error;
-    return status;
+    return await prisma.scheduledStatus.update({
+      where: { id },
+      data: updateData
+    });
   } catch (error: any) {
     logger.error('[ScheduledStatus] Error updating scheduled status:', error);
     throw error;
@@ -115,13 +91,9 @@ export const updateScheduledStatus = async (
  */
 export const deleteScheduledStatus = async (userId: string, id: string) => {
   try {
-    const { error } = await supabase
-      .from('scheduled_statuses')
-      .delete()
-      .eq('user_id', userId)
-      .eq('id', id);
-
-    if (error) throw error;
+    await prisma.scheduledStatus.deleteMany({
+      where: { id, userId }
+    });
   } catch (error: any) {
     logger.error('[ScheduledStatus] Error deleting scheduled status:', error);
     throw error;
@@ -135,4 +107,3 @@ export const scheduledStatusService = {
   updateScheduledStatus,
   deleteScheduledStatus,
 };
-

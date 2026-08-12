@@ -1,8 +1,6 @@
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
 import { canonifyContactJid } from './whatsapp.service';
-
-const supabase = getSupabaseClient();
 
 export interface WhatsAppMessage {
   user_id: string;
@@ -20,24 +18,32 @@ export interface WhatsAppMessage {
  */
 export const upsertMessage = async (message: WhatsAppMessage): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('whatsapp_messages')
-      .upsert({
-        user_id: message.user_id,
-        contact_id: canonifyContactJid(message.contact_id) || message.contact_id,
-        message_id: message.message_id,
-        from_me: message.from_me,
+    await prisma.whatsappMessage.upsert({
+      where: {
+        userId_messageId: {
+          userId: message.user_id,
+          messageId: message.message_id
+        }
+      },
+      update: {
+        contactId: canonifyContactJid(message.contact_id) || message.contact_id,
+        fromMe: message.from_me,
         content: message.content,
-        media_url: message.media_url,
-        media_type: message.media_type,
-        timestamp: message.timestamp.toISOString(),
-      }, {
-        onConflict: 'user_id, message_id'
-      });
-
-    if (error) {
-      logger.error('[MessageService] Error upserting message:', error);
-    }
+        mediaUrl: message.media_url,
+        mediaType: message.media_type,
+        timestamp: message.timestamp,
+      },
+      create: {
+        userId: message.user_id,
+        contactId: canonifyContactJid(message.contact_id) || message.contact_id,
+        messageId: message.message_id,
+        fromMe: message.from_me,
+        content: message.content,
+        mediaUrl: message.media_url,
+        mediaType: message.media_type,
+        timestamp: message.timestamp,
+      }
+    });
   } catch (error) {
     logger.error('[MessageService] Unexpected error upserting message:', error);
   }
@@ -58,38 +64,26 @@ export const upsertContact = async (userId: string, contactId: string, contactNa
     const finalName = contactName && contactName !== canonicalJid.split('@')[0]
       ? contactName
       : canonicalJid.split('@')[0];
-    const now = new Date().toISOString();
+    const now = new Date();
 
-    const { error } = await supabase
-      .from('contacts')
-      .upsert({
-        user_id: userId,
-        contact_id: canonicalJid,
-        contact_name: finalName,
-        last_seen_at: now,
-      }, {
-        onConflict: 'user_id, contact_id'
-      });
-
-    if (error) {
-      logger.debug(`[MessageService] Primary upsert failed, trying manual fallback for ${canonicalJid}: ${error.message}`);
-      // Fallback: try insert then update
-      const { error: insErr } = await supabase
-        .from('contacts')
-        .insert({
-          user_id: userId,
-          contact_id: canonicalJid,
-          contact_name: finalName,
-          last_seen_at: now,
-        });
-      if (insErr) {
-        await supabase
-          .from('contacts')
-          .update({ contact_name: finalName, last_seen_at: now })
-          .eq('user_id', userId)
-          .eq('contact_id', canonicalJid);
+    await prisma.contact.upsert({
+      where: {
+        userId_contactId: {
+          userId,
+          contactId: canonicalJid
+        }
+      },
+      update: {
+        contactName: finalName,
+        lastSeenAt: now,
+      },
+      create: {
+        userId,
+        contactId: canonicalJid,
+        contactName: finalName,
+        lastSeenAt: now,
       }
-    }
+    });
   } catch (error) {
     logger.debug('[MessageService] Could not upsert contact:', error);
   }
@@ -97,32 +91,26 @@ export const upsertContact = async (userId: string, contactId: string, contactNa
 
 /**
  * Get messages for a specific user and contact
- * Returns the 500 MOST RECENT messages, sorted chronologically ASC for display
  */
 export const getMessages = async (userId: string, contactId: string, limit: number = 500) => {
   try {
     const canonicalJid = canonifyContactJid(contactId) || contactId;
-    const { data, error } = await supabase
-      .from('whatsapp_messages')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('contact_id', canonicalJid)
-      .order('timestamp', { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      throw error;
-    }
+    const data = await prisma.whatsappMessage.findMany({
+      where: {
+        userId,
+        contactId: canonicalJid
+      },
+      orderBy: { timestamp: 'desc' },
+      take: limit
+    });
 
     if (!data || data.length === 0) return [];
 
-    const result = [...data].sort((a: any, b: any) => {
-      const ta = new Date(a.timestamp).getTime();
-      const tb = new Date(b.timestamp).getTime();
-      return ta - tb;
+    const result = [...data].sort((a, b) => {
+      return a.timestamp.getTime() - b.timestamp.getTime();
     });
 
-    logger.info(`[MessageService] getMessages(user=${userId}, contact=${contactId}) => ${result.length} messages (last ${limit} max, sorted ASC)`);
+    logger.info(`[MessageService] getMessages(user=${userId}, contact=${contactId}) => ${result.length} messages`);
     return result;
   } catch (error) {
     logger.error('[MessageService] Error getting messages:', error);
@@ -131,72 +119,36 @@ export const getMessages = async (userId: string, contactId: string, limit: numb
 };
 
 /**
- * Internal helper: try to upsert a contact contact into DB with max flexibility
+ * Internal helper: try to upsert a contact into DB with max flexibility
  */
-const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?: string): Promise<void> => {
+const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?: Date | string): Promise<void> => {
   try {
     if (!jid || jid.includes('@g.us') || jid.includes('@broadcast')) return;
     const canonicalJid = canonifyContactJid(jid);
     if (!canonicalJid) return;
     
     const finalName = name && name !== canonicalJid.split('@')[0] ? name : canonicalJid.split('@')[0];
-    const now = lastSeen || new Date().toISOString();
+    const now = lastSeen ? new Date(lastSeen) : new Date();
 
-    // 1. Try the standard upsert with first_seen_at
-    let done = false;
-    try {
-      const { error } = await supabase
-        .from('contacts')
-        .upsert({
-          user_id: userId,
-          contact_id: canonicalJid,
-          contact_name: finalName,
-          first_seen_at: now,
-          last_seen_at: now,
-        }, { onConflict: 'user_id, contact_id' });
-      if (!error) done = true;
-    } catch (_) {}
-
-    // 2. If that failed, try without first_seen_at (maybe column doesn't exist)
-    if (!done) {
-      try {
-        const { error } = await supabase
-          .from('contacts')
-          .upsert({
-            user_id: userId,
-            contact_id: canonicalJid,
-            contact_name: finalName,
-            last_seen_at: now,
-          }, { onConflict: 'user_id, contact_id' });
-        if (!error) done = true;
-      } catch (_) {}
-    }
-
-    // 3. Fallback to manual INSERT then UPDATE
-    if (!done) {
-      try {
-        const { error: insErr } = await supabase
-          .from('contacts')
-          .insert({
-            user_id: userId,
-            contact_id: canonicalJid,
-            contact_name: finalName,
-            last_seen_at: now,
-          });
-        if (!insErr) done = true;
-      } catch (_) {}
-
-      if (!done) {
-        try {
-          await supabase
-            .from('contacts')
-            .update({ contact_name: finalName, last_seen_at: now })
-            .eq('user_id', userId)
-            .eq('contact_id', canonicalJid);
-          done = true;
-        } catch (_) {}
+    await prisma.contact.upsert({
+      where: {
+        userId_contactId: {
+          userId,
+          contactId: canonicalJid
+        }
+      },
+      update: {
+        contactName: finalName,
+        lastSeenAt: now,
+      },
+      create: {
+        userId,
+        contactId: canonicalJid,
+        contactName: finalName,
+        lastSeenAt: now,
+        firstSeenAt: now,
       }
-    }
+    });
   } catch (e) {
     logger.debug(`[MessageService] upsertRobust failed silently for ${jid}`);
   }
@@ -204,36 +156,34 @@ const upsertRobust = async (userId: string, jid: string, name: string, lastSeen?
 
 /**
  * Get all contacts for a user - ULTRA ROBUST IMPLEMENTATION
- * Strategy:
- *  1. Read from the dedicated `contacts` table
- *  2. Extract DISTINCT contact_ids from: whatsapp_messages, deleted_messages,
- *     view_once_captures, status_likes
- *  3. Merge everything, persist new contacts to contacts table, return sorted
  */
 export const getContacts = async (userId: string) => {
   const finalMap = new Map<string, any>();
 
   try {
-    // --- STAGE 1: Read from the `contacts` table (ignore errors, proceed) ---
+    // --- STAGE 1: Read from the `contacts` table ---
     try {
-      const { data: existing, error: err } = await supabase
-        .from('contacts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('last_seen_at', { ascending: false });
-
-      if (!err && existing) {
-        for (const c of existing as any[]) {
-          if (c && c.contact_id) finalMap.set(c.contact_id, c);
+      const existing = await prisma.contact.findMany({
+        where: { userId },
+        orderBy: { lastSeenAt: 'desc' }
+      });
+      if (existing) {
+        for (const c of existing) {
+          if (c && c.contactId) finalMap.set(c.contactId, {
+            user_id: c.userId,
+            contact_id: c.contactId,
+            contact_name: c.contactName,
+            last_seen_at: c.lastSeenAt,
+            id: c.id
+          });
         }
       }
-      logger.info(`[MessageService] Stage 1 (contacts table): ${finalMap.size} contacts for user ${userId}`);
     } catch (contactsErr) {
       logger.warn(`[MessageService] Could not read contacts table for user ${userId}: ${(contactsErr as Error).message}`);
     }
 
     // --- STAGE 2: Extract contact_ids from ALL message-related tables ---
-    const addCandidate = (jid: string, name?: string, lastSeen?: string) => {
+    const addCandidate = (jid: string, name?: string, lastSeen?: Date | string) => {
       if (!jid || jid.includes('@g.us') || jid.includes('@broadcast')) return;
       const existing = finalMap.get(jid);
       const finalName = name && name !== jid.split('@')[0] ? name : jid.split('@')[0];
@@ -242,92 +192,67 @@ export const getContacts = async (userId: string) => {
           user_id: userId,
           contact_id: jid,
           contact_name: finalName,
-          last_seen_at: lastSeen || new Date().toISOString(),
+          last_seen_at: lastSeen ? new Date(lastSeen) : new Date(),
         });
       } else {
-        // Upgrade the name if we found a better one
         if ((!existing.contact_name || existing.contact_name === jid.split('@')[0]) &&
             finalName !== jid.split('@')[0]) {
           existing.contact_name = finalName;
         }
-        // Upgrade the timestamp if newer
         if (lastSeen) {
           const cur = existing.last_seen_at ? new Date(existing.last_seen_at).getTime() : 0;
           const cand = new Date(lastSeen).getTime();
-          if (cand > cur) existing.last_seen_at = lastSeen;
+          if (cand > cur) existing.last_seen_at = new Date(lastSeen);
         }
       }
     };
 
-    // 2a. whatsapp_messages (primary source)
+    // 2a. whatsapp_messages
     try {
-      const { data: rows } = await supabase
-        .from('whatsapp_messages')
-        .select('contact_id, timestamp, from_me, content')
-        .eq('user_id', userId)
-        .order('timestamp', { ascending: false })
-        .limit(10000);
-
-      if (rows && rows.length > 0) {
-        for (const r of rows as any[]) {
-          addCandidate(r.contact_id, undefined, r.timestamp);
-        }
-        logger.info(`[MessageService] Stage 2a (whatsapp_messages): scanned ${rows.length} rows for user ${userId}`);
-      }
-    } catch (e) {
-      logger.debug(`[MessageService] whatsapp_messages extraction: ${(e as Error).message}`);
-    }
+      const rows = await prisma.whatsappMessage.findMany({
+        where: { userId },
+        select: { contactId: true, timestamp: true },
+        orderBy: { timestamp: 'desc' },
+        take: 10000
+      });
+      for (const r of rows) addCandidate(r.contactId, undefined, r.timestamp);
+    } catch (e) {}
 
     // 2b. deleted_messages
     try {
-      const { data: rows } = await supabase
-        .from('deleted_messages')
-        .select('sender_id, sender_name, deleted_at')
-        .eq('user_id', userId)
-        .limit(2000);
-      if (rows) {
-        for (const r of rows as any[]) addCandidate(r.sender_id, r.sender_name, r.deleted_at);
-      }
-    } catch (_) {
-      logger.debug('[MessageService] deleted_messages not available');
-    }
+      const rows = await prisma.deletedMessage.findMany({
+        where: { userId },
+        select: { senderId: true, senderName: true, deletedAt: true },
+        take: 2000
+      });
+      for (const r of rows) addCandidate(r.senderId, r.senderName || undefined, r.deletedAt);
+    } catch (_) {}
 
     // 2c. view_once_captures
     try {
-      const { data: rows } = await supabase
-        .from('view_once_captures')
-        .select('sender_id, sender_name, captured_at')
-        .eq('user_id', userId)
-        .limit(2000);
-      if (rows) {
-        for (const r of rows as any[]) addCandidate(r.sender_id, r.sender_name, r.captured_at);
-      }
-    } catch (_) {
-      logger.debug('[MessageService] view_once_captures not available');
-    }
+      const rows = await prisma.viewOnceCapture.findMany({
+        where: { userId },
+        select: { senderId: true, senderName: true, capturedAt: true },
+        take: 2000
+      });
+      for (const r of rows) addCandidate(r.senderId, r.senderName || undefined, r.capturedAt);
+    } catch (_) {}
 
     // 2d. status_likes
     try {
-      const { data: rows } = await supabase
-        .from('status_likes')
-        .select('contact_id, contact_name, liked_at')
-        .eq('user_id', userId)
-        .limit(2000);
-      if (rows) {
-        for (const r of rows as any[]) addCandidate(r.contact_id, r.contact_name, r.liked_at);
-      }
-    } catch (_) {
-      logger.debug('[MessageService] status_likes not available');
-    }
+      const rows = await prisma.statusLike.findMany({
+        where: { userId },
+        select: { contactId: true, contactName: true, likedAt: true },
+        take: 2000
+      });
+      for (const r of rows) addCandidate(r.contactId, r.contactName || undefined, r.likedAt || undefined);
+    } catch (_) {}
 
     // --- STAGE 3: Persist any newly-discovered contacts to `contacts` table ---
     let persistedCount = 0;
     for (const [jid, entry] of finalMap.entries()) {
-      const needsPersist =
-        !entry.id || // no primary key => not from DB
-        entry.__fromHistory; // flagged as from history
+      const needsPersist = !entry.id;
       if (needsPersist || true) {
-        // Always try to sync to DB (keeps last_seen_at up to date)
         await upsertRobust(userId, jid, entry.contact_name, entry.last_seen_at);
         persistedCount++;
       }
@@ -340,11 +265,9 @@ export const getContacts = async (userId: string) => {
       return tb - ta;
     });
 
-    logger.info(`[MessageService] ✅ getContacts(user=${userId}) => ${result.length} contacts total (${persistedCount} synced to DB)`);
     return result;
   } catch (fatal) {
     logger.error(`[MessageService] Fatal in getContacts for user ${userId}:`, fatal);
-    // Last-ditch return whatever we have, or empty
     return Array.from(finalMap.values());
   }
 };

@@ -1,13 +1,11 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
 import * as statusService from '../services/status.service';
 import { likeStatus, getAllContactsFromSocket, getSocket, getWhatsAppStatus, getAllAvailableStatuses, getContactStatuses } from '../services/whatsapp.service';
 import { invalidateStatusConfigCache } from '../services/status.service';
 import { checkStatusReactionQuota } from '../services/quota.service';
-
-const supabase = getSupabaseClient();
 
 /**
  * Get status configuration for the authenticated user
@@ -128,16 +126,12 @@ export const updateStatusConfig = async (req: AuthRequest, res: Response): Promi
     });
 
     // Update or create global status config
-    const { data: existingGlobalConfig } = await supabase
-      .from('status_config')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    const existingGlobalConfig = await prisma.statusConfig.findUnique({
+      where: { userId }
+    });
 
     // Build update object - only include fields that are provided
-    const globalConfigData: any = {
-      updated_at: new Date().toISOString(),
-    };
+    const globalConfigData: any = {};
     
     // Only update fields that are provided in the request
     if (enabled !== undefined) {
@@ -171,12 +165,10 @@ export const updateStatusConfig = async (req: AuthRequest, res: Response): Promi
         globalConfigData.enabled = existingGlobalConfig.enabled;
       }
       if (!globalConfigData.action_type) {
-        globalConfigData.action_type = existingGlobalConfig.action_type || 'view_and_like';
+        globalConfigData.action_type = existingGlobalConfig.actionType || 'view_and_like';
       }
-      // IMPORTANT: Only preserve existing emoji if not explicitly provided in the update
-      // If defaultEmoji is provided (even if it's the same), use the new value
       if (globalConfigData.default_emoji === undefined) {
-        globalConfigData.default_emoji = existingGlobalConfig.default_emoji || '❤️';
+        globalConfigData.default_emoji = existingGlobalConfig.defaultEmoji || '❤️';
       }
       // If defaultEmoji was provided, it's already set in globalConfigData above
     }
@@ -191,13 +183,21 @@ export const updateStatusConfig = async (req: AuthRequest, res: Response): Promi
     if (existingGlobalConfig) {
       // Update existing config
       logger.info(`[Status] Updating existing config for user ${userId}:`, globalConfigData);
-      const { error, data: updatedData } = await supabase
-        .from('status_config')
-        .update(globalConfigData)
-        .eq('user_id', userId)
-        .select();
-
-      if (error) {
+      try {
+        const updatedData = await prisma.statusConfig.update({
+          where: { userId },
+          data: {
+            enabled: globalConfigData.enabled,
+            actionType: globalConfigData.action_type,
+            defaultEmoji: globalConfigData.default_emoji
+          }
+        });
+        
+        logger.info(`[Status] Config updated successfully for user ${userId}:`, {
+          ...updatedData,
+          default_emoji: updatedData.defaultEmoji ? `"${updatedData.defaultEmoji}" (length: ${updatedData.defaultEmoji.length})` : 'not set',
+        });
+      } catch (error) {
         logger.error('[Status] Error updating global config:', error);
         res.status(500).json({
           success: false,
@@ -206,37 +206,37 @@ export const updateStatusConfig = async (req: AuthRequest, res: Response): Promi
         return;
       }
       
-      logger.info(`[Status] Config updated successfully for user ${userId}:`, {
-        ...updatedData?.[0],
-        default_emoji: updatedData?.[0]?.default_emoji ? `"${updatedData[0].default_emoji}" (length: ${updatedData[0].default_emoji.length})` : 'not set',
-      });
-      
       // Verify the update was successful by reading it back
-      const { data: verifyConfig } = await supabase
-        .from('status_config')
-        .select('default_emoji, action_type, enabled')
-        .eq('user_id', userId)
-        .single();
+      const verifyConfig = await prisma.statusConfig.findUnique({
+        where: { userId },
+        select: { defaultEmoji: true, actionType: true, enabled: true }
+      });
       
       if (verifyConfig) {
         logger.info(`[Status] ✅ Verified config in DB for user ${userId}:`, {
-          default_emoji: `"${verifyConfig.default_emoji}" (length: ${verifyConfig.default_emoji?.length || 0})`,
-          action_type: verifyConfig.action_type,
+          default_emoji: `"${verifyConfig.defaultEmoji}" (length: ${verifyConfig.defaultEmoji?.length || 0})`,
+          action_type: verifyConfig.actionType,
           enabled: verifyConfig.enabled,
         });
       }
     } else {
       // Create new config
       logger.info(`[Status] Creating new config for user ${userId}:`, globalConfigData);
-      const { error, data: insertedData } = await supabase
-        .from('status_config')
-        .insert({
-          user_id: userId,
-          ...globalConfigData,
-        })
-        .select();
+      try {
+        const insertedData = await prisma.statusConfig.create({
+          data: {
+            userId,
+            enabled: globalConfigData.enabled,
+            actionType: globalConfigData.action_type,
+            defaultEmoji: globalConfigData.default_emoji
+          }
+        });
 
-      if (error) {
+        logger.info(`[Status] Config created successfully for user ${userId}:`, {
+          ...insertedData,
+          default_emoji: insertedData.defaultEmoji ? `"${insertedData.defaultEmoji}" (length: ${insertedData.defaultEmoji.length})` : 'not set',
+        });
+      } catch (error) {
         logger.error('[Status] Error creating global config:', error);
         res.status(500).json({
           success: false,
@@ -244,20 +244,14 @@ export const updateStatusConfig = async (req: AuthRequest, res: Response): Promi
         });
         return;
       }
-      
-      logger.info(`[Status] Config created successfully for user ${userId}:`, {
-        ...insertedData?.[0],
-        default_emoji: insertedData?.[0]?.default_emoji ? `"${insertedData[0].default_emoji}" (length: ${insertedData[0].default_emoji.length})` : 'not set',
-      });
     }
 
     // For premium users: update contact-specific configs
     if (Array.isArray(contacts) && contacts.length > 0) {
-      const { data: user } = await supabase
-        .from('users')
-        .select('plan')
-        .eq('id', userId)
-        .single();
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { plan: true }
+      });
 
       if (user?.plan === 'premium') {
         // Update each contact config
@@ -292,36 +286,31 @@ export const updateStatusConfig = async (req: AuthRequest, res: Response): Promi
           }
 
           const contactConfigData: any = {
-            user_id: userId,
-            contact_id: contactId,
-            contact_name: contactName,
+            userId,
+            contactId,
+            contactName,
             enabled: contactEnabled,
             emoji: contactEmoji,
-            action_type: contactActionType,
-            watch_only: watchOnly,
-            updated_at: new Date().toISOString(),
+            actionType: contactActionType,
+            watchOnly: watchOnly,
           };
 
           // Check if config exists
-          const { data: existingContactConfig } = await supabase
-            .from('status_auto_like_config')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('contact_id', contactId)
-            .single();
+          const existingContactConfig = await prisma.statusAutoLikeConfig.findFirst({
+            where: { userId, contactId }
+          });
 
           if (existingContactConfig) {
             // Update existing
-            await supabase
-              .from('status_auto_like_config')
-              .update(contactConfigData)
-              .eq('user_id', userId)
-              .eq('contact_id', contactId);
+            await prisma.statusAutoLikeConfig.update({
+              where: { id: existingContactConfig.id },
+              data: contactConfigData
+            });
           } else {
             // Insert new
-            await supabase
-              .from('status_auto_like_config')
-              .insert(contactConfigData);
+            await prisma.statusAutoLikeConfig.create({
+              data: contactConfigData
+            });
           }
         }
       }
@@ -662,15 +651,16 @@ export const likeStatusController = async (req: AuthRequest, res: Response): Pro
       let shouldRemoveFromList = isStatusExpired;
       if (!shouldRemoveFromList) {
         try {
-          const { data: existingLike } = await supabase
-            .from('status_likes')
-            .select('liked_at, created_at')
-            .eq('user_id', userId)
-            .eq('status_id', statusId)
-            .single();
+          const existingLike = await prisma.statusLike.findFirst({
+            where: {
+              userId: userId,
+              statusId: statusId
+            },
+            select: { likedAt: true, createdAt: true }
+          });
           
           if (existingLike) {
-            const likedAt = new Date(existingLike.liked_at || existingLike.created_at);
+            const likedAt = new Date(existingLike.likedAt || existingLike.createdAt);
             const now = new Date();
             const hoursSinceLike = (now.getTime() - likedAt.getTime()) / (1000 * 60 * 60);
             
@@ -838,11 +828,10 @@ export const getStatusContacts = async (req: AuthRequest, res: Response): Promis
     }
 
     // Check if user is premium
-    const { data: user } = await supabase
-      .from('users')
-      .select('plan')
-      .eq('id', userId)
-      .single();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true }
+    });
 
     if (user?.plan !== 'premium') {
       res.status(403).json({
@@ -877,13 +866,13 @@ export const getStatusContacts = async (req: AuthRequest, res: Response): Promis
     }
 
     // Get existing contact configs
-    const { data: existingConfigs } = await supabase
-      .from('status_auto_like_config')
-      .select('contact_id, enabled, emoji, action_type, watch_only')
-      .eq('user_id', userId);
+    const existingConfigs = await prisma.statusAutoLikeConfig.findMany({
+      where: { userId },
+      select: { contactId: true, enabled: true, emoji: true, actionType: true, watchOnly: true }
+    });
 
     const existingConfigsMap = new Map(
-      existingConfigs?.map((c) => [c.contact_id, c]) || []
+      existingConfigs.map((c) => [c.contactId, c])
     );
 
     // Merge contacts with existing configs
@@ -894,8 +883,8 @@ export const getStatusContacts = async (req: AuthRequest, res: Response): Promis
         contact_name: contact.contact_name,
         enabled: existingConfig?.enabled || false,
         emoji: existingConfig?.emoji || '❤️',
-        action_type: (existingConfig?.action_type as 'view_only' | 'view_and_like') || 'view_and_like',
-        watch_only: existingConfig?.watch_only || false,
+        action_type: existingConfig?.actionType || 'view_and_like',
+        watch_only: existingConfig?.watchOnly || false,
       };
     });
 

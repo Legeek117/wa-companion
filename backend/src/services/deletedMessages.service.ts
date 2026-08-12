@@ -1,10 +1,6 @@
 import { WASocket } from '@whiskeysockets/baileys';
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
-import { checkDeletedMessagesQuota, incrementDeletedMessages } from './quota.service';
-import { processAndUploadMedia, getMediaType } from './media.service';
-
-const supabase = getSupabaseClient();
 
 // Store messages temporarily to detect deletions
 // Cache limité à 1000 messages (en mémoire)
@@ -116,38 +112,32 @@ const notifyUserAboutDeletedMessage = async (
  * Get deleted messages for a user
  */
 export const getDeletedMessages = async (userId: string, limit: number = 50) => {
-  const { data, error } = await supabase
-    .from('deleted_messages')
-    .select('*')
-    .eq('user_id', userId)
-    .order('deleted_at', { ascending: false })
-    .limit(limit);
-
-  if (error) {
+  try {
+    const data = await prisma.deletedMessage.findMany({
+      where: { userId },
+      orderBy: { deletedAt: 'desc' },
+      take: limit
+    });
+    return data;
+  } catch (error) {
     logger.error('[DeletedMessages] Error getting deleted messages:', error);
     throw new Error('Failed to get deleted messages');
   }
-
-  return data || [];
 };
 
 /**
  * Get deleted message by ID
  */
 export const getDeletedMessage = async (userId: string, messageId: string) => {
-  const { data, error } = await supabase
-    .from('deleted_messages')
-    .select('*')
-    .eq('id', messageId)
-    .eq('user_id', userId)
-    .single();
-
-  if (error) {
+  try {
+    const data = await prisma.deletedMessage.findFirst({
+      where: { id: messageId, userId }
+    });
+    return data;
+  } catch (error) {
     logger.error('[DeletedMessages] Error getting deleted message:', error);
     throw new Error('Failed to get deleted message');
   }
-
-  return data;
 };
 
 /**
@@ -160,60 +150,32 @@ export const deleteDeletedMessage = async (userId: string, messageId: string): P
   });
 
   // First, check if the message exists and belongs to the user
-  const { data: existingMessage, error: checkError } = await supabase
-    .from('deleted_messages')
-    .select('id, user_id')
-    .eq('id', messageId)
-    .eq('user_id', userId)
-    .single();
-
-  if (checkError) {
-    logger.error('[DeletedMessages] Error checking message existence:', {
-      error: checkError,
-      message: checkError.message,
-      code: checkError.code,
-      details: checkError.details,
-      hint: checkError.hint,
+  try {
+    const existingMessage = await prisma.deletedMessage.findFirst({
+      where: { id: messageId, userId },
+      select: { id: true, userId: true }
     });
-    
-    // If message not found, it's not an error - just return success
-    if (checkError.code === 'PGRST116') {
+
+    if (!existingMessage) {
       logger.warn(`[DeletedMessages] Message ${messageId} not found for user ${userId}`);
       return; // Message doesn't exist, consider it already deleted
     }
-    
-    throw new Error(`Failed to check message: ${checkError.message}`);
-  }
 
-  if (!existingMessage) {
-    logger.warn(`[DeletedMessages] Message ${messageId} not found for user ${userId}`);
-    return; // Message doesn't exist, consider it already deleted
-  }
+    // Delete the message
+    await prisma.deletedMessage.delete({
+      where: { id: messageId } // id is unique and findFirst already checked ownership
+    });
 
-  // Delete the message
-  const { error, data } = await supabase
-    .from('deleted_messages')
-    .delete()
-    .eq('id', messageId)
-    .eq('user_id', userId)
-    .select();
-
-  if (error) {
-    logger.error('[DeletedMessages] Error deleting message:', {
+    logger.info(`[DeletedMessages] Message ${messageId} deleted successfully by user ${userId}`);
+  } catch (error: any) {
+    logger.error('[DeletedMessages] Error processing message deletion:', {
       error,
       message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
       messageId,
       userId,
     });
     throw new Error(`Failed to delete message: ${error.message}`);
   }
-
-  logger.info(`[DeletedMessages] Message ${messageId} deleted successfully by user ${userId}`, {
-    deletedRows: data?.length || 0,
-  });
 };
 
 /**
@@ -228,24 +190,19 @@ export const getDeletedMessagesStats = async (userId: string) => {
   thisMonth.setHours(0, 0, 0, 0);
 
   // Get deletions today
-  const { count: todayCount } = await supabase
-    .from('deleted_messages')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('deleted_at', today.toISOString());
+  const todayCount = await prisma.deletedMessage.count({
+    where: { userId, deletedAt: { gte: today } }
+  });
 
   // Get deletions this month
-  const { count: monthCount } = await supabase
-    .from('deleted_messages')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('deleted_at', thisMonth.toISOString());
+  const monthCount = await prisma.deletedMessage.count({
+    where: { userId, deletedAt: { gte: thisMonth } }
+  });
 
   // Get total deletions
-  const { count: totalCount } = await supabase
-    .from('deleted_messages')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId);
+  const totalCount = await prisma.deletedMessage.count({
+    where: { userId }
+  });
 
   return {
     deletedToday: todayCount || 0,

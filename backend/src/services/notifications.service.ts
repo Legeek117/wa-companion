@@ -392,7 +392,7 @@ export const markNotificationAsRead = async (userId: string, notificationId: str
       data: { read: true },
     });
 
-    return result.modifiedCount > 0;
+    return result.count > 0;
   } catch (error) {
     logger.error('[NotificationsService] Error marking notification as read:', error);
     return false;

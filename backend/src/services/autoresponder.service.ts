@@ -1,12 +1,10 @@
 import { WASocket, proto } from '@whiskeysockets/baileys';
 import { logger } from '../config/logger';
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { captureViewOnceFromQuoted } from './viewOnce.service';
 import { getSocket, getActiveSockets } from './whatsapp.service';
 import { matchesViewOnceCommand } from './viewOnceCommand.service';
 import { findUserIdBySocketJID } from './userIdentification.service';
-
-const supabase = getSupabaseClient();
 
 const extractQuotedMessage = (message: any): proto.IMessage | null => {
   if (!message?.message) {
@@ -233,31 +231,26 @@ export const handleIncomingMessage = async (
 export const getAutoresponderConfig = async (userId: string) => {
   try {
     // Get user plan
-    const { data: user } = await supabase
-      .from('users')
-      .select('plan')
-      .eq('id', userId)
-      .single();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true }
+    });
 
     const isPremium = user?.plan === 'premium';
 
     // Get autoresponder configs
-    const { data: configs } = await supabase
-      .from('autoresponder_config')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true });
+    const configs = await prisma.autoresponderConfig.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' }
+    });
 
     // Get autoresponder contacts (premium only)
     let contacts: any[] = [];
     if (isPremium) {
-      const { data: contactConfigs } = await supabase
-        .from('autoresponder_contacts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('contact_name', { ascending: true });
-      
-      contacts = contactConfigs || [];
+      contacts = await prisma.autoresponderContact.findMany({
+        where: { userId },
+        orderBy: { contactName: 'asc' }
+      });
     }
 
     return {

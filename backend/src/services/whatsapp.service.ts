@@ -9,7 +9,8 @@ import QRCode from 'qrcode';
 import { join } from 'path';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { env } from '../config/env';
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
+import { getSupabaseClient } from '../config/supabase';
 import { logger } from '../config/logger';
 import { liveLogService } from './liveLog.service';
 import { WhatsAppSession } from '../types/whatsapp.types';
@@ -178,15 +179,12 @@ export const isMessageLoggingEnabled = async (userId: string): Promise<boolean> 
   }
 
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('log_messages')
-      .eq('id', userId)
-      .single();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { logMessages: true }
+    });
 
-    if (error) throw error;
-    
-    const enabled = !!data?.log_messages;
+    const enabled = !!user?.logMessages;
     messageLoggingEnabled.set(userId, enabled);
     return enabled;
   } catch (error) {
@@ -286,45 +284,45 @@ const getOrCreateSession = async (userId: string): Promise<WhatsAppSession> => {
   const sessionId = `session_${userId}_${Date.now()}`;
 
   // Try to get existing session
-  const { data: existingSession, error: findError } = await supabase
-    .from('whatsapp_sessions')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
+  try {
+    const existingSession = await prisma.whatsappSession.findFirst({
+      where: { userId }
+    });
 
-  if (existingSession && !findError) {
-    return {
-      userId: existingSession.user_id,
-      sessionId: existingSession.session_id,
-      qrCode: existingSession.qr_code || undefined,
-      pairingCode: existingSession.pairing_code || undefined,
-      status: existingSession.status as 'disconnected' | 'connecting' | 'connected',
-      connectedAt: existingSession.connected_at ? new Date(existingSession.connected_at) : undefined,
-      lastSeen: existingSession.last_seen ? new Date(existingSession.last_seen) : undefined,
-    };
+    if (existingSession) {
+      return {
+        userId: existingSession.userId,
+        sessionId: existingSession.sessionId,
+        qrCode: existingSession.qrCode || undefined,
+        pairingCode: existingSession.pairingCode || undefined,
+        status: existingSession.status as 'disconnected' | 'connecting' | 'connected',
+        connectedAt: existingSession.connectedAt ? new Date(existingSession.connectedAt) : undefined,
+        lastSeen: existingSession.lastSeen ? new Date(existingSession.lastSeen) : undefined,
+      };
+    }
+  } catch (findError) {
+    // Ignore and proceed to create
   }
 
   // Create new session
-  const { data: newSession, error: createError } = await supabase
-    .from('whatsapp_sessions')
-    .insert({
-      user_id: userId,
-      session_id: sessionId,
-      status: 'disconnected',
-    })
-    .select()
-    .single();
+  try {
+    const newSession = await prisma.whatsappSession.create({
+      data: {
+        userId,
+        sessionId,
+        status: 'disconnected',
+      }
+    });
 
-  if (createError || !newSession) {
+    return {
+      userId: newSession.userId,
+      sessionId: newSession.sessionId,
+      status: newSession.status as 'disconnected' | 'connecting' | 'connected',
+    };
+  } catch (createError) {
     logger.error('Error creating WhatsApp session:', createError);
     throw new Error('Failed to create WhatsApp session');
   }
-
-  return {
-    userId: newSession.user_id,
-    sessionId: newSession.session_id,
-    status: newSession.status as 'disconnected' | 'connecting' | 'connected',
-  };
 };
 
 /**
@@ -341,23 +339,21 @@ const updateSessionStatus = async (
     sessionData?: any;
   }
 ): Promise<void> => {
-  const updateData: any = {
-    updated_at: new Date().toISOString(),
-  };
+  const updateData: any = {};
 
   if (updates.status) updateData.status = updates.status;
-  if (updates.qrCode !== undefined) updateData.qr_code = updates.qrCode;
-  if (updates.pairingCode !== undefined) updateData.pairing_code = updates.pairingCode;
-  if (updates.connectedAt) updateData.connected_at = updates.connectedAt.toISOString();
-  if (updates.lastSeen) updateData.last_seen = updates.lastSeen.toISOString();
-  if (updates.sessionData) updateData.session_data = updates.sessionData;
+  if (updates.qrCode !== undefined) updateData.qrCode = updates.qrCode;
+  if (updates.pairingCode !== undefined) updateData.pairingCode = updates.pairingCode;
+  if (updates.connectedAt) updateData.connectedAt = updates.connectedAt;
+  if (updates.lastSeen) updateData.lastSeen = updates.lastSeen;
+  if (updates.sessionData) updateData.sessionData = updates.sessionData;
 
-  const { error } = await supabase
-    .from('whatsapp_sessions')
-    .update(updateData)
-    .eq('user_id', userId);
-
-  if (error) {
+  try {
+    await prisma.whatsappSession.updateMany({
+      where: { userId },
+      data: updateData
+    });
+  } catch (error) {
     logger.error('Error updating WhatsApp session:', error);
     throw new Error('Failed to update WhatsApp session');
   }
@@ -2872,14 +2868,13 @@ export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ 
       { table: 'contacts', fields: 'contact_id, contact_name' },
       { table: 'whatsapp_messages', fields: 'contact_id' },
       { table: 'deleted_messages', fields: 'sender_id, sender_name' },
-      { table: 'view_once_captures', fields: 'sender_id, sender_name' },
       { table: 'status_likes', fields: 'contact_id, contact_name' },
       { table: 'whatsapp_sessions', fields: 'session_data' }
     ];
 
     for (const source of sources) {
       try {
-        const { data } = await supabase.from(source.table).select(source.fields).eq('user_id', userId);
+        const data = await prisma.$queryRawUnsafe(`SELECT ${source.fields} FROM "${source.table}" WHERE user_id = $1`, userId);
         if (data) {
           for (const item of data as any[]) {
             // Special case for whatsapp_sessions which might have contact info in session_data

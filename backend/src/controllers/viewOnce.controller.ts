@@ -88,8 +88,8 @@ export const downloadViewOnceCapture = async (req: AuthRequest, res: Response): 
     res.json({
       success: true,
       data: {
-        mediaUrl: capture.media_url,
-        mediaType: capture.media_type,
+        mediaUrl: capture.mediaUrl,
+        mediaType: capture.mediaType,
       },
     });
   } catch (error) {

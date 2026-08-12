@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '../config/database';
+import { getSupabaseClient } from '../config/supabase';
 import { logger } from '../config/logger';
 import { WASocket } from '@whiskeysockets/baileys';
 

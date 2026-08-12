@@ -1,7 +1,5 @@
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
-
-const supabase = getSupabaseClient();
 
 /**
  * In-memory cache of admin settings (avoid hitting DB on every single message)
@@ -20,20 +18,18 @@ const DEFAULTS: Record<string, boolean> = {
  */
 const refreshCacheFromDb = async (): Promise<void> => {
   try {
-    const { data, error } = await supabase
-      .from('admin_settings')
-      .select('setting_key, value');
-
-    if (error) throw error;
+    const data = await prisma.adminSetting.findMany({
+      select: { settingKey: true, value: true }
+    });
 
     settingsCache.clear();
     for (const key of Object.keys(DEFAULTS)) {
       settingsCache.set(key, DEFAULTS[key]);
     }
     if (data) {
-      for (const row of data as any[]) {
+      for (const row of data) {
         if (typeof row.value === 'boolean') {
-          settingsCache.set(row.setting_key, row.value);
+          settingsCache.set(row.settingKey, row.value);
         }
       }
     }
@@ -93,20 +89,18 @@ export const updateSetting = async (
   }
 
   try {
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from('admin_settings')
-      .upsert(
-        {
-          setting_key: key,
-          value,
-          updated_at: now,
-          updated_by: updatedBy || null,
-        },
-        { onConflict: 'setting_key' }
-      );
-
-    if (error) throw error;
+    await prisma.adminSetting.upsert({
+      where: { settingKey: key },
+      update: {
+        value,
+        updatedBy: updatedBy || null,
+      },
+      create: {
+        settingKey: key,
+        value,
+        updatedBy: updatedBy || null,
+      }
+    });
 
     // Invalidate cache
     settingsCache.set(key, value);

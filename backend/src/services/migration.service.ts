@@ -2,7 +2,7 @@
  * Migration service - Shared functions for Supabase → Cloudinary migration
  */
 
-import { getSupabaseClient } from '../config/database';
+import { getSupabaseClient } from '../config/supabase';
 import { downloadMediaFromSupabase } from './supabaseStorage.service';
 import { uploadMediaToCloudinary } from './cloudinaryStorage.service';
 import { logger } from '../config/logger';

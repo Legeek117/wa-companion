@@ -1,7 +1,7 @@
 import path from 'path';
 import { promises as fs, existsSync } from 'fs';
 import { env } from '../config/env';
-import { getSupabaseClient } from '../config/database';
+import { getSupabaseClient } from '../config/supabase';
 import { logger } from '../config/logger';
 
 const STORAGE_BUCKET = env.SUPABASE_STORAGE_BUCKET?.trim();

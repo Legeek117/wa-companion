@@ -1,16 +1,13 @@
-import { Response } from 'express';
-import { Request } from 'express';
+import { Response, Request } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { logger } from '../config/logger';
 import { env } from '../config/env';
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import * as whatsappService from '../services/whatsapp.service';
 import * as messageService from '../services/message.service';
 import * as adminSettingsService from '../services/adminSettings.service';
 import { listAllSupabaseFiles, migrateFile } from '../services/migration.service';
-
-const supabase = getSupabaseClient();
 
 interface AdminRequest extends Request {
   adminToken?: string;
@@ -31,14 +28,12 @@ export const verifyAdminToken = (req: AdminRequest, res: Response, next: () => v
     return;
   }
 
-  // First check if it's the static token (for backward compatibility or scripts)
   const expectedStaticToken = process.env.ADMIN_MIGRATION_TOKEN || 'change-me-in-production';
   if (adminToken === expectedStaticToken) {
     req.adminToken = adminToken as string;
     return next();
   }
 
-  // If not static, try to verify as JWT
   try {
     const decoded = jwt.verify(adminToken as string, env.JWT_SECRET) as { adminId: string; email: string; role: string };
     if (decoded.role !== 'admin') {
@@ -54,42 +49,20 @@ export const verifyAdminToken = (req: AdminRequest, res: Response, next: () => v
   }
 };
 
-/**
- * Admin Login
- * POST /api/admin/auth/login
- */
 export const adminLogin = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
-    const { data: admin, error } = await supabase
-      .from('admins')
-      .select('*')
-      .eq('email', email.toLowerCase())
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') { // Not found
-        res.status(401).json({ success: false, error: { message: 'Email ou mot de passe incorrect' } });
-      } else {
-        logger.error('[Admin] Login DB error:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: { 
-            message: `Erreur base de données: ${error.message}`,
-            code: error.code
-          } 
-        });
-      }
-      return;
-    }
+    const admin = await prisma.admin.findUnique({
+      where: { email: email.toLowerCase() }
+    });
 
     if (!admin) {
       res.status(401).json({ success: false, error: { message: 'Email ou mot de passe incorrect' } });
       return;
     }
 
-    const validPassword = await bcrypt.compare(password, admin.password_hash);
+    const validPassword = await bcrypt.compare(password, admin.passwordHash);
     if (!validPassword) {
       res.status(401).json({ success: false, error: { message: 'Email ou mot de passe incorrect' } });
       return;
@@ -108,40 +81,24 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         token,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     logger.error('[Admin] Login error:', error);
     res.status(500).json({ success: false, error: { message: 'Erreur lors de la connexion' } });
   }
 };
 
-/**
- * Live Logs Stream (SSE)
- * GET /api/admin/logs/stream
- */
 export const getLiveLogsStream = (req: Request, res: Response): void => {
-  // Set headers for SSE
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
   });
-  
-  // Flush headers
   res.flushHeaders();
 
-  // Import locally to avoid circular dependency if any (though shouldn't be)
   const { liveLogService } = require('../services/liveLog.service');
-  
-  // Add client to service
   liveLogService.addClient(res);
-  
-  // Client connection is removed inside addClient when 'close' event fires
 };
 
-/**
- * Admin Register (Temporary / Initial setup)
- * POST /api/admin/auth/register
- */
 export const adminRegister = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -151,50 +108,34 @@ export const adminRegister = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const password_hash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
 
-    const { data: admin, error } = await supabase
-      .from('admins')
-      .insert({ email: email.toLowerCase(), password_hash })
-      .select('id, email')
-      .single();
-
-    if (error) {
-      logger.error('[Admin] Register DB error:', error);
-      if (error.code === '23505') {
+    try {
+      const admin = await prisma.admin.create({
+        data: { email: email.toLowerCase(), passwordHash },
+        select: { id: true, email: true }
+      });
+      res.status(201).json({
+        success: true,
+        data: admin,
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002') {
         res.status(409).json({ success: false, error: { message: 'Cet email est déjà utilisé' } });
       } else {
-        res.status(500).json({ 
-          success: false, 
-          error: { 
-            message: `Erreur base de données: ${error.message}`,
-            code: error.code
-          } 
-        });
+        throw error;
       }
-      return;
     }
-
-    res.status(201).json({
-      success: true,
-      data: admin,
-    });
-  } catch (error) {
+  } catch (error: any) {
     logger.error('[Admin] Register error:', error);
     res.status(500).json({ success: false, error: { message: 'Erreur lors de la création du compte' } });
   }
 };
 
-/**
- * Start migration from Supabase to Cloudinary
- * POST /api/admin/migrate-cloudinary
- * Headers: x-admin-token: YOUR_SECRET_TOKEN
- */
 export const startMigration = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     logger.info('[Admin] Migration request received');
 
-    // Check Cloudinary config
     if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
       res.status(400).json({
         success: false,
@@ -206,13 +147,10 @@ export const startMigration = async (req: AdminRequest, res: Response): Promise<
       return;
     }
 
-    // Start migration in background (don't block response)
-    // The migration will run asynchronously
     migrateAllFiles().catch((error) => {
       logger.error('[Admin] Migration error:', error);
     });
 
-    // Return immediately
     res.status(202).json({
       success: true,
       message: 'Migration started. Check logs for progress.',
@@ -233,15 +171,8 @@ export const startMigration = async (req: AdminRequest, res: Response): Promise<
   }
 };
 
-/**
- * Get migration status
- * GET /api/admin/migration-status
- * Headers: x-admin-token: YOUR_SECRET_TOKEN
- */
 export const getMigrationStatus = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    // This is a simple implementation
-    // In production, you might want to store status in Redis or database
     res.status(200).json({
       success: true,
       data: {
@@ -261,16 +192,12 @@ export const getMigrationStatus = async (req: AdminRequest, res: Response): Prom
   }
 };
 
-/**
- * Background migration function
- */
 async function migrateAllFiles(): Promise<void> {
   try {
     logger.info('[Migration] ========================================');
     logger.info('[Migration] Starting Supabase → Cloudinary migration');
     logger.info('[Migration] ========================================');
 
-    // List all files
     logger.info('[Migration] Listing all files from Supabase...');
     const files = await listAllSupabaseFiles();
     logger.info(`[Migration] Found ${files.length} files to migrate`);
@@ -280,7 +207,6 @@ async function migrateAllFiles(): Promise<void> {
       return;
     }
 
-    // Migrate files
     let successCount = 0;
     let failCount = 0;
 
@@ -295,7 +221,6 @@ async function migrateAllFiles(): Promise<void> {
         failCount++;
       }
 
-      // Small delay to avoid rate limiting
       if (i < files.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }
@@ -312,49 +237,26 @@ async function migrateAllFiles(): Promise<void> {
   }
 }
 
-/**
- * Get all users and their WhatsApp connection status
- */
 export const getAllUsers = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('id, email, plan, log_messages, created_at');
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, plan: true, logMessages: true, createdAt: true }
+    });
 
-    if (usersError) {
-      logger.error('[Admin] Error fetching users:', usersError);
-      res.status(500).json({
-        success: false,
-        error: { 
-          message: `Erreur lors de la récupération des utilisateurs: ${usersError.message}`,
-          code: usersError.code 
-        },
-      });
-      return;
-    }
+    const sessions = await prisma.whatsappSession.findMany({
+      select: { userId: true, status: true, lastSeen: true }
+    });
 
-    if (!users) {
-      res.status(200).json({
-        success: true,
-        data: [],
-      });
-      return;
-    }
-
-    const { data: sessions, error: sessionsError } = await supabase
-      .from('whatsapp_sessions')
-      .select('user_id, status, last_seen');
-
-    if (sessionsError) {
-      logger.warn('[Admin] Error fetching sessions (non-fatal):', sessionsError);
-    }
-
-    const usersWithStatus = users.map(user => {
-      const session = sessions?.find(s => s.user_id === user.id);
+    const usersWithStatus = users.map((user: any) => {
+      const session = sessions?.find((s: any) => s.userId === user.id);
       return {
-        ...user,
+        id: user.id,
+        email: user.email,
+        plan: user.plan,
+        log_messages: user.logMessages,
+        created_at: user.createdAt,
         whatsapp_status: session?.status || 'disconnected',
-        last_seen: session?.last_seen || null,
+        last_seen: session?.lastSeen || null,
       };
     });
 
@@ -371,10 +273,6 @@ export const getAllUsers = async (req: AdminRequest, res: Response): Promise<voi
   }
 };
 
-/**
- * Toggle message logging for a user
- * POST /api/admin/users/:userId/toggle-logging
- */
 export const toggleUserLogging = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
@@ -388,14 +286,11 @@ export const toggleUserLogging = async (req: AdminRequest, res: Response): Promi
       return;
     }
 
-    const { error } = await supabase
-      .from('users')
-      .update({ log_messages: enabled })
-      .eq('id', userId);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { logMessages: enabled }
+    });
 
-    if (error) throw error;
-
-    // Update the cache in whatsapp service
     whatsappService.updateMessageLoggingCache(userId, enabled);
 
     res.status(200).json({
@@ -411,9 +306,6 @@ export const toggleUserLogging = async (req: AdminRequest, res: Response): Promi
   }
 };
 
-/**
- * Force sync contacts from WhatsApp socket to database
- */
 export const syncUserContacts = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
@@ -435,14 +327,10 @@ export const syncUserContacts = async (req: AdminRequest, res: Response): Promis
   }
 };
 
-/**
- * Get contacts for a specific user
- */
 export const getUserContacts = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
     
-    // Try to sync contacts from socket first if connected
     try {
       await whatsappService.getAllContactsFromSocket(userId);
     } catch (syncError) {
@@ -464,22 +352,16 @@ export const getUserContacts = async (req: AdminRequest, res: Response): Promise
   }
 };
 
-/**
- * Get messages for a user-contact pair
- */
 export const getUserMessages = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const { userId, contactId } = req.params;
     
-    // DÉCOMMANDE DEBUG pour le contact_id peut être encodé (%40 -> @)
     const decodedContactId = contactId;
     logger.info(`[Admin] getUserMessages REQUEST RAW: userId=${userId}, contactId(raw)=${contactId}, decoded=${decodedContactId}, length=${decodedContactId.length}`);
     
-    // Test 1: query avec décodage URI
     let messages = await messageService.getMessages(userId, decodedContactId);
     logger.info(`[Admin] getUserMessages test1 (decoded raw Express)= ${messages.length}`);
     
-    // Test 2: query avec decodeURIComponent explicite
     const altContact = decodeURIComponent(contactId);
     if (messages.length === 0) {
       logger.info(`[Admin] getUserMessages test2: altContact=${altContact}`);
@@ -489,25 +371,19 @@ export const getUserMessages = async (req: AdminRequest, res: Response): Promise
       }
     }
     
-    // Test 3: fallback: query avec recherche 'LIKE' souple sur 10 caractères si 0 résultat
     if (messages.length === 0) {
       logger.info(`[Admin] getUserMessages: 0 résultats, essayons diagnostic DB direct...`);
-      const dbClient = getSupabaseClient();
       
-      // Vérifier combien de messages existe pour ce user peu importe le contact
-      const { count } = await dbClient.from('whatsapp_messages').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+      const count = await prisma.whatsappMessage.count({ where: { userId } });
       logger.info(`[Admin] getUserMessages DIAGNOSTIC: user ${userId} a ${count} messages TOTAL dans whatsapp_messages`);
       
-      // Afficher 5 contacts distincts pour avoir un échantillon de JIDs
-      const { data: sampleContacts } = await dbClient
-        .from('whatsapp_messages')
-        .select('contact_id')
-        .eq('user_id', userId)
-        .limit(5);
+      const sampleContacts = await prisma.whatsappMessage.findMany({
+        where: { userId },
+        select: { contactId: true },
+        take: 5
+      });
       logger.info(`[Admin] getUserMessages DIAGNOSTIC: 5 contact_ids samples: ${JSON.stringify(sampleContacts)}`);
       
-      // Test 4: si la req demandait contact_id = (altContact decoded ou original), voir s'il a une différence de suffixe (.net @s.whatsapp.net vs @lid etc)
-      // Exemple: frontend envoie X@lid mais DB contient X@s.whatsapp.net
       const suffixVariants = [
         decodedContactId,
         altContact,
@@ -517,14 +393,11 @@ export const getUserMessages = async (req: AdminRequest, res: Response): Promise
       ];
       for (const variant of suffixVariants) {
         if (!variant) continue;
-        const { count: tryCount } = await dbClient
-          .from('whatsapp_messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId)
-          .eq('contact_id', variant);
-        if (tryCount && tryCount > 0) {
+        const tryCount = await prisma.whatsappMessage.count({
+          where: { userId, contactId: variant }
+        });
+        if (tryCount > 0) {
           logger.info(`[Admin] getUserMessages ✅ Found ${tryCount} messages with variant: contact_id="${variant}"`);
-          // Récupérer ces messages
           const msgs = await messageService.getMessages(userId, variant);
           if (msgs.length > 0) {
             messages = msgs;
@@ -550,9 +423,6 @@ export const getUserMessages = async (req: AdminRequest, res: Response): Promise
   }
 };
 
-/**
- * Send a message as a specific user
- */
 export const sendMessageAsUser = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
@@ -627,4 +497,3 @@ export const updateAdminSetting = async (req: AdminRequest, res: Response): Prom
     });
   }
 };
-

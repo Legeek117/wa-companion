@@ -1,5 +1,7 @@
 import { WASocket } from '@whiskeysockets/baileys';
-import { getSupabaseClient } from '../config/database';
+import { env } from '../config/env';
+import prisma from '../config/database';
+import { getSupabaseClient } from '../config/supabase';
 import { logger } from '../config/logger';
 import { likeStatus, addContactIfNotExists, hasRecentlyProcessedStatus, markStatusAsProcessed } from './whatsapp.service';
 import { getMediaType, processAndUploadMedia } from './media.service';
@@ -141,34 +143,30 @@ export const invalidateStatusConfigCache = (userId: string): void => {
  * Get user's status configuration (global + contacts)
  */
 export const getStatusConfig = async (userId: string) => {
-  // Get global status config
-  const { data: globalConfig } = await supabase
-    .from('status_config')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
+  // Get global config
+  const globalConfig = await prisma.statusConfig.findUnique({
+    where: { userId }
+  });
 
   // Get contact-specific configs
-  const { data: contactConfigs } = await supabase
-    .from('status_auto_like_config')
-    .select('*')
-    .eq('user_id', userId);
+  const contactConfigs = await prisma.statusAutoLikeConfig.findMany({
+    where: { userId }
+  });
 
   // Get user plan
-  const { data: user } = await supabase
-    .from('users')
-    .select('plan')
-    .eq('id', userId)
-    .single();
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { plan: true }
+  });
 
   const isPremium = user?.plan === 'premium';
 
   // Build global config
   const config = {
     enabled: globalConfig?.enabled || false,
-    actionType: globalConfig?.action_type || 'view_and_like' as 'view_only' | 'view_and_like',
-    defaultEmoji: globalConfig?.default_emoji || '❤️',
-    selectedContacts: contactConfigs?.filter((c) => c.enabled || c.watch_only).map((c) => c.contact_id) || [],
+    actionType: globalConfig?.actionType || 'view_and_like' as 'view_only' | 'view_and_like',
+    defaultEmoji: globalConfig?.defaultEmoji || '❤️',
+    selectedContacts: contactConfigs?.filter((c: any) => c.enabled || c.watchOnly).map((c: any) => c.contactId) || [],
     isPremium,
   };
 

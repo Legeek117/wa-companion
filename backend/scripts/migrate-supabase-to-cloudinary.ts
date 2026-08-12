@@ -9,7 +9,7 @@
  *   ts-node scripts/migrate-supabase-to-cloudinary.ts
  */
 
-import { getSupabaseClient } from '../src/config/database';
+import { getSupabaseClient } from '../src/config/supabase';
 import { downloadMediaFromSupabase } from '../src/services/supabaseStorage.service';
 import { uploadMediaToCloudinary } from '../src/services/cloudinaryStorage.service';
 import { logger } from '../src/config/logger';

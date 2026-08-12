@@ -1,7 +1,5 @@
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { logger } from '../config/logger';
-
-const supabase = getSupabaseClient();
 
 export interface ViewOnceCommandConfig {
   id: string;
@@ -17,39 +15,35 @@ export interface ViewOnceCommandConfig {
  * Get or create View Once command configuration for a user
  */
 export const getViewOnceCommandConfig = async (userId: string): Promise<ViewOnceCommandConfig> => {
-  let { data, error } = await supabase
-    .from('view_once_command_config')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
+  try {
+    let data = await prisma.viewOnceCommandConfig.findUnique({
+      where: { userId }
+    });
 
-  if (error && error.code === 'PGRST116') {
-    // Config doesn't exist, create default one
-    const { data: newConfig, error: createError } = await supabase
-      .from('view_once_command_config')
-      .insert({
-        user_id: userId,
-        command_text: '.vv',
-        command_emoji: null,
-        enabled: true,
-      })
-      .select()
-      .single();
-
-    if (createError) {
-      logger.error('[ViewOnceCommand] Error creating default config:', createError);
-      throw new Error('Failed to create View Once command config');
+    if (!data) {
+      data = await prisma.viewOnceCommandConfig.create({
+        data: {
+          userId,
+          commandText: '.vv',
+          commandEmoji: null,
+          enabled: true,
+        }
+      });
     }
 
-    return newConfig as ViewOnceCommandConfig;
-  }
-
-  if (error) {
+    return {
+      id: data.id,
+      user_id: data.userId,
+      command_text: data.commandText,
+      command_emoji: data.commandEmoji,
+      enabled: data.enabled,
+      created_at: data.createdAt.toISOString(),
+      updated_at: data.updatedAt.toISOString(),
+    };
+  } catch (error) {
     logger.error('[ViewOnceCommand] Error getting config:', error);
     throw new Error('Failed to get View Once command config');
   }
-
-  return data as ViewOnceCommandConfig;
 };
 
 /**
@@ -63,22 +57,33 @@ export const updateViewOnceCommandConfig = async (
     enabled?: boolean;
   }
 ): Promise<ViewOnceCommandConfig> => {
-  // Ensure config exists
-  await getViewOnceCommandConfig(userId);
+  try {
+    // Ensure config exists
+    await getViewOnceCommandConfig(userId);
 
-  const { data, error } = await supabase
-    .from('view_once_command_config')
-    .update(updates)
-    .eq('user_id', userId)
-    .select()
-    .single();
+    const updateData: any = {};
+    if (updates.command_text !== undefined) updateData.commandText = updates.command_text;
+    if (updates.command_emoji !== undefined) updateData.commandEmoji = updates.command_emoji;
+    if (updates.enabled !== undefined) updateData.enabled = updates.enabled;
 
-  if (error) {
+    const data = await prisma.viewOnceCommandConfig.update({
+      where: { userId },
+      data: updateData
+    });
+
+    return {
+      id: data.id,
+      user_id: data.userId,
+      command_text: data.commandText,
+      command_emoji: data.commandEmoji,
+      enabled: data.enabled,
+      created_at: data.createdAt.toISOString(),
+      updated_at: data.updatedAt.toISOString(),
+    };
+  } catch (error) {
     logger.error('[ViewOnceCommand] Error updating config:', error);
     throw new Error('Failed to update View Once command config');
   }
-
-  return data as ViewOnceCommandConfig;
 };
 
 /**
@@ -114,4 +119,3 @@ export const matchesViewOnceCommand = async (
     return false;
   }
 };
-

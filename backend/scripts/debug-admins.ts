@@ -1,5 +1,5 @@
 
-import { getSupabaseClient } from '../src/config/database';
+import { getSupabaseClient } from '../src/config/supabase';
 
 async function checkAdmins() {
   const supabase = getSupabaseClient();

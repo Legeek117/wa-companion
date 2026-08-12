@@ -2,7 +2,7 @@ import app from './app';
 import { env } from './config/env';
 import { logger } from './config/logger';
 import { getRedisClient } from './config/redis';
-import { getSupabaseClient } from './config/database';
+
 import { logEnvironmentStatus, checkEnvironmentVariables } from './config/check-env';
 import { reconnectAllSessionsForAllUsers } from './services/whatsapp.service';
 import { initializeFirebaseAdmin } from './services/notifications.service';

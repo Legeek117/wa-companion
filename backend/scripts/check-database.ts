@@ -3,7 +3,7 @@
  * Usage: ts-node scripts/check-database.ts
  */
 
-import { getSupabaseClient } from '../src/config/database';
+import { getSupabaseClient } from '../src/config/supabase';
 
 async function checkDatabase() {
   const supabase = getSupabaseClient();

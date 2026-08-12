@@ -1,11 +1,9 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import * as autoresponderService from '../services/autoresponder.service';
 import { getAllContactsFromSocket } from '../services/whatsapp.service';
 import { logger } from '../config/logger';
-
-const supabase = getSupabaseClient();
 
 /**
  * Get autoresponder configuration
@@ -100,11 +98,10 @@ export const getAutoresponderContacts = async (req: AuthRequest, res: Response):
     }
 
     // Check if user is premium
-    const { data: user } = await supabase
-      .from('users')
-      .select('plan')
-      .eq('id', userId)
-      .single();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true }
+    });
 
     if (user?.plan !== 'premium') {
       res.status(403).json({
@@ -146,13 +143,13 @@ export const getAutoresponderContacts = async (req: AuthRequest, res: Response):
     }
 
     // Get existing autoresponder contact configs
-    const { data: existingConfigs } = await supabase
-      .from('autoresponder_contacts')
-      .select('contact_id, enabled, custom_message')
-      .eq('user_id', userId);
+    const existingConfigs = await prisma.autoresponderContact.findMany({
+      where: { userId },
+      select: { contactId: true, enabled: true, customMessage: true }
+    });
 
     const existingConfigsMap = new Map(
-      existingConfigs?.map((c) => [c.contact_id, c]) || []
+      existingConfigs.map((c: any) => [c.contactId, c])
     );
 
     // Merge contacts with existing configs
@@ -162,7 +159,7 @@ export const getAutoresponderContacts = async (req: AuthRequest, res: Response):
         contact_id: contact.contact_id,
         contact_name: contact.contact_name,
         enabled: existingConfig?.enabled ?? true, // Default to enabled if no config
-        custom_message: existingConfig?.custom_message || null,
+        custom_message: existingConfig?.customMessage || null,
       };
     });
 
@@ -229,22 +226,3 @@ export const updateAutoresponderContact = async (req: AuthRequest, res: Response
     });
   }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

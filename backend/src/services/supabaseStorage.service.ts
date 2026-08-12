@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '../config/database';
+import { getSupabaseClient } from '../config/supabase';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
 

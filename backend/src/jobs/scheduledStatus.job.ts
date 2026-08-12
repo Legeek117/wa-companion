@@ -1,9 +1,7 @@
-import { getSupabaseClient } from '../config/database';
+import prisma from '../config/database';
 import { getSocket } from '../services/whatsapp.service';
 import { logger } from '../config/logger';
 import { publishStatus } from '../services/scheduledStatusPublish.service';
-
-const supabase = getSupabaseClient();
 
 /**
  * Process scheduled statuses job
@@ -30,34 +28,36 @@ export async function processScheduledStatusesJob(): Promise<void> {
     });
 
     // First, let's check all pending statuses to see what we have
-    const { data: allPendingStatuses, error: allPendingError } = await supabase
-      .from('scheduled_statuses')
-      .select('id, scheduled_at, status, caption')
-      .eq('status', 'pending')
-      .order('scheduled_at', { ascending: true });
-
-    if (allPendingError) {
-      logger.error('Error finding all pending statuses:', allPendingError);
-    } else {
-      logger.info(`Found ${allPendingStatuses?.length || 0} total pending status(es)`, {
-        statuses: allPendingStatuses?.map(s => ({
-          id: s.id,
-          scheduled_at: s.scheduled_at,
-          scheduled_at_local: new Date(s.scheduled_at).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
-          caption: s.caption?.substring(0, 30),
-        })) || [],
+    try {
+      const allPendingStatuses = await prisma.scheduledStatus.findMany({
+        where: { status: 'pending' },
+        select: { id: true, scheduledAt: true, status: true, caption: true },
+        orderBy: { scheduledAt: 'asc' }
       });
+
+      logger.info(`Found ${allPendingStatuses.length} total pending status(es)`, {
+        statuses: allPendingStatuses.map(s => ({
+          id: s.id,
+          scheduled_at: s.scheduledAt,
+          scheduled_at_local: new Date(s.scheduledAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }),
+          caption: s.caption?.substring(0, 30),
+        })),
+      });
+    } catch (allPendingError) {
+      logger.error('Error finding all pending statuses:', allPendingError);
     }
 
     // Find statuses scheduled for now or in the past (status = pending)
     // Use buffer to catch statuses scheduled for exactly now
-    const { data: scheduledStatuses, error: findError } = await supabase
-      .from('scheduled_statuses')
-      .select('*')
-      .eq('status', 'pending')
-      .lte('scheduled_at', bufferISO);
-
-    if (findError) {
+    let scheduledStatuses;
+    try {
+      scheduledStatuses = await prisma.scheduledStatus.findMany({
+        where: {
+          status: 'pending',
+          scheduledAt: { lte: bufferTime }
+        }
+      });
+    } catch (findError) {
       logger.error('Error finding scheduled statuses:', findError);
       throw new Error('Failed to find scheduled statuses');
     }
@@ -75,34 +75,33 @@ export async function processScheduledStatusesJob(): Promise<void> {
     logger.info(`Found ${scheduledStatuses.length} scheduled status(es) to process`, {
       statuses: scheduledStatuses.map(s => ({
         id: s.id,
-        scheduled_at: s.scheduled_at,
+        scheduled_at: s.scheduledAt,
         caption: s.caption?.substring(0, 50),
-        hasMedia: !!s.media_url,
+        hasMedia: !!s.mediaUrl,
       })),
     });
 
     // Process each scheduled status
     for (const status of scheduledStatuses) {
       try {
-        const socket = getSocket(status.user_id);
+        const socket = getSocket(status.userId);
 
         if (!socket) {
-          logger.warn(`WhatsApp not connected for user ${status.user_id}, skipping status ${status.id}`);
+          logger.warn(`WhatsApp not connected for user ${status.userId}, skipping status ${status.id}`);
           // Update status to failed
-          await supabase
-            .from('scheduled_statuses')
-            .update({
+          await prisma.scheduledStatus.update({
+            where: { id: status.id },
+            data: {
               status: 'failed',
-              error_message: 'WhatsApp not connected',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', status.id);
+              errorMessage: 'WhatsApp not connected',
+            }
+          });
           continue;
         }
 
         // Publish status via Baileys
-        logger.info(`Publishing scheduled status ${status.id} for user ${status.user_id}`, {
-          hasMedia: !!status.media_url,
+        logger.info(`Publishing scheduled status ${status.id} for user ${status.userId}`, {
+          hasMedia: !!status.mediaUrl,
           hasCaption: !!status.caption,
         });
 
@@ -111,8 +110,8 @@ export async function processScheduledStatusesJob(): Promise<void> {
           logger.info(`[ScheduledStatus] Attempting to publish status ${status.id}...`);
           const published = await publishStatus(
             socket,
-            status.caption,
-            status.media_url
+            status.caption || undefined,
+            status.mediaUrl
           );
 
           if (!published) {
@@ -122,21 +121,15 @@ export async function processScheduledStatusesJob(): Promise<void> {
           logger.info(`[ScheduledStatus] Status ${status.id} published successfully, updating database...`);
 
           // Update status to published
-          const { error: updateError } = await supabase
-            .from('scheduled_statuses')
-            .update({
+          await prisma.scheduledStatus.update({
+            where: { id: status.id },
+            data: {
               status: 'published',
-              published_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', status.id);
+              publishedAt: new Date(),
+            }
+          });
 
-          if (updateError) {
-            logger.error(`[ScheduledStatus] Error updating status ${status.id}:`, updateError);
-            throw new Error(`Failed to update status: ${updateError.message}`);
-          } else {
-            logger.info(`[ScheduledStatus] ✅ Status ${status.id} published and updated successfully`);
-          }
+          logger.info(`[ScheduledStatus] ✅ Status ${status.id} published and updated successfully`);
         } catch (publishError: any) {
           logger.error(`[ScheduledStatus] ❌ Error publishing status ${status.id}:`, {
             error: publishError?.message || publishError,
@@ -147,14 +140,13 @@ export async function processScheduledStatusesJob(): Promise<void> {
       } catch (error) {
         logger.error(`Error processing status ${status.id}:`, error);
         // Update status to failed
-        await supabase
-          .from('scheduled_statuses')
-          .update({
+        await prisma.scheduledStatus.update({
+          where: { id: status.id },
+          data: {
             status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', status.id);
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          }
+        });
       }
     }
 

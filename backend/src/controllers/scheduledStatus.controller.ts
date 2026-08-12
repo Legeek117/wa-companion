@@ -117,7 +117,6 @@ export const createScheduledStatus = async (req: AuthRequest, res: Response): Pr
     const status = await scheduledStatusService.createScheduledStatus(
       userId,
       mediaUrl,
-      mediaType,
       scheduledAt,
       caption
     );
@@ -215,7 +214,6 @@ export const updateScheduledStatus = async (req: AuthRequest, res: Response): Pr
       userId,
       id,
       mediaUrl,
-      mediaType,
       scheduledAt,
       caption
     );

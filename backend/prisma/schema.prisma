@@ -91,8 +91,8 @@ model User {
   plan      Plan     @default(free)
   subscriptionId String?  @map("subscription_id") @db.VarChar(255)
   logMessages Boolean  @default(false) @map("log_messages")
-  createdAt DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   subscriptions         Subscription[]
   whatsappSessions      WhatsappSession[]
@@ -100,6 +100,7 @@ model User {
   whatsappMessages      WhatsappMessage[]
   statusLikes           StatusLike[]
   statusAutoLikeConfig  StatusAutoLikeConfig[]
+  statusConfig          StatusConfig?
   viewOnceCaptures      ViewOnceCapture[]
   deletedMessages       DeletedMessage[]
   autoresponderConfig   AutoresponderConfig[]
@@ -121,8 +122,8 @@ model Admin {
   id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   email        String   @unique @db.VarChar(255)
   passwordHash String   @map("password_hash") @db.VarChar(255)
-  createdAt    DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([email])
   @@map("admins")
@@ -135,12 +136,12 @@ model Subscription {
   stripeCustomerId    String               @map("stripe_customer_id") @db.VarChar(255)
   plan                Plan
   status              SubscriptionStatus
-  currentPeriodStart  DateTime             @map("current_period_start") @db.TimestampTz
-  currentPeriodEnd    DateTime             @map("current_period_end") @db.TimestampTz
+  currentPeriodStart  DateTime             @map("current_period_start") @db.Timestamptz
+  currentPeriodEnd    DateTime             @map("current_period_end") @db.Timestamptz
   cancelAtPeriodEnd   Boolean              @default(false) @map("cancel_at_period_end")
-  canceledAt          DateTime?            @map("canceled_at") @db.TimestampTz
-  createdAt           DateTime             @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt           DateTime             @updatedAt @map("updated_at") @db.TimestampTz
+  canceledAt          DateTime?            @map("canceled_at") @db.Timestamptz
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -157,11 +158,11 @@ model WhatsappSession {
   qrCode      String?       @map("qr_code") @db.Text
   pairingCode String?       @map("pairing_code") @db.VarChar(20)
   status      SessionStatus @default(disconnected)
-  connectedAt DateTime?     @map("connected_at") @db.TimestampTz
-  lastSeen    DateTime?     @map("last_seen") @db.TimestampTz
+  connectedAt DateTime?     @map("connected_at") @db.Timestamptz
+  lastSeen    DateTime?     @map("last_seen") @db.Timestamptz
   sessionData Json?         @map("session_data") @db.JsonB
-  createdAt   DateTime      @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt   DateTime      @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -176,10 +177,10 @@ model Contact {
   userId      String   @map("user_id") @db.Uuid
   contactId   String   @map("contact_id") @db.VarChar(255)
   contactName String   @map("contact_name") @db.VarChar(255)
-  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.TimestampTz
-  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.TimestampTz
-  createdAt   DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.Timestamptz
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -199,8 +200,8 @@ model WhatsappMessage {
   content   String?   @db.Text
   mediaUrl  String?   @map("media_url") @db.Text
   mediaType MediaType? @map("media_type")
-  timestamp DateTime  @db.TimestampTz
-  createdAt DateTime  @default(now()) @map("created_at") @db.TimestampTz
+  timestamp DateTime  @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -218,8 +219,8 @@ model StatusLike {
   contactName String  @map("contact_name") @db.VarChar(255)
   statusId  String   @map("status_id") @db.VarChar(255)
   emojiUsed String   @default("❤️") @map("emoji_used") @db.VarChar(10)
-  likedAt   DateTime @default(now()) @map("liked_at") @db.TimestampTz
-  createdAt DateTime @default(now()) @map("created_at") @db.TimestampTz
+  likedAt   DateTime @default(now()) @map("liked_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -239,8 +240,8 @@ model StatusAutoLikeConfig {
   emoji     String      @default("❤️") @db.VarChar(10)
   actionType ActionType? @map("action_type")
   watchOnly Boolean     @default(false) @map("watch_only")
-  createdAt DateTime    @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt DateTime    @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -259,8 +260,8 @@ model ViewOnceCapture {
   mediaUrl  String    @map("media_url") @db.Text
   mediaType MediaType @map("media_type")
   fileSize  BigInt?   @map("file_size")
-  capturedAt DateTime @default(now()) @map("captured_at") @db.TimestampTz
-  createdAt DateTime  @default(now()) @map("created_at") @db.TimestampTz
+  capturedAt DateTime @default(now()) @map("captured_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -280,10 +281,10 @@ model DeletedMessage {
   content   String?   @db.Text
   mediaUrl  String?   @map("media_url") @db.Text
   mediaType MediaType? @map("media_type")
-  sentAt    DateTime  @map("sent_at") @db.TimestampTz
-  deletedAt DateTime  @map("deleted_at") @db.TimestampTz
+  sentAt    DateTime  @map("sent_at") @db.Timestamptz
+  deletedAt DateTime  @map("deleted_at") @db.Timestamptz
   delaySeconds Int?    @map("delay_seconds")
-  createdAt DateTime  @default(now()) @map("created_at") @db.TimestampTz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -302,8 +303,8 @@ model AutoresponderConfig {
   enabled            Boolean              @default(false)
   autoActivateOffline Boolean             @default(true) @map("auto_activate_offline")
   scheduleConfig     Json?                @map("schedule_config") @db.JsonB
-  createdAt          DateTime             @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt          DateTime             @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -321,8 +322,8 @@ model AutoresponderContact {
   contactName String   @map("contact_name") @db.VarChar(255)
   enabled     Boolean  @default(true)
   customMessage String? @map("custom_message") @db.Text
-  createdAt   DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -339,8 +340,8 @@ model ViewOnceCommandConfig {
   commandText String   @default(".vv") @map("command_text") @db.VarChar(50)
   commandEmoji String? @map("command_emoji") @db.VarChar(10)
   enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -353,12 +354,12 @@ model ScheduledStatus {
   userId    String                @map("user_id") @db.Uuid
   mediaUrl  String?               @map("media_url") @db.Text
   caption   String?               @db.Text
-  scheduledAt DateTime            @map("scheduled_at") @db.TimestampTz
-  publishedAt DateTime?           @map("published_at") @db.TimestampTz
+  scheduledAt DateTime            @map("scheduled_at") @db.Timestamptz
+  publishedAt DateTime?           @map("published_at") @db.Timestamptz
   status    ScheduledStatusStatus @default(pending)
   errorMessage String?            @map("error_message") @db.Text
-  createdAt DateTime              @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt DateTime              @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime              @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -376,8 +377,8 @@ model Quota {
   deletedMessagesCount Int      @default(0) @map("deleted_messages_count")
   scheduledStatusesCount Int    @default(0) @map("scheduled_statuses_count")
   resetDate            DateTime @map("reset_date") @db.Date
-  createdAt            DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt            DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -394,7 +395,7 @@ model Analytics {
   viewOnceCapturesCount    Int      @default(0) @map("view_once_captures_count")
   deletedMessagesCount     Int      @default(0) @map("deleted_messages_count")
   autoresponderResponsesCount Int   @default(0) @map("autoresponder_responses_count")
-  createdAt                DateTime @default(now()) @map("created_at") @db.TimestampTz
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -414,7 +415,7 @@ model Notification {
   imageUrl  String?          @map("image_url") @db.Text
   data      Json?            @db.JsonB
   read      Boolean          @default(false)
-  createdAt DateTime         @default(now()) @map("created_at") @db.TimestampTz
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -432,8 +433,8 @@ model NotificationSettings {
   viewOnce       Boolean  @default(true) @map("view_once")
   statusLiked    Boolean  @default(true) @map("status_liked")
   deletedMessage Boolean  @default(true) @map("deleted_message")
-  createdAt      DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -446,12 +447,39 @@ model FcmToken {
   userId    String   @map("user_id") @db.Uuid
   token     String   @unique @db.Text
   deviceInfo Json?   @map("device_info") @db.JsonB
-  createdAt DateTime @default(now()) @map("created_at") @db.TimestampTz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.TimestampTz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([token])
   @@map("fcm_tokens")
+}
+
+
+model StatusConfig {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  enabled Boolean @default(false)
+  actionType ActionType? @default(view_and_like) @map("action_type")
+  defaultEmoji String @default("❤️") @map("default_emoji") @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("status_config")
+}
+
+model AdminSetting {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  settingKey  String   @unique @map("setting_key") @db.VarChar(100)
+  value       Boolean  @default(true)
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("admin_settings")
 }
