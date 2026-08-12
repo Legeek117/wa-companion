@@ -2,6 +2,43 @@ version: '3.9'
 
 services:
   # ─────────────────────────────────────────────
+  # Traefik — Reverse Proxy avec Let's Encrypt
+  # ─────────────────────────────────────────────
+  traefik:
+    image: traefik:v2.10
+    container_name: amda-traefik
+    restart: unless-stopped
+    command:
+      # API et Dashboard
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      # Logs
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      # Docker provider
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Redirection HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      # Let's Encrypt
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=amir@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Dashboard Traefik
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "traefik_letsencrypt:/letsencrypt"
+    networks:
+      - amda-network
+
+  # ─────────────────────────────────────────────
   # PostgreSQL — base de données locale
   # ─────────────────────────────────────────────
   postgres:
@@ -23,6 +60,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    networks:
+      - amda-network
 
   # ─────────────────────────────────────────────
   # Redis — cache & queues
@@ -40,6 +79,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - amda-network
 
   # ─────────────────────────────────────────────
   # Backend AMDA
@@ -55,28 +96,28 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "3003:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
-      # ── Remplacez les valeurs ci-dessous dans un fichier .env ou via les secrets Docker ──
+      # ── URLs publiques ──
+      API_URL: https://amda.159.223.162.195.nip.io
+      FRONTEND_URL: https://amdabot.netlify.app
+      ALLOWED_ORIGINS: https://amdabot.netlify.app,https://amda.159.223.162.195.nip.io
+      # ── Database & Redis ──
       DATABASE_URL: postgresql://postgres:S4HmEb69@postgres:5432/amda
       REDIS_URL: redis://redis:6379
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      API_URL: http://159.223.162.195:3003
-      FRONTEND_URL: https://amdabot.netlify.app
-      ALLOWED_ORIGINS: https://amdabot.netlify.app
+      # ── Paths ──
       WHATSAPP_SESSION_PATH: /app/sessions
       UPLOADS_PATH: /app/uploads
       LOG_LEVEL: info
-      # ── À définir obligatoirement via .env ou secrets ──
+      # ── JWT (à définir via .env) ──
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      # ── Stripe (optionnel en dev, obligatoire en prod) ──
+      # ── Stripe (optionnel) ──
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
@@ -91,12 +132,22 @@ services:
     volumes:
       - backend_uploads:/app/uploads
       - backend_sessions:/app/sessions
+    labels:
+      - "traefik.enable=true"
+      # Router HTTP → HTTPS redirect (handled by entrypoint)
+      - "traefik.http.routers.amda-backend.rule=Host(`amda.159.223.162.195.nip.io`)"
+      - "traefik.http.routers.amda-backend.entrypoints=websecure"
+      - "traefik.http.routers.amda-backend.tls=true"
+      - "traefik.http.routers.amda-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.amda-backend.loadbalancer.server.port=3000"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => { if (r.statusCode !== 200) throw new Error(r.statusCode) })"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 40s
+    networks:
+      - amda-network
 
 volumes:
   postgres_data:
@@ -107,3 +158,9 @@ volumes:
     driver: local
   backend_sessions:
     driver: local
+  traefik_letsencrypt:
+    driver: local
+
+networks:
+  amda-network:
+    driver: bridge
