@@ -14,7 +14,9 @@ RUN npm ci
 
 # Copier les sources
 COPY src ./src
+COPY scripts ./scripts
 COPY tsconfig.json .
+COPY tsconfig.scripts.json .
 
 # Compiler TypeScript (src + scripts) + générer le client Prisma
 RUN npm run build
