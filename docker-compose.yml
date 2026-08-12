@@ -70,8 +70,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       # ── Paths ──
-      WHATSAPP_SESSION_PATH: /app/sessions
-      UPLOADS_PATH: /app/uploads
+      WHATSAPP_SESSION_PATH: ./sessions
+      UPLOADS_PATH: ./uploads
       LOG_LEVEL: info
       # ── JWT (à définir via .env) ──
       JWT_SECRET: ${JWT_SECRET}
