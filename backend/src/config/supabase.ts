@@ -1,29 +1,29 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { env } from './env';
-import { logger } from './logger';
+/**
+ * Supabase client — DÉSACTIVÉ
+ * La base de données utilise PostgreSQL local via Prisma.
+ * Le stockage des médias utilise le système de fichiers local (volume Docker).
+ *
+ * Ce fichier est conservé pour éviter les erreurs d'import dans les fichiers
+ * qui n'ont pas encore été nettoyés. Les fonctions retournent des no-ops.
+ */
 
-let supabaseClientInstance: SupabaseClient | null = null;
-
-export const getSupabaseClient = (): SupabaseClient => {
-  if (supabaseClientInstance) {
-    return supabaseClientInstance;
-  }
-
-  const supabaseUrl = env.SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    logger.warn('[Supabase] SUPABASE_URL or SUPABASE_ANON_KEY not set. Storage/Auth features requiring Supabase might fail.');
-    // Return a dummy client to prevent immediate crashes, but operations will fail
-    return createClient('https://dummy.supabase.co', 'dummy-key');
-  }
-
-  supabaseClientInstance = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+export const getSupabaseClient = (): any => {
+  return {
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }), data: null, error: null }) }),
+      insert: async () => ({ data: null, error: null }),
+      update: () => ({ eq: () => ({ data: null, error: null }) }),
+      delete: () => ({ eq: () => ({ data: null, error: null }) }),
+      upsert: async () => ({ data: null, error: null }),
+    }),
+    storage: {
+      from: () => ({
+        upload: async () => ({ data: null, error: null }),
+        download: async () => ({ data: null, error: null }),
+        remove: async () => ({ data: null, error: null }),
+        list: async () => ({ data: [], error: null }),
+        getPublicUrl: () => ({ data: { publicUrl: '' } }),
+      }),
     },
-  });
-
-  return supabaseClientInstance;
+  };
 };

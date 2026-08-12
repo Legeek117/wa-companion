@@ -1,12 +1,9 @@
 import { WASocket } from '@whiskeysockets/baileys';
 import { env } from '../config/env';
 import prisma from '../config/database';
-import { getSupabaseClient } from '../config/supabase';
 import { logger } from '../config/logger';
 import { likeStatus, addContactIfNotExists, hasRecentlyProcessedStatus, markStatusAsProcessed } from './whatsapp.service';
 import { getMediaType, processAndUploadMedia } from './media.service';
-
-const supabase = getSupabaseClient();
 
 // Cache for status configuration to avoid repeated DB queries
 interface CachedConfig {
@@ -40,31 +37,29 @@ const getCachedConfig = async (userId: string): Promise<CachedConfig> => {
     return cached;
   }
   
-  // Fetch fresh config from DB
+  // Fetch fresh config from DB using Prisma
   const [globalConfigResult, userResult, contactConfigsResult] = await Promise.all([
-    supabase
-      .from('status_config')
-      .select('enabled, action_type, default_emoji')
-      .eq('user_id', userId)
-      .maybeSingle(),
-    supabase
-      .from('users')
-      .select('plan')
-      .eq('id', userId)
-      .maybeSingle(),
-    supabase
-      .from('status_auto_like_config')
-      .select('contact_id, enabled, emoji, action_type, watch_only')
-      .eq('user_id', userId),
+    prisma.statusConfig.findUnique({
+      where: { userId },
+      select: { enabled: true, actionType: true, defaultEmoji: true }
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true }
+    }),
+    prisma.statusAutoLikeConfig.findMany({
+      where: { userId },
+      select: { contactId: true, enabled: true, emoji: true, actionType: true, watchOnly: true }
+    })
   ]);
   
   // Log what we got from the database
   logger.info(`[Status] 📊 Fetched config from DB for user ${userId}:`, {
-    hasGlobalConfig: !!globalConfigResult.data,
-    default_emoji: globalConfigResult.data?.default_emoji ? `"${globalConfigResult.data.default_emoji}" (length: ${globalConfigResult.data.default_emoji.length})` : 'not set',
-    action_type: globalConfigResult.data?.action_type,
-    enabled: globalConfigResult.data?.enabled,
-    contactConfigsCount: contactConfigsResult.data?.length || 0,
+    hasGlobalConfig: !!globalConfigResult,
+    default_emoji: globalConfigResult?.defaultEmoji ? `"${globalConfigResult.defaultEmoji}" (length: ${globalConfigResult.defaultEmoji.length})` : 'not set',
+    action_type: globalConfigResult?.actionType,
+    enabled: globalConfigResult?.enabled,
+    contactConfigsCount: contactConfigsResult?.length || 0,
   });
   
   const contactConfigsMap = new Map<string, {
@@ -75,14 +70,11 @@ const getCachedConfig = async (userId: string): Promise<CachedConfig> => {
   }>();
   
   // Build global config first to use as fallback
-  // IMPORTANT: Use the value from DB directly, don't fallback to '❤️' if it's set
-  const globalConfig = globalConfigResult.data ? {
-    enabled: globalConfigResult.data.enabled || false,
-    action_type: (globalConfigResult.data.action_type as 'view_only' | 'view_and_like') || 'view_and_like',
-    // Use the emoji from DB if it exists, otherwise default to '❤️'
-    // But if it's null/undefined in DB, use '❤️' as fallback
-    default_emoji: (globalConfigResult.data.default_emoji && globalConfigResult.data.default_emoji.trim() !== '') 
-      ? globalConfigResult.data.default_emoji 
+  const globalConfig = globalConfigResult ? {
+    enabled: globalConfigResult.enabled || false,
+    action_type: (globalConfigResult.actionType as 'view_only' | 'view_and_like') || 'view_and_like',
+    default_emoji: (globalConfigResult.defaultEmoji && globalConfigResult.defaultEmoji.trim() !== '') 
+      ? globalConfigResult.defaultEmoji 
       : '❤️',
   } : {
     enabled: false,
@@ -96,33 +88,32 @@ const getCachedConfig = async (userId: string): Promise<CachedConfig> => {
     enabled: globalConfig.enabled,
   });
   
-  if (contactConfigsResult.data) {
-    for (const config of contactConfigsResult.data) {
-      // Use contact emoji if it exists and is not empty, otherwise use global default
+  if (contactConfigsResult) {
+    for (const config of contactConfigsResult) {
       const contactEmoji = (config.emoji && config.emoji.trim() !== '') 
         ? config.emoji 
         : globalConfig.default_emoji;
       
-      logger.debug(`[Status] Contact config for ${config.contact_id}:`, {
+      logger.debug(`[Status] Contact config for ${config.contactId}:`, {
         contact_emoji: config.emoji ? `"${config.emoji}" (length: ${config.emoji.length})` : 'not set',
         final_emoji: `"${contactEmoji}" (length: ${contactEmoji.length})`,
-        action_type: config.action_type || globalConfig.action_type,
+        action_type: config.actionType || globalConfig.action_type,
       });
       
-      contactConfigsMap.set(config.contact_id, {
+      contactConfigsMap.set(config.contactId, {
         enabled: config.enabled || false,
         emoji: contactEmoji,
-        action_type: (config.action_type && (config.action_type === 'view_only' || config.action_type === 'view_and_like'))
-          ? (config.action_type as 'view_only' | 'view_and_like')
+        action_type: (config.actionType && (config.actionType === 'view_only' || config.actionType === 'view_and_like'))
+          ? (config.actionType as 'view_only' | 'view_and_like')
           : globalConfig.action_type,
-        watch_only: config.watch_only || false,
+        watch_only: config.watchOnly || false,
       });
     }
   }
   
   const newCache: CachedConfig = {
-    globalConfig: globalConfigResult.data ? globalConfig : null,
-    userPlan: (userResult.data?.plan as 'free' | 'premium') || null,
+    globalConfig: globalConfigResult ? globalConfig : null,
+    userPlan: (userResult?.plan as 'free' | 'premium') || null,
     contactConfigs: contactConfigsMap,
     lastUpdated: now,
   };
@@ -226,28 +217,29 @@ export const getStatusLikesHistory = async (userId: string, limit: number = 100)
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     
-    // Utiliser DISTINCT ON pour éviter les duplications basées sur status_id
-    // Filter out statuses older than 24 hours (expired statuses)
-    const { data, error } = await supabase
-      .from('status_likes')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('liked_at', twentyFourHoursAgo.toISOString()) // Only get statuses from last 24h
-      .order('status_id', { ascending: false })
-      .order('liked_at', { ascending: false });
+    // Fetch from Prisma with 24h filter
+    const data = await prisma.statusLike.findMany({
+      where: {
+        userId,
+        likedAt: { gte: twentyFourHoursAgo }
+      },
+      orderBy: [
+        { statusId: 'desc' },
+        { likedAt: 'desc' }
+      ]
+    });
     
-    // Filtrer les doublons par status_id (garder le plus récent)
+    // Filtrer les doublons par statusId (garder le plus récent)
     const uniqueStatuses = new Map<string, any>();
     if (data) {
       for (const like of data) {
-        const statusId = like.status_id;
+        const statusId = like.statusId;
         if (!uniqueStatuses.has(statusId)) {
           uniqueStatuses.set(statusId, like);
         } else {
-          // Si on a déjà ce status_id, garder celui avec la date la plus récente
           const existing = uniqueStatuses.get(statusId);
-          const existingDate = new Date(existing.liked_at || existing.created_at);
-          const currentDate = new Date(like.liked_at || like.created_at);
+          const existingDate = new Date(existing.likedAt || existing.createdAt);
+          const currentDate = new Date(like.likedAt || like.createdAt);
           if (currentDate > existingDate) {
             uniqueStatuses.set(statusId, like);
           }
@@ -258,23 +250,11 @@ export const getStatusLikesHistory = async (userId: string, limit: number = 100)
     // Convertir en tableau et trier par date
     const uniqueData = Array.from(uniqueStatuses.values())
       .sort((a, b) => {
-        const dateA = new Date(a.liked_at || a.created_at);
-        const dateB = new Date(b.liked_at || b.created_at);
+        const dateA = new Date(a.likedAt || a.createdAt);
+        const dateB = new Date(b.likedAt || b.createdAt);
         return dateB.getTime() - dateA.getTime();
       })
       .slice(0, limit);
-
-    if (error) {
-      logger.error('[Status] Error getting status likes history:', {
-        error,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-        userId,
-      });
-      throw new Error(`Failed to get status likes history: ${error.message || 'Unknown error'}`);
-    }
 
     logger.info(`[Status] Retrieved ${uniqueData.length} active statuses (expired statuses filtered) for user ${userId}`);
     return uniqueData || [];
@@ -295,24 +275,25 @@ export const getStatusStats = async (userId: string) => {
   thisWeek.setDate(thisWeek.getDate() - 7);
 
   // Get likes today
-  const { count: todayCount } = await supabase
-    .from('status_likes')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('liked_at', today.toISOString());
+  const todayCount = await prisma.statusLike.count({
+    where: {
+      userId,
+      likedAt: { gte: today }
+    }
+  });
 
   // Get likes this week
-  const { count: weekCount } = await supabase
-    .from('status_likes')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('liked_at', thisWeek.toISOString());
+  const weekCount = await prisma.statusLike.count({
+    where: {
+      userId,
+      likedAt: { gte: thisWeek }
+    }
+  });
 
   // Get total likes
-  const { count: totalCount } = await supabase
-    .from('status_likes')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId);
+  const totalCount = await prisma.statusLike.count({
+    where: { userId }
+  });
 
   return {
     likedToday: todayCount || 0,

@@ -3,7 +3,6 @@ import { logger } from '../config/logger';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { uploadMediaToCloudinary } from './cloudinaryStorage.service';
-import { uploadMediaToSupabase } from './supabaseStorage.service';
 
 /**
  * Get file extension from mime type
@@ -37,7 +36,7 @@ export const getExtensionFromMimeType = (mimeType: string): string => {
 };
 
 /**
- * Upload media to Cloudinary (preferred), Supabase Storage (fallback), or local storage (last resort)
+ * Upload media to Cloudinary (preferred) or local storage (fallback)
  */
 export const uploadMedia = async (
   buffer: Buffer,
@@ -73,22 +72,8 @@ export const uploadMedia = async (
       return cloudinaryUrl;
     }
     
-    // Fallback to Supabase Storage if Cloudinary is not available
-    logger.debug('[Media] Cloudinary not available, trying Supabase Storage');
-    const supabaseUrl = await uploadMediaToSupabase(
-      buffer,
-      storagePath,
-      mimeType,
-      { upsert: true, cacheControl: '3600' }
-    );
-    
-    if (supabaseUrl) {
-      logger.info(`[Media] Media uploaded to Supabase: ${supabaseUrl}`);
-      return supabaseUrl;
-    }
-    
-    // Fallback to local storage if both Cloudinary and Supabase are not available
-    logger.warn('[Media] Cloudinary and Supabase Storage not available, falling back to local storage');
+    // Fallback to local storage if Cloudinary is not available
+    logger.warn('[Media] Cloudinary not available, falling back to local storage');
     
     // Create uploads directory if it doesn't exist
     const uploadsDir = join(process.cwd(), 'uploads', subdirectory);

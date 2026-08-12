@@ -1,8 +1,10 @@
-import { getSupabaseClient } from '../config/supabase';
+/**
+ * User Identification Service
+ * Find which user owns a WhatsApp JID (phone number)
+ */
+
 import { logger } from '../config/logger';
 import { WASocket } from '@whiskeysockets/baileys';
-
-const supabase = getSupabaseClient();
 
 /**
  * Find the userId that owns a WhatsApp JID (phone number)
@@ -14,28 +16,14 @@ export const findUserIdByJID = async (jid: string): Promise<string | null> => {
       return null;
     }
 
-    // Normalize JID (remove @s.whatsapp.net if present, or add it)
+    // Normalize JID (remove @s.whatsapp.net if present)
     let normalizedJid = jid;
     if (jid.includes('@')) {
       normalizedJid = jid.split('@')[0];
     }
 
-    // Search in whatsapp_sessions table
-    // We need to match the JID with the session's phone number
-    // The session_data might contain the phone number, or we can check socket.user.id
-    
-    // Method 1: Check active sockets (if we have access to them)
-    // This will be done in the calling function
-    
-    // Method 2: Search in database by matching with session data
-    // Since we store session data, we can try to match the JID
-    // However, this is complex because the JID format might vary
-    
-    // Method 3: Use a reverse lookup - check which user has this JID as their connected phone
-    // We'll need to iterate through active sessions or use a different approach
-    
-    // For now, we'll return null and let the caller handle it
-    // The caller should check if the message is fromMe, and if so, use the socket's userId
+    // Search is done via socket matching (see findUserIdBySocketJID)
+    // Database lookups would be complex because JID format varies
     return null;
   } catch (error) {
     logger.error('[UserIdentification] Error finding userId by JID:', error);
@@ -86,4 +74,3 @@ export const findUserIdBySocketJID = (jid: string, sockets: Map<string, WASocket
     return null;
   }
 };
-
