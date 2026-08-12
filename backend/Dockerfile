@@ -1,51 +1,61 @@
+# ─────────────────────────────────────────────────────────────
+# Stage 1 : Build
+# ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copier les manifestes de dépendances
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
+# Installer TOUTES les dépendances (y compris devDependencies pour le build)
 RUN npm ci
 
-# Copy source
+# Copier les sources
 COPY src ./src
 COPY tsconfig.json .
 
-# Build
+# Compiler TypeScript (src + scripts) + générer le client Prisma
 RUN npm run build
+RUN npm run build:scripts
 RUN npm run prisma:generate
 
-# Runtime stage
+# ─────────────────────────────────────────────────────────────
+# Stage 2 : Runtime
+# ─────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+# Créer un utilisateur non-root
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
-# Copy from builder
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/package.json .
-COPY --chown=nodejs:nodejs prisma ./prisma
+# Copier les artefacts du build
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nodejs:nodejs /app/package.json .
 
-# Create directories for persistent volumes
-RUN mkdir -p /app/uploads /app/sessions && \
+# Copier les scripts de seed et d'init
+COPY --chown=nodejs:nodejs scripts ./scripts
+
+# Créer les répertoires de données persistantes
+RUN mkdir -p /app/uploads/deleted-messages /app/uploads/view-once /app/sessions && \
     chown -R nodejs:nodejs /app/uploads /app/sessions
 
-# Switch to non-root
+# Copier et rendre exécutable le script de démarrage
+COPY --chown=nodejs:nodejs docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Passer à l'utilisateur non-root
 USER nodejs
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => { if (r.statusCode !== 200) throw new Error(r.statusCode) })"
 
-# Expose port
 EXPOSE 3000
 
-# Start
-CMD ["node", "dist/server.js"]
+ENTRYPOINT ["/entrypoint.sh"]

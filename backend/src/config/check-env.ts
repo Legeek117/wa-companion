@@ -16,18 +16,17 @@ interface EnvCheck {
 }
 
 const requiredVars: string[] = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
+  'DATABASE_URL',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
 ];
 
 const optionalVars: string[] = [
-  'DATABASE_URL',
   'REDIS_URL',
   'STRIPE_SECRET_KEY',
   'CLOUDINARY_CLOUD_NAME',
+  'SUPABASE_URL',
+  'SUPABASE_ANON_KEY',
 ];
 
 export function checkEnvironmentVariables(): {

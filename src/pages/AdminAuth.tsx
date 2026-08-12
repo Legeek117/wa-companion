@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Shield, Lock, Mail, UserPlus, LogIn } from "lucide-react";
+import { Shield, Lock, Mail, LogIn } from "lucide-react";
 import { Loading } from "@/components/Loading";
 
 const AdminAuth = () => {

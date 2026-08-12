@@ -3,9 +3,8 @@ import * as adminController from '../controllers/admin.controller';
 
 const router = Router();
 
-// Public Admin Auth routes
+// Public Admin Auth routes — register disabled, admins are created via seed
 router.post('/auth/login', adminController.adminLogin);
-router.post('/auth/register', adminController.adminRegister);
 
 // Admin routes (protected by token)
 router.get('/logs/stream', adminController.verifyAdminToken, adminController.getLiveLogsStream);

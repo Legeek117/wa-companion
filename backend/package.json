@@ -17,7 +17,9 @@
     "migrate-cloudinary": "ts-node scripts/migrate-supabase-to-cloudinary.ts",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "seed:admins": "ts-node --project tsconfig.scripts.json scripts/seed-admins.ts",
+    "build:scripts": "tsc --project tsconfig.scripts.json"
   },
   "keywords": [
     "whatsapp",

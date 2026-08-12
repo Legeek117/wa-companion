@@ -20,7 +20,6 @@ import {
   Trash2,
   Settings,
   Sparkles,
-  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
