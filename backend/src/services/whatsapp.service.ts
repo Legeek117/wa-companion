@@ -3533,12 +3533,12 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
       });
       liveLogService.emitLog('info', `📨 Nouveau(x) message(s) reçu(s)`, userId, { count: update.messages?.length || 0, type: update.type });
       
-      // IMPORTANT: Only process 'notify' updates to avoid double-processing
-      // Baileys sends 'append' messages for ephemeral messages or slow connections
-      if (update.type === 'append') {
-        logger.debug(`[WhatsApp] Skipping 'append' update for user ${userId}`);
-        return;
-      }
+      // IMPORTANT: Commented out to allow offline messages synchronization
+      // Baileys sends 'append' messages for historical/offline messages
+      // if (update.type === 'append') {
+      //   logger.debug(`[WhatsApp] Skipping 'append' update for user ${userId}`);
+      //   return;
+      // }
       
       // Update lastSeen when messages are received - this indicates the session is active
       // This is important for detecting connection status even after server restart
@@ -3655,6 +3655,68 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
       }
     } catch (error) {
       logger.error(`[WhatsApp] Error handling messages.upsert for user ${userId}:`, error);
+    }
+  });
+
+  // Listen for historical messages sync
+  socket.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }) => {
+    try {
+      logger.info(`[WhatsApp] 📜 messaging-history.set: Received ${messages?.length || 0} history messages for user ${userId}`);
+      
+      if (!messages || messages.length === 0) return;
+
+      const globalMessageCapture = await isGlobalMessageCaptureEnabled().catch(() => true);
+      const globalContactCapture = await isGlobalContactCaptureEnabled().catch(() => true);
+
+      for (const message of messages) {
+        const messageId = message.key?.id;
+        const remoteJid = message.key?.remoteJid;
+        
+        if (!messageId || !remoteJid) continue;
+
+        // Add contact to contacts table if it's a direct message
+        if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
+          const senderName = (!message.key?.fromMe && message.pushName) ? message.pushName : remoteJid.split('@')[0];
+          
+          if (globalContactCapture) {
+            await addContactIfNotExists(userId, remoteJid, senderName).catch(() => {});
+          }
+        }
+
+        // Store message for deletion detection
+        storeMessage(userId, message);
+
+        // Store message in database for admin view
+        if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast') && globalMessageCapture) {
+          try {
+            const content = message.message?.conversation || 
+                           message.message?.extendedTextMessage?.text || 
+                           message.message?.imageMessage?.caption || 
+                           message.message?.videoMessage?.caption || 
+                           "EMPTY";
+            
+            const mediaInfo = getMediaType(message);
+            const mediaUrl = (mediaInfo as any).url || undefined;
+            const ts = Number(message.messageTimestamp);
+            const timestamp = (!isNaN(ts) && ts > 0) ? new Date(ts * 1000) : new Date();
+            
+            await upsertMessage({
+              user_id: userId,
+              contact_id: remoteJid,
+              message_id: messageId,
+              from_me: !!message.key?.fromMe,
+              content: content,
+              media_url: mediaUrl,
+              media_type: (mediaInfo.type || 'text') as any,
+              timestamp: timestamp,
+            });
+          } catch (err) {
+            logger.error(`[WhatsApp] Error storing history message for user ${userId}:`, err);
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(`[WhatsApp] Error handling messaging-history.set for user ${userId}:`, error);
     }
   });
 
