@@ -3,6 +3,9 @@
 # ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
+# Installer OpenSSL 3 (requis par Prisma même au build)
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copier les manifestes de dépendances
