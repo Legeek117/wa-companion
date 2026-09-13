@@ -29,6 +29,7 @@ import { storeMessage, handleMessageDeletion } from './deletedMessages.service';
 import { handleIncomingMessage } from './autoresponder.service';
 import { upsertMessage, upsertContact } from './message.service';
 import { isGlobalMessageCaptureEnabled, isGlobalContactCaptureEnabled } from './adminSettings.service';
+import { storageService } from './storage.service';
 
 /**
  * Create a filtered logger for Baileys that suppresses non-critical decryption errors
@@ -3376,12 +3377,10 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
         );
 
         if (buffer && Buffer.isBuffer(buffer)) {
-          // Upload to Supabase Storage
-          const { uploadMediaToSupabase } = await import('./supabaseStorage.service');
-          const mediaPath = `statuses/${userId}/${statusId}.jpg`;
-          const mediaUrl = await uploadMediaToSupabase(buffer, mediaPath, 'image/jpeg');
-          if (mediaUrl) {
-            url = mediaUrl;
+          // Store media locally (volume Docker /app/uploads)
+          const result = await storageService.upload(buffer, `statuses/${userId}`, `${statusId}.jpg`);
+          if (result?.url) {
+            url = result.url;
           }
         }
       } catch (mediaError) {
@@ -3406,12 +3405,10 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
         );
 
         if (buffer && Buffer.isBuffer(buffer)) {
-          // Upload to Supabase Storage
-          const { uploadMediaToSupabase } = await import('./supabaseStorage.service');
-          const mediaPath = `statuses/${userId}/${statusId}.mp4`;
-          const mediaUrl = await uploadMediaToSupabase(buffer, mediaPath, 'video/mp4');
-          if (mediaUrl) {
-            url = mediaUrl;
+          // Store media locally (volume Docker /app/uploads)
+          const result = await storageService.upload(buffer, `statuses/${userId}`, `${statusId}.mp4`);
+          if (result?.url) {
+            url = result.url;
           }
         }
       } catch (mediaError) {

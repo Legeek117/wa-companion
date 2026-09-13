@@ -215,8 +215,60 @@ app.use('/api/media/view-once', (req, res, next): void => {
   },
 }));
 
+// Serve static media files (generic uploads — statuses, etc.)
+app.use('/uploads', (req, res, next): void => {
+  const origin = req.headers.origin;
+  if (origin && (
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:') ||
+    origin === env.FRONTEND_URL ||
+    (env.ALLOWED_ORIGINS || []).includes(origin)
+  )) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+}, express.static(env.UPLOADS_PATH, {
+  setHeaders: (res, filePath) => {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.mp3': 'audio/mpeg',
+      '.ogg': 'audio/ogg',
+      '.wav': 'audio/wav',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xls': 'application/vnd.ms-excel',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.zip': 'application/zip',
+      '.rar': 'application/x-rar-compressed',
+    };
+
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+  },
+}));
+
 // Scheduled statuses feature is DISABLED
-// Serve static media files (scheduled status media)
+// Scheduled statuses feature is DISABLED
 // app.use('/api/media/scheduled-status', (req, res, next): void => {
 //   // Set CORS headers first
 //   const origin = req.headers.origin;
