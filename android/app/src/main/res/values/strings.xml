@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AMDA</string>
+    <string name="title_activity_main">AMDA</string>
+    <string name="package_name">com.amda.app</string>
+    <string name="custom_url_scheme">com.amda.app</string>
+</resources>
