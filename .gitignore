@@ -6,6 +6,9 @@ dist/
 dev-dist/
 build/
 
+# Releases (APK + keystore de signature - ne jamais commiter)
+releases/
+
 # Variables d'environnement (ne jamais commiter)
 .env
 .env.local
