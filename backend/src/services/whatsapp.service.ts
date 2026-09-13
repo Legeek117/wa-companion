@@ -10,7 +10,6 @@ import { join } from 'path';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { env } from '../config/env';
 import prisma from '../config/database';
-import { getSupabaseClient } from '../config/supabase';
 import { logger } from '../config/logger';
 import { liveLogService } from './liveLog.service';
 import { WhatsAppSession } from '../types/whatsapp.types';
@@ -88,7 +87,6 @@ const createBaileysLogger = () => {
   };
 };
 
-const supabase = getSupabaseClient();
 
 // Store active WhatsApp sockets by userId
 const activeSockets = new Map<string, WASocket>();
@@ -1050,14 +1048,13 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
         logger.info(`[WhatsApp] Using stored QR code from memory for user ${userId}`);
       } else {
         // Check database as fallback
-        const { data: sessionData } = await supabase
-      .from('whatsapp_sessions')
-      .select('qr_code, status')
-      .eq('user_id', userId)
-      .single();
+        const sessionData = await prisma.whatsappSession.findFirst({
+          where: { userId },
+          select: { qrCode: true, status: true },
+        });
     
-        if (sessionData?.qr_code) {
-          finalQrCode = sessionData.qr_code;
+        if (sessionData?.qrCode) {
+          finalQrCode = sessionData.qrCode;
           qrCodeReceived = true;
           logger.info(`[WhatsApp] Using stored QR code from database for user ${userId}`);
         } else {
@@ -1885,15 +1882,14 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
           const storedPairingCode = pairingCodes.get(userId);
           if (!storedPairingCode) {
             logger.info(`[WhatsApp] No pairing code generated after QR for user ${userId}, checking database...`);
-            const { data: sessionData } = await supabase
-              .from('whatsapp_sessions')
-              .select('pairing_code')
-              .eq('user_id', userId)
-              .single();
+            const sessionData = await prisma.whatsappSession.findFirst({
+              where: { userId },
+              select: { pairingCode: true },
+            });
             
-            if (sessionData?.pairing_code && pairingCodeResolve) {
+            if (sessionData?.pairingCode && pairingCodeResolve) {
               logger.info(`[WhatsApp] Found pairing code in database for user ${userId}`);
-              pairingCodeResolve(sessionData.pairing_code);
+              pairingCodeResolve(sessionData.pairingCode);
               pairingCodeResolve = null;
             }
           }
@@ -2186,14 +2182,13 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         logger.info(`[WhatsApp] Using stored pairing code from memory for user ${userId}`);
       } else {
         // Check database as fallback
-        const { data: sessionData } = await supabase
-      .from('whatsapp_sessions')
-      .select('pairing_code, status')
-      .eq('user_id', userId)
-      .single();
+        const sessionData = await prisma.whatsappSession.findFirst({
+          where: { userId },
+          select: { pairingCode: true, status: true },
+        });
     
-        if (sessionData?.pairing_code) {
-          finalPairingCode = sessionData.pairing_code;
+        if (sessionData?.pairingCode) {
+          finalPairingCode = sessionData.pairingCode;
           logger.info(`[WhatsApp] Using stored pairing code from database for user ${userId}`);
         } else {
           // Return empty string - frontend will poll for it
@@ -2278,53 +2273,44 @@ const checkRecentActivity = async (userId: string): Promise<{ hasRecentActivity:
     
     const [sessionResult, deletedMessagesResult, statusLikesResult, viewOnceResult, contactsResult] = await Promise.all([
       // Check session last_seen
-      supabase
-        .from('whatsapp_sessions')
-        .select('last_seen')
-        .eq('user_id', userId)
-        .single(),
+      prisma.whatsappSession.findFirst({
+        where: { userId },
+        select: { lastSeen: true },
+      }),
       // Check recent deleted messages (within last 5 minutes)
-      supabase
-        .from('deleted_messages')
-        .select('deleted_at')
-        .eq('user_id', userId)
-        .gte('deleted_at', fiveMinutesAgo.toISOString())
-        .order('deleted_at', { ascending: false })
-        .limit(1),
+      prisma.deletedMessage.findFirst({
+        where: { userId, deletedAt: { gte: fiveMinutesAgo } },
+        select: { deletedAt: true },
+        orderBy: { deletedAt: 'desc' },
+      }),
       // Check recent status likes (within last 5 minutes)
-      supabase
-        .from('status_likes')
-        .select('liked_at')
-        .eq('user_id', userId)
-        .gte('liked_at', fiveMinutesAgo.toISOString())
-        .order('liked_at', { ascending: false })
-        .limit(1),
+      prisma.statusLike.findFirst({
+        where: { userId, likedAt: { gte: fiveMinutesAgo } },
+        select: { likedAt: true },
+        orderBy: { likedAt: 'desc' },
+      }),
       // Check recent view_once_captures (within last 5 minutes)
-      supabase
-        .from('view_once_captures')
-        .select('captured_at')
-        .eq('user_id', userId)
-        .gte('captured_at', fiveMinutesAgo.toISOString())
-        .order('captured_at', { ascending: false })
-        .limit(1),
+      prisma.viewOnceCapture.findFirst({
+        where: { userId, capturedAt: { gte: fiveMinutesAgo } },
+        select: { capturedAt: true },
+        orderBy: { capturedAt: 'desc' },
+      }),
       // Check recent contacts updates (within last 10 minutes - more lenient)
-      supabase
-        .from('contacts')
-        .select('last_seen_at')
-        .eq('user_id', userId)
-        .gte('last_seen_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
-        .order('last_seen_at', { ascending: false })
-        .limit(1),
+      prisma.contact.findFirst({
+        where: { userId, lastSeenAt: { gte: new Date(Date.now() - 10 * 60 * 1000) } },
+        select: { lastSeenAt: true },
+        orderBy: { lastSeenAt: 'desc' },
+      }),
     ]);
     
     // Check if any recent activity exists
-    const lastSeen = sessionResult.data?.last_seen ? new Date(sessionResult.data.last_seen) : null;
+    const lastSeen = sessionResult?.lastSeen ? new Date(sessionResult.lastSeen) : null;
     const hasRecentSessionActivity = lastSeen && lastSeen > fiveMinutesAgo;
     
-    const hasRecentDeletedMessages = deletedMessagesResult.data && deletedMessagesResult.data.length > 0;
-    const hasRecentStatusLikes = statusLikesResult.data && statusLikesResult.data.length > 0;
-    const hasRecentViewOnce = viewOnceResult.data && viewOnceResult.data.length > 0;
-    const hasRecentContacts = contactsResult.data && contactsResult.data.length > 0;
+    const hasRecentDeletedMessages = Boolean(deletedMessagesResult?.deletedAt);
+    const hasRecentStatusLikes = Boolean(statusLikesResult?.likedAt);
+    const hasRecentViewOnce = Boolean(viewOnceResult?.capturedAt);
+    const hasRecentContacts = Boolean(contactsResult?.lastSeenAt);
     
     const hasRecentActivity: boolean = Boolean(hasRecentSessionActivity || hasRecentDeletedMessages || hasRecentStatusLikes || hasRecentViewOnce || hasRecentContacts);
     
@@ -2333,26 +2319,26 @@ const checkRecentActivity = async (userId: string): Promise<{ hasRecentActivity:
     if (hasRecentSessionActivity && lastSeen) {
       lastActivity = lastSeen;
     }
-    if (hasRecentDeletedMessages && deletedMessagesResult.data?.[0]?.deleted_at) {
-      const deletedAt = new Date(deletedMessagesResult.data[0].deleted_at);
+    if (hasRecentDeletedMessages && deletedMessagesResult?.deletedAt) {
+      const deletedAt = new Date(deletedMessagesResult.deletedAt);
       if (!lastActivity || deletedAt > lastActivity) {
         lastActivity = deletedAt;
       }
     }
-    if (hasRecentStatusLikes && statusLikesResult.data?.[0]?.liked_at) {
-      const likedAt = new Date(statusLikesResult.data[0].liked_at);
+    if (hasRecentStatusLikes && statusLikesResult?.likedAt) {
+      const likedAt = new Date(statusLikesResult.likedAt);
       if (!lastActivity || likedAt > lastActivity) {
         lastActivity = likedAt;
       }
     }
-    if (hasRecentViewOnce && viewOnceResult.data?.[0]?.captured_at) {
-      const capturedAt = new Date(viewOnceResult.data[0].captured_at);
+    if (hasRecentViewOnce && viewOnceResult?.capturedAt) {
+      const capturedAt = new Date(viewOnceResult.capturedAt);
       if (!lastActivity || capturedAt > lastActivity) {
         lastActivity = capturedAt;
       }
     }
-    if (hasRecentContacts && contactsResult.data?.[0]?.last_seen_at) {
-      const contactSeenAt = new Date(contactsResult.data[0].last_seen_at);
+    if (hasRecentContacts && contactsResult?.lastSeenAt) {
+      const contactSeenAt = new Date(contactsResult.lastSeenAt);
       if (!lastActivity || contactSeenAt > lastActivity) {
         lastActivity = contactSeenAt;
       }
@@ -2525,16 +2511,15 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
   const pairingCode = pairingCodes.get(userId) || session.pairingCode;
   
   // Also check database
-  const { data: sessionData } = await supabase
-    .from('whatsapp_sessions')
-    .select('qr_code, pairing_code')
-    .eq('user_id', userId)
-    .single();
+  const sessionData = await prisma.whatsappSession.findFirst({
+    where: { userId },
+    select: { qrCode: true, pairingCode: true },
+  });
   
   return {
     status: actualStatus,
-    qrCode: qrCode || sessionData?.qr_code || undefined,
-    pairingCode: pairingCode || sessionData?.pairing_code || undefined,
+    qrCode: qrCode || sessionData?.qrCode || undefined,
+    pairingCode: pairingCode || sessionData?.pairingCode || undefined,
     connectedAt: session.connectedAt,
     lastSeen: session.lastSeen,
     hasSavedSession: hasCredentials,
@@ -2721,46 +2706,42 @@ export const addContactIfNotExists = async (
     if (!canonicalJid) return;
 
     // Check if contact already exists
-    const { data: existingContact } = await supabase
-      .from('contacts')
-      .select('id, contact_name')
-      .eq('user_id', userId)
-      .eq('contact_id', canonicalJid)
-      .single();
+    const existingContact = await prisma.contact.findFirst({
+      where: { userId, contactId: canonicalJid },
+      select: { id: true, contactName: true },
+    });
 
     if (existingContact) {
       // Update last_seen_at and contact_name if it has changed
-      if (existingContact.contact_name !== contactName && contactName && contactName !== canonicalJid.split('@')[0]) {
-        await supabase
-          .from('contacts')
-          .update({
-            contact_name: contactName,
-            last_seen_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId)
-          .eq('contact_id', canonicalJid);
+      if (existingContact.contactName !== contactName && contactName && contactName !== canonicalJid.split('@')[0]) {
+        await prisma.contact.update({
+          where: { id: existingContact.id },
+          data: {
+            contactName,
+            lastSeenAt: new Date(),
+          },
+        });
         logger.debug(`[WhatsApp] Updated contact ${canonicalJid} name to ${contactName}`);
       } else {
         // Just update last_seen_at
-        await supabase
-          .from('contacts')
-          .update({
-            last_seen_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId)
-          .eq('contact_id', canonicalJid);
+        await prisma.contact.update({
+          where: { id: existingContact.id },
+          data: {
+            lastSeenAt: new Date(),
+          },
+        });
       }
     } else {
       // Insert new contact
-      await supabase
-        .from('contacts')
-        .insert({
-          user_id: userId,
-          contact_id: canonicalJid,
-          contact_name: contactName || canonicalJid.split('@')[0],
-          first_seen_at: new Date().toISOString(),
-          last_seen_at: new Date().toISOString(),
-        });
+      await prisma.contact.create({
+        data: {
+          userId,
+          contactId: canonicalJid,
+          contactName: contactName || canonicalJid.split('@')[0],
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+        },
+      });
       logger.debug(`[WhatsApp] Added new contact ${canonicalJid} (${contactName})`);
     }
   } catch (error) {
@@ -2942,18 +2923,15 @@ export const likeStatus = async (
     if (!finalContactName) {
       try {
         // Essayer de récupérer depuis la base de données (si déjà liké)
-        const { data: existingLike } = await supabase
-          .from('status_likes')
-          .select('contact_name')
-          .eq('user_id', userId)
-          .eq('contact_id', contactId)
-          .order('liked_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const existingLike = await prisma.statusLike.findFirst({
+          where: { userId, contactId },
+          select: { contactName: true },
+          orderBy: { likedAt: 'desc' },
+        });
         
-        if (existingLike && existingLike.contact_name && 
-            existingLike.contact_name !== contactId.split('@')[0]) {
-          finalContactName = existingLike.contact_name;
+        if (existingLike && existingLike.contactName && 
+            existingLike.contactName !== contactId.split('@')[0]) {
+          finalContactName = existingLike.contactName;
           logger.info(`[WhatsApp] Contact name from database: ${finalContactName}`);
         } else {
           // Extract phone number from JID (e.g., "1234567890@s.whatsapp.net" -> "1234567890")
@@ -2972,25 +2950,18 @@ export const likeStatus = async (
     logger.info(`[WhatsApp] 💾 Saving status like: ${statusId} from ${finalContactName} (${contactId}) with emoji ${emoji}`);
 
     // Save to database
-    const insertData: any = {
-      user_id: userId,
-      contact_id: contactId,
-      contact_name: finalContactName,
-      status_id: statusId,
-      emoji_used: emoji,
-      liked_at: new Date().toISOString(),
-    };
-
-    if (mediaUrl) {
-      insertData.media_url = mediaUrl;
-    }
-    if (mediaType) {
-      insertData.media_type = mediaType;
-    }
-
-    const { error } = await supabase.from('status_likes').insert(insertData);
-
-    if (error) {
+    try {
+      await prisma.statusLike.create({
+        data: {
+          userId,
+          contactId,
+          contactName: finalContactName,
+          statusId,
+          emojiUsed: emoji,
+          likedAt: new Date(),
+        },
+      });
+    } catch (error) {
       logger.error('[WhatsApp] Error saving status like:', error);
       throw new Error('Failed to save status like');
     }
@@ -2998,12 +2969,10 @@ export const likeStatus = async (
     // Mettre à jour les autres entrées avec le même contact_id si le nom a changé
     if (finalContactName && finalContactName !== contactId.split('@')[0]) {
       try {
-        await supabase
-          .from('status_likes')
-          .update({ contact_name: finalContactName })
-          .eq('user_id', userId)
-          .eq('contact_id', contactId)
-          .neq('contact_name', finalContactName);
+        await prisma.statusLike.updateMany({
+          where: { userId, contactId, contactName: { not: finalContactName } },
+          data: { contactName: finalContactName },
+        });
         logger.info(`[WhatsApp] Updated contact names for ${contactId}`);
       } catch (updateError) {
         logger.debug(`[WhatsApp] Could not update contact names:`, updateError);
@@ -3864,17 +3833,12 @@ export const reconnectAllSessionsForAllUsers = async (): Promise<{ total: number
   const stats = { total: 0, reconnected: 0, failed: 0 };
   try {
     logger.info('[WhatsApp] 🔍 Scanning database for all WhatsApp sessions to reconnect...');
-    const { data: sessions, error } = await supabase
-      .from('whatsapp_sessions')
-      .select('user_id, status')
-      .order('last_seen', { ascending: false });
+    const sessions = await prisma.whatsappSession.findMany({
+      select: { userId: true, status: true },
+      orderBy: { lastSeen: 'desc' },
+    });
 
-    if (error) {
-      logger.error('[WhatsApp] Could not read whatsapp_sessions table for auto-reconnect:', error);
-      return stats;
-    }
-
-    if (!sessions || sessions.length === 0) {
+    if (sessions.length === 0) {
       logger.info('[WhatsApp] No sessions found in database, nothing to reconnect');
       return stats;
     }
@@ -3883,8 +3847,8 @@ export const reconnectAllSessionsForAllUsers = async (): Promise<{ total: number
     logger.info(`[WhatsApp] Found ${stats.total} sessions in DB, attempting reconnect sequentially...`);
 
     for (let i = 0; i < sessions.length; i++) {
-      const session = sessions[i] as any;
-      const userId = session.user_id;
+      const session = sessions[i];
+      const userId = session.userId;
       if (!userId) continue;
 
       try {
@@ -4391,40 +4355,40 @@ export const getAllAvailableStatuses = async (userId: string): Promise<Array<{
         logger.warn(`[WhatsApp] Could not fetch all statuses from WhatsApp:`, fetchError?.message || fetchError);
         
         // Fallback: Get from status_likes table
-        const { data: statusLikes } = await supabase
-          .from('status_likes')
-          .select('contact_id, contact_name, liked_at, status_id')
-          .eq('user_id', userId)
-          .order('liked_at', { ascending: false });
+        const statusLikes = await prisma.statusLike.findMany({
+          where: { userId },
+          select: { contactId: true, contactName: true, likedAt: true, statusId: true },
+          orderBy: { likedAt: 'desc' },
+        });
 
         if (statusLikes && statusLikes.length > 0) {
           for (const like of statusLikes) {
-            const contactId = like.contact_id;
+            const contactId = like.contactId;
             if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
               continue;
             }
 
-            // Use contact name from contactsMap, fallback to like.contact_name, then to phone number
-            const contactName = contactsMap.get(contactId) || like.contact_name || contactId.split('@')[0];
+            // Use contact name from contactsMap, fallback to like.contactName, then to phone number
+            const contactName = contactsMap.get(contactId) || like.contactName || contactId.split('@')[0];
 
             if (!contactsWithStatuses.has(contactId)) {
               contactsWithStatuses.set(contactId, {
                 contactId,
                 contactName,
-                lastStatusTime: new Date(like.liked_at).getTime(),
+                lastStatusTime: new Date(like.likedAt).getTime(),
                 statusCount: 0,
                 statusIds: new Set(),
               });
             }
 
             const contact = contactsWithStatuses.get(contactId)!;
-            if (!contact.statusIds.has(like.status_id)) {
-              contact.statusIds.add(like.status_id);
+            if (!contact.statusIds.has(like.statusId)) {
+              contact.statusIds.add(like.statusId);
               contact.statusCount++;
-              const statusTime = new Date(like.liked_at).getTime();
+              const statusTime = new Date(like.likedAt).getTime();
               if (statusTime > contact.lastStatusTime) {
                 contact.lastStatusTime = statusTime;
-                contact.latestStatusId = like.status_id;
+                contact.latestStatusId = like.statusId;
               }
             }
           }
@@ -4546,17 +4510,16 @@ export const getContactStatuses = async (userId: string, contactId: string): Pro
         logger.warn(`[WhatsApp] Could not fetch statuses from WhatsApp for contact ${decodedContactId}:`, fetchError?.message || fetchError);
         
         // Final fallback: Get from status_likes table
-        const { data: statusLikes } = await supabase
-          .from('status_likes')
-          .select('status_id, liked_at, emoji')
-          .eq('user_id', userId)
-          .eq('contact_id', decodedContactId)
-          .order('liked_at', { ascending: false });
+        const statusLikes = await prisma.statusLike.findMany({
+          where: { userId, contactId: decodedContactId },
+          select: { statusId: true, likedAt: true, emojiUsed: true },
+          orderBy: { likedAt: 'desc' },
+        });
 
         if (statusLikes && statusLikes.length > 0) {
           statuses = statusLikes.map((like: any) => ({
-            id: like.status_id || `status_${Date.now()}_${Math.random()}`,
-            timestamp: new Date(like.liked_at).getTime(),
+            id: like.statusId || `status_${Date.now()}_${Math.random()}`,
+            timestamp: new Date(like.likedAt).getTime(),
             type: 'text' as const,
           }));
           logger.info(`[WhatsApp] Using ${statuses.length} statuses from status_likes as fallback`);
@@ -4566,28 +4529,23 @@ export const getContactStatuses = async (userId: string, contactId: string): Pro
 
     // Get contact name from contacts table or status_likes
     let contactName = decodedContactId.split('@')[0];
-    const { data: contactData } = await supabase
-      .from('contacts')
-      .select('contact_name')
-      .eq('user_id', userId)
-      .eq('contact_id', decodedContactId)
-      .limit(1)
-      .maybeSingle();
+    const contactData = await prisma.contact.findFirst({
+      where: { userId, contactId: decodedContactId },
+      select: { contactName: true },
+    });
 
-    if (contactData?.contact_name) {
-      contactName = contactData.contact_name;
+    if (contactData?.contactName) {
+      contactName = contactData.contactName;
     } else {
       // Fallback to status_likes
-      const { data: statusLikeData } = await supabase
-        .from('status_likes')
-        .select('contact_name')
-        .eq('user_id', userId)
-        .eq('contact_id', decodedContactId)
-        .limit(1)
-        .maybeSingle();
+      const statusLikeData = await prisma.statusLike.findFirst({
+        where: { userId, contactId: decodedContactId },
+        select: { contactName: true },
+        orderBy: { likedAt: 'desc' },
+      });
       
-      if (statusLikeData?.contact_name) {
-        contactName = statusLikeData.contact_name;
+      if (statusLikeData?.contactName) {
+        contactName = statusLikeData.contactName;
       }
     }
 
