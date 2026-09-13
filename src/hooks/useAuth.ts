@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { api, apiClient } from '@/lib/api';
 import logger from '@/lib/logger';
+import { ensureE2EKeys } from '@/lib/e2eCrypto';
 import { toast } from 'sonner';
 
 export interface User {
@@ -133,6 +135,16 @@ export function useAuth() {
 
   const isAuthenticated = !!apiClient.getToken() && !!user;
   const isPremium = user?.plan === 'premium';
+
+  // Generate/register the device E2E keypair once the user is known.
+  // The private key stays on the phone; only the public key is registered on the server.
+  useEffect(() => {
+    if (user?.id) {
+      ensureE2EKeys(user.id).catch((error) => {
+        logger.warn('E2E key initialization failed:', error);
+      });
+    }
+  }, [user?.id]);
 
   return {
     user,

@@ -8,6 +8,7 @@ import {
   getViewOnceStats,
   deleteViewOnceCapture,
 } from '../controllers/viewOnce.controller';
+import { downloadEncryptedMedia } from '../controllers/e2e.controller';
 import {
   getCommandConfig,
   updateCommandConfig,
@@ -27,6 +28,7 @@ router.get('/', apiLimiter, listViewOnceCaptures);
 router.get('/stats', apiLimiter, getViewOnceStats);
 router.get('/:id', apiLimiter, getViewOnceCaptureById);
 router.get('/:id/download', apiLimiter, downloadViewOnceCapture);
+router.get('/:id/media', apiLimiter, downloadEncryptedMedia);
 router.delete('/:id', apiLimiter, deleteViewOnceCapture);
 
 export default router;

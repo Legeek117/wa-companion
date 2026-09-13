@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.routes';
 import whatsappRoutes from './routes/whatsapp.routes';
 import statusRoutes from './routes/status.routes';
 import viewOnceRoutes from './routes/viewOnce.routes';
+import e2eRoutes from './routes/e2e.routes';
 import deletedMessagesRoutes from './routes/deletedMessages.routes';
 import autoresponderRoutes from './routes/autoresponder.routes';
 // Scheduled statuses feature is DISABLED
@@ -361,6 +362,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/status', statusRoutes);
 app.use('/api/view-once', viewOnceRoutes);
+app.use('/api/e2e', e2eRoutes);
 app.use('/api/deleted-messages', deletedMessagesRoutes);
 app.use('/api/autoresponder', autoresponderRoutes);
 // Scheduled statuses feature is DISABLED

@@ -91,6 +91,7 @@ model User {
   plan      Plan     @default(free)
   subscriptionId String?  @map("subscription_id") @db.VarChar(255)
   logMessages Boolean  @default(false) @map("log_messages")
+  publicKey  String?   @map("public_key") @db.Text
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -259,6 +260,9 @@ model ViewOnceCapture {
   senderName String   @map("sender_name") @db.VarChar(255)
   mediaUrl  String    @map("media_url") @db.Text
   mediaType MediaType @map("media_type")
+  encrypted Boolean   @default(false) @map("encrypted")
+  mediaIv   String?   @map("media_iv") @db.Text
+  wrappedKey String?  @map("wrapped_key") @db.Text
   fileSize  BigInt?   @map("file_size")
   capturedAt DateTime @default(now()) @map("captured_at") @db.Timestamptz
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz

@@ -1,6 +1,8 @@
 import { WASocket } from '@whiskeysockets/baileys';
 import prisma from '../config/database';
 import { logger } from '../config/logger';
+import { checkDeletedMessagesQuota, incrementDeletedMessages } from './quota.service';
+import { processAndUploadMedia, getMediaType } from './media.service';
 
 // Store messages temporarily to detect deletions
 // Cache limité à 1000 messages (en mémoire)
@@ -16,6 +18,13 @@ const messageStore = new Map<string, {
   sentAt: Date;
   message: any;
 }>();
+
+const VALID_MEDIA_TYPES = ['text', 'image', 'video', 'audio', 'document', 'sticker'] as const;
+
+const mapMediaType = (mediaType?: string): any => {
+  if (!mediaType) return null;
+  return (VALID_MEDIA_TYPES as readonly string[]).includes(mediaType) ? mediaType : null;
+};
 
 /**
  * Clean up old messages from cache if it exceeds MAX_CACHE_SIZE
@@ -41,23 +50,253 @@ const cleanupCache = (): void => {
 /**
  * Store incoming message for deletion detection
  */
-export const storeMessage = (_userId: string, _message: any): void => {
-  // ⚠️ DÉSACTIVÉ POUR LE DÉPLOIEMENT
-  // La fonctionnalité de récupération des messages supprimés est désactivée.
-  return;
+export const storeMessage = (userId: string, message: any): void => {
+  try {
+    const messageId = message.key?.id;
+    const senderId = message.key?.remoteJid;
+
+    if (!messageId || !senderId || senderId === 'status@broadcast') {
+      return;
+    }
+
+    // Ignore messages from self
+    if (message.key?.fromMe) {
+      logger.info(`[DeletedMessages] ℹ️ Skipping message: from self (not storing own messages)`);
+      return;
+    }
+
+    const senderName = message.pushName || senderId || 'Unknown';
+    const sentAt = new Date(message.messageTimestamp * 1000 || Date.now());
+
+    // Extract content
+    let content = '';
+    let mediaUrl = '';
+    let mediaType: string | undefined;
+
+    if (message.message?.conversation) {
+      content = message.message.conversation;
+    } else if (message.message?.extendedTextMessage?.text) {
+      content = message.message.extendedTextMessage.text;
+    } else if (message.message?.imageMessage) {
+      mediaType = 'image';
+      content = message.message.imageMessage.caption || '';
+    } else if (message.message?.videoMessage) {
+      mediaType = 'video';
+      content = message.message.videoMessage.caption || '';
+    } else if (message.message?.audioMessage) {
+      mediaType = 'audio';
+      content = message.message.audioMessage.ptt ? 'Message vocal' : 'Audio';
+    } else if (message.message?.stickerMessage) {
+      mediaType = 'sticker';
+      content = 'Sticker';
+    } else if (message.message?.documentMessage) {
+      mediaType = 'document';
+      content = message.message.documentMessage.fileName || 'Document';
+    } else if (message.message?.locationMessage) {
+      mediaType = 'location';
+      content = `📍 Localisation: ${message.message.locationMessage.degreesLatitude}, ${message.message.locationMessage.degreesLongitude}`;
+    } else if (message.message?.contactMessage) {
+      mediaType = 'contact';
+      content = `👤 Contact: ${message.message.contactMessage.displayName || 'Contact'}`;
+    } else {
+      const mediaInfo = getMediaType(message);
+      if (mediaInfo.type) {
+        mediaType = mediaInfo.type;
+      }
+    }
+
+    const storeKey = `${userId}:${senderId}:${messageId}`;
+
+    messageStore.set(storeKey, {
+      userId,
+      messageId,
+      senderId,
+      senderName,
+      content,
+      mediaUrl,
+      mediaType,
+      sentAt,
+      message,
+    });
+
+    cleanupCache();
+
+    setTimeout(() => {
+      messageStore.delete(storeKey);
+    }, 24 * 60 * 60 * 1000);
+
+    logger.debug(`[DeletedMessages] ✅ Message stored in cache: ${storeKey} (total: ${messageStore.size})`);
+  } catch (error) {
+    logger.error('[DeletedMessages] Error storing message:', error);
+  }
 };
 
 /**
  * Handle message deletion - detect and save deleted messages
  */
 export const handleMessageDeletion = async (
-  _userId: string,
-  _socket: WASocket,
-  _deletion: any
+  userId: string,
+  socket: WASocket,
+  deletion: any
 ): Promise<void> => {
-  // ⚠️ DÉSACTIVÉ POUR LE DÉPLOIEMENT
-  // La fonctionnalité de récupération des messages supprimés est désactivée.
-  return;
+  try {
+    logger.info(`[DeletedMessages] 🔍 Deletion event received for user ${userId}:`, {
+      hasKeys: !!deletion?.keys,
+      keysCount: deletion?.keys?.length || 0,
+      deletionType: deletion?.type,
+    });
+
+    if (!deletion || !deletion.keys || deletion.keys.length === 0) {
+      logger.warn(`[DeletedMessages] ⚠️ No keys in deletion event for user ${userId}`);
+      return;
+    }
+
+    for (const key of deletion.keys) {
+      const messageId = key.id;
+      let senderId = key.remoteJid || key.participant;
+
+      if (!messageId) {
+        continue;
+      }
+
+      if (!senderId || senderId === 'status@broadcast') {
+        continue;
+      }
+
+      // ⚠️ IMPORTANT: Ne capturer que les messages supprimés par l'EXPÉDITEUR
+      if (key.fromMe === true) {
+        logger.info(`[DeletedMessages] ℹ️ Skipping deletion: user deleted their own message (not capturing)`);
+        continue;
+      }
+
+      const storeKey1 = `${userId}:${senderId}:${messageId}`;
+      const storeKey2 = senderId.includes('@') ? `${userId}:${senderId}:${messageId}` : `${userId}:${senderId}@s.whatsapp.net:${messageId}`;
+
+      let storedMessage = messageStore.get(storeKey1);
+      if (!storedMessage) {
+        storedMessage = messageStore.get(storeKey2);
+      }
+
+      if (storedMessage) {
+        const messageAge = Date.now() - storedMessage.sentAt.getTime();
+        const maxAge = 60 * 60 * 1000; // 1 heure maximum (plus permissif)
+
+        if (messageAge > maxAge) {
+          logger.warn(`[DeletedMessages] ⚠️ Message too old in cache (${Math.floor(messageAge / 1000)}s), might be false positive - NOT capturing`);
+          continue;
+        }
+      }
+
+      const foundStoreKey = storedMessage ? (messageStore.has(storeKey1) ? storeKey1 : storeKey2) : storeKey1;
+
+      if (!storedMessage) {
+        logger.warn(`[DeletedMessages] ⚠️ Message not found in cache - NOT treating as deletion:`, {
+          triedKeys: [storeKey1, storeKey2],
+          messageId,
+          senderId,
+          reason: 'Message must be in cache to be considered deleted',
+        });
+        continue;
+      }
+
+      logger.info(`[DeletedMessages] ✅ Found message in cache: ${foundStoreKey}`);
+
+      // Check quota before saving
+      try {
+        await checkDeletedMessagesQuota(userId);
+      } catch (error: any) {
+        if (error.message?.includes('quota exceeded')) {
+          logger.warn(`[DeletedMessages] Quota exceeded for user ${userId}, skipping capture`);
+          messageStore.delete(storeKey1);
+          messageStore.delete(storeKey2);
+          continue;
+        }
+        throw error;
+      }
+
+      const deletedAt = new Date();
+      const delaySeconds = Math.floor((deletedAt.getTime() - storedMessage.sentAt.getTime()) / 1000);
+
+      // If message has media, try to upload it before saving
+      let finalMediaUrl = storedMessage.mediaUrl;
+      if (storedMessage.mediaType && storedMessage.message) {
+        try {
+          const uploadedUrl = await processAndUploadMedia(socket, storedMessage.message, userId, 'deleted-messages');
+          if (uploadedUrl) {
+            finalMediaUrl = uploadedUrl;
+            logger.info(`[DeletedMessages] Media uploaded for deleted message ${messageId}`);
+          }
+        } catch (error) {
+          logger.warn(`[DeletedMessages] Failed to upload media for deleted message ${messageId}:`, error);
+        }
+      }
+
+      // Save to database
+      await prisma.deletedMessage.create({
+        data: {
+          userId,
+          senderId: storedMessage.senderId,
+          senderName: storedMessage.senderName,
+          messageId,
+          content: storedMessage.content,
+          mediaUrl: finalMediaUrl || null,
+          mediaType: mapMediaType(storedMessage.mediaType),
+          sentAt: storedMessage.sentAt,
+          deletedAt,
+          delaySeconds,
+        },
+      });
+
+      logger.info(`[DeletedMessages] ✅ Captured deleted message from ${storedMessage.senderName} for user ${userId} (delay: ${delaySeconds}s):`, {
+        messageId,
+        content: storedMessage.content?.substring(0, 100),
+        mediaType: storedMessage.mediaType,
+        mediaUrl: finalMediaUrl,
+      });
+
+      // 💾 Forcer un flush de la base de données
+      // Prisma traite automatiquement par transaction
+
+      // Increment quota
+      await incrementDeletedMessages(userId);
+
+      // Remove from store
+      messageStore.delete(storeKey1);
+      messageStore.delete(storeKey2);
+
+      // 📬 Notification utilisateur - Envoyer le message supprimé via WhatsApp
+      try {
+        await notifyUserAboutDeletedMessage(userId, socket, storedMessage, delaySeconds);
+      } catch (error) {
+        logger.warn(`[DeletedMessages] Failed to notify user about deleted message:`, error);
+      }
+
+      // Envoyer une notification push
+      try {
+        const { sendPushNotification } = await import('./notifications.service');
+        await sendPushNotification(userId, {
+          title: 'Message supprimé récupéré',
+          body: `Message de ${storedMessage.senderName} récupéré`,
+          image: finalMediaUrl || undefined,
+          data: {
+            type: 'deleted_message',
+            senderId: storedMessage.senderId,
+            senderName: storedMessage.senderName,
+            messageId,
+            delaySeconds: delaySeconds.toString(),
+          },
+        });
+      } catch (notifError) {
+        logger.warn('[DeletedMessages] Failed to send push notification:', notifError);
+      }
+    }
+  } catch (error: any) {
+    if (error.message?.includes('quota exceeded')) {
+      logger.warn(`[DeletedMessages] Quota exceeded for user ${userId}`);
+      return;
+    }
+    logger.error('[DeletedMessages] Error handling message deletion:', error);
+  }
 };
 
 /**

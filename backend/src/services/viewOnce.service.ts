@@ -598,10 +598,41 @@ export const captureViewOnceFromQuoted = async (
 
     logger.info(`[ViewOnce] ✅ Download successful: ${downloadResult.buffer.length} bytes`);
 
-    // 5. Upload vers Supabase Storage
-    const { uploadMedia } = await import('./media.service');
-    const mimeType = viewOnceData.type === 'video' ? 'video/mp4' : (viewOnceData.type === 'audio' ? 'audio/mp3' : 'image/jpeg');
-    const mediaUrl = await uploadMedia(downloadResult.buffer, downloadResult.filename!, mimeType, 'view-once', userId);
+    // 5. Chiffrement E2E : le média est chiffré avec la clé publique RSA de l'utilisateur.
+    //    La clé privée reste UNIQUEMENT sur le téléphone, le serveur ne peut pas déchiffrer.
+    //    WebCrypto attend ciphertext || authTag (16 octets) concaténés → format pris en charge.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { publicKey: true },
+    });
+
+    let mediaUrl: string;
+    let encrypted = false;
+    let mediaIv: string | null = null;
+    let wrappedKey: string | null = null;
+
+    if (user?.publicKey) {
+      const { encryptMedia } = await import('./encryption.service');
+      const encryptedMedia = encryptMedia(downloadResult.buffer, user.publicKey);
+      encrypted = true;
+      mediaIv = encryptedMedia.iv;
+      wrappedKey = encryptedMedia.wrappedKey;
+
+      // Stocker le ciphertext sur le stockage local (jamais le contenu en clair)
+      const { storageService } = await import('./storage.service');
+      const storageResult = await storageService.upload(
+        encryptedMedia.ciphertext,
+        'view-once',
+        `${downloadResult.filename}.enc`
+      );
+      mediaUrl = storageResult.url;
+
+      logger.info(`[ViewOnce] 🔐 View Once chiffré E2E pour l'utilisateur ${userId} (${encryptedMedia.ciphertext.length} bytes)`);
+    } else {
+      // Aucune clé publique enregistrée : on ne stocke PAS le média (confidentialité)
+      mediaUrl = 'viewonce:none';
+      logger.warn(`[ViewOnce] ⚠️ Aucune clé publique enregistrée pour l'utilisateur ${userId}, média non stocké`);
+    }
 
     // 6. Sauvegarder en base de données
     const fileSize = downloadResult.buffer.length;
@@ -613,6 +644,9 @@ export const captureViewOnceFromQuoted = async (
         senderName,
         mediaUrl,
         mediaType: viewOnceData.type,
+        encrypted,
+        mediaIv,
+        wrappedKey,
         fileSize: BigInt(fileSize),
       },
     });
@@ -638,12 +672,14 @@ export const captureViewOnceFromQuoted = async (
     logger.info(`[ViewOnce] ✅ View Once captured successfully: ${capture.id}`);
 
     // 9. Envoyer une notification push
+    //    Note: Les médias chiffrés E2E ne sont pas envoyés dans la notification
+    //    (le serveur ne peut pas fournir une aperçu déchiffrable).
     try {
       const { sendPushNotification } = await import('./notifications.service');
       await sendPushNotification(userId, {
         title: 'View Once capturé',
         body: `Nouveau View Once de ${senderName}`,
-        image: mediaUrl || undefined,
+        image: encrypted ? undefined : (mediaUrl || undefined),
         data: {
           type: 'view_once',
           id: capture.id,

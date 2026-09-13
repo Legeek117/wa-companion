@@ -7,8 +7,9 @@ export interface ViewOnceCapture {
   id: string;
   sender_id: string;
   sender_name: string;
-  media_url: string;
-  media_type: 'image' | 'video';
+  media_url?: string;
+  media_type: 'image' | 'video' | 'audio';
+  encrypted?: boolean;
   captured_at: string;
   created_at: string;
 }

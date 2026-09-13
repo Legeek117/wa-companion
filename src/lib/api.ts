@@ -197,6 +197,48 @@ class ApiClient {
   async delete<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
+
+  /**
+   * Fetch a binary resource (e.g. encrypted view-once media) with authentication.
+   * Returns an ArrayBuffer plus response headers (for E2E decryption metadata).
+   */
+  async fetchArrayBuffer(
+    endpoint: string
+  ): Promise<{ data?: ArrayBuffer; headers: Headers; error?: ApiResponse['error'] }> {
+    const url = `${this.baseURL}${endpoint}`;
+    const token = this.getToken();
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        let message = 'An error occurred';
+        try {
+          const payload = await response.json();
+          message = payload.error?.message || payload.message || message;
+        } catch {
+          /* ignore */
+        }
+        return {
+          error: { message, statusCode: response.status },
+          headers: response.headers,
+        };
+      }
+
+      const data = await response.arrayBuffer();
+      return { data, headers: response.headers };
+    } catch (error: any) {
+      return {
+        error: { message: error?.message || 'Network error', statusCode: 0 },
+        headers: new Headers(),
+      };
+    }
+  }
 }
 
 // Export singleton instance
@@ -247,6 +289,13 @@ export const api = {
     getCommandConfig: () => apiClient.get('/api/view-once/command-config'),
     updateCommandConfig: (config: { command_text?: string; command_emoji?: string | null; enabled?: boolean }) =>
       apiClient.put('/api/view-once/command-config', config),
+    mediaArrayBuffer: (id: string) => apiClient.fetchArrayBuffer(`/api/view-once/${id}/media`),
+  },
+
+  // E2E (clé publique de déchiffrement des vues uniques)
+  e2e: {
+    keyStatus: () => apiClient.get('/api/e2e/key'),
+    registerKey: (publicKey: string) => apiClient.put('/api/e2e/key', { publicKey }),
   },
 
   // Deleted Messages

@@ -21,9 +21,24 @@ export const listDeletedMessages = async (req: AuthRequest, res: Response): Prom
     const limit = parseInt(req.query.limit as string) || 50;
     const messages = await deletedMessagesService.getDeletedMessages(userId, limit);
 
+    // Format snake_case (compatible frontend, voir DeletedMessages.tsx)
+    const data = messages.map((m) => ({
+      id: m.id,
+      sender_id: m.senderId,
+      sender_name: m.senderName,
+      message_id: m.messageId,
+      media_url: m.mediaUrl,
+      media_type: m.mediaType,
+      content: m.content,
+      sent_at: m.sentAt,
+      deleted_at: m.deletedAt,
+      delay_seconds: m.delaySeconds,
+      created_at: m.createdAt,
+    }));
+
     res.json({
       success: true,
-      data: messages,
+      data,
     });
   } catch (error) {
     logger.error('[DeletedMessages] Error getting messages:', error);
@@ -52,9 +67,29 @@ export const getDeletedMessageById = async (req: AuthRequest, res: Response): Pr
     const messageId = req.params.id;
     const message = await deletedMessagesService.getDeletedMessage(userId, messageId);
 
+    if (!message) {
+      res.status(404).json({
+        success: false,
+        error: { message: 'Deleted message not found', statusCode: 404 },
+      });
+      return;
+    }
+
     res.json({
       success: true,
-      data: message,
+      data: {
+        id: message.id,
+        sender_id: message.senderId,
+        sender_name: message.senderName,
+        message_id: message.messageId,
+        media_url: message.mediaUrl,
+        media_type: message.mediaType,
+        content: message.content,
+        sent_at: message.sentAt,
+        deleted_at: message.deletedAt,
+        delay_seconds: message.delaySeconds,
+        created_at: message.createdAt,
+      },
     });
   } catch (error) {
     logger.error('[DeletedMessages] Error getting message:', error);

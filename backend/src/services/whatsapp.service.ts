@@ -3,7 +3,6 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import { join } from 'path';
@@ -29,7 +28,6 @@ import { storeMessage, handleMessageDeletion } from './deletedMessages.service';
 import { handleIncomingMessage } from './autoresponder.service';
 import { upsertMessage, upsertContact } from './message.service';
 import { isGlobalMessageCaptureEnabled, isGlobalContactCaptureEnabled } from './adminSettings.service';
-import { storageService } from './storage.service';
 
 /**
  * Create a filtered logger for Baileys that suppresses non-critical decryption errors
@@ -109,6 +107,7 @@ const statusCache = new Map<string, Array<{
   timestamp: number;
   type: 'image' | 'video' | 'text';
   url?: string;
+  text?: string;
   caption?: string;
 }>>();
 
@@ -3356,66 +3355,19 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
     }
 
     // Determine status type and content
+    // Note: les médias des statuts ne sont JAMAIS stockés (confidentialité)
     let type: 'image' | 'video' | 'text' = 'text';
-    let url: string | undefined;
     let caption: string | undefined;
+    let text: string | undefined;
 
     if (message.message?.imageMessage) {
       type = 'image';
       caption = message.message.imageMessage.caption;
-      
-      // Try to download and store media
-      try {
-        const buffer = await downloadMediaMessage(
-          message,
-          'buffer',
-          {},
-          {
-            logger,
-            reuploadRequest: socket.updateMediaMessage,
-          }
-        );
-
-        if (buffer && Buffer.isBuffer(buffer)) {
-          // Store media locally (volume Docker /app/uploads)
-          const result = await storageService.upload(buffer, `statuses/${userId}`, `${statusId}.jpg`);
-          if (result?.url) {
-            url = result.url;
-          }
-        }
-      } catch (mediaError) {
-        logger.warn(`[WhatsApp] Could not download status image for user ${userId}:`, mediaError);
-        // Use direct URL if available
-        url = message.message.imageMessage.url || message.message.imageMessage.directPath;
-      }
+      text = message.message.imageMessage.caption;
     } else if (message.message?.videoMessage) {
       type = 'video';
       caption = message.message.videoMessage.caption;
-      
-      // Try to download and store media
-      try {
-        const buffer = await downloadMediaMessage(
-          message,
-          'buffer',
-          {},
-          {
-            logger,
-            reuploadRequest: socket.updateMediaMessage,
-          }
-        );
-
-        if (buffer && Buffer.isBuffer(buffer)) {
-          // Store media locally (volume Docker /app/uploads)
-          const result = await storageService.upload(buffer, `statuses/${userId}`, `${statusId}.mp4`);
-          if (result?.url) {
-            url = result.url;
-          }
-        }
-      } catch (mediaError) {
-        logger.warn(`[WhatsApp] Could not download status video for user ${userId}:`, mediaError);
-        // Use direct URL if available
-        url = message.message.videoMessage.url || message.message.videoMessage.directPath;
-      }
+      text = message.message.videoMessage.caption;
     } else if (message.message?.extendedTextMessage) {
       type = 'text';
       caption = message.message.extendedTextMessage.text;
@@ -3440,7 +3392,7 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
         contactName,
         timestamp,
         type,
-        url,
+        text,
         caption,
       };
 
@@ -4441,6 +4393,7 @@ export const getContactStatuses = async (userId: string, contactId: string): Pro
       id: string;
       timestamp: number;
       caption?: string;
+      text?: string;
       type: 'image' | 'video' | 'text';
       url?: string;
     }> = [];
@@ -4455,7 +4408,8 @@ export const getContactStatuses = async (userId: string, contactId: string): Pro
         timestamp: s.timestamp,
         caption: s.caption,
         type: s.type,
-        url: s.url,
+        text: s.text,
+        url: undefined,
       }));
       logger.info(`[WhatsApp] Using ${statuses.length} cached statuses for contact ${decodedContactId}`);
     } else {

@@ -6,12 +6,15 @@ import { PlanBadge } from "@/components/PlanBadge";
 import { QuotaCounter } from "@/components/QuotaCounter";
 import { Pagination } from "@/components/ui/pagination";
 import { MediaViewer } from "@/components/ui/media-viewer";
-import { Download, Eye, Image, Crown, Trash2 } from "lucide-react";
+import { Download, Eye, Image, Crown, Trash2, Lock } from "lucide-react";
 import { useViewOnce } from "@/hooks/useViewOnce";
+import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "@/components/Loading";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api, ApiResponse } from "@/lib/api";
+import { ensureE2EKeys, fetchAndDecryptViewOnce } from "@/lib/e2eCrypto";
+import logger from "@/lib/logger";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -41,6 +44,8 @@ const buildMediaUrl = (mediaUrl: string | null): string | null => {
 
 const ViewOnce = () => {
   const { captures, isLoading, quota, isPremium } = useViewOnce();
+  const { user } = useAuth();
+  const userId = user?.id;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
@@ -57,12 +62,34 @@ const ViewOnce = () => {
   const endIndex = startIndex + itemsPerPage;
   const paginatedCaptures = captures.slice(startIndex, endIndex);
 
-  const handleViewMedia = (capture: any) => {
+  const handleViewMedia = async (capture: any) => {
     // Determine media type for viewer
     const viewerType: 'image' | 'video' = 
       ['image', 'sticker'].includes(capture.media_type) ? 'image' : 
       capture.media_type === 'video' ? 'video' : 'image';
-    
+
+    // Captures chiffrées E2E : télécharger + déchiffrer localement
+    if (capture.encrypted) {
+      try {
+        toast.loading('Déchiffrement en cours...');
+        const decrypted = await fetchAndDecryptViewOnce(userId, capture.id, capture.media_type);
+        toast.dismiss();
+        if (!decrypted) {
+          toast.error('Impossible de déchiffrer (clé privée absente)');
+          return;
+        }
+        setSelectedMedia({
+          url: decrypted.objectUrl,
+          type: viewerType,
+          title: `${capture.sender_name} - ${new Date(capture.captured_at).toLocaleString('fr-FR')}`,
+        });
+      } catch (error: any) {
+        toast.dismiss();
+        toast.error('Erreur de déchiffrement : ' + (error?.message || 'inconnue'));
+      }
+      return;
+    }
+
     const fullMediaUrl = buildMediaUrl(capture.media_url);
     if (!fullMediaUrl) {
       toast.error('URL du média invalide');
@@ -76,14 +103,35 @@ const ViewOnce = () => {
     });
   };
 
-  const handleDownload = async (captureId: string) => {
+  const handleDownload = async (capture: any) => {
+    // Captures chiffrées E2E : déchiffrer puis télécharger
+    if (capture.encrypted) {
+      try {
+        toast.loading('Déchiffrement en cours...');
+        const decrypted = await fetchAndDecryptViewOnce(userId, capture.id, capture.media_type);
+        toast.dismiss();
+        if (!decrypted) {
+          toast.error('Impossible de déchiffrer (clé privée absente)');
+          return;
+        }
+        const link = document.createElement('a');
+        link.href = decrypted.objectUrl;
+        link.download = `view-once-${capture.id}`;
+        link.click();
+        toast.success('Téléchargement démarré');
+      } catch (error: any) {
+        toast.dismiss();
+        toast.error('Erreur de déchiffrement : ' + (error?.message || 'inconnue'));
+      }
+      return;
+    }
+
     try {
-      const response = await api.viewOnce.download(captureId) as ApiResponse<{ mediaUrl: string }>;
+      const response = await api.viewOnce.download(capture.id) as ApiResponse<{ mediaUrl: string }>;
       if (response.success && response.data?.mediaUrl) {
-        // Create a temporary link to download
         const link = document.createElement('a');
         link.href = response.data.mediaUrl;
-        link.download = `view-once-${captureId}`;
+        link.download = `view-once-${capture.id}`;
         link.click();
         toast.success('Téléchargement démarré');
       } else {
@@ -93,6 +141,21 @@ const ViewOnce = () => {
       toast.error('Erreur lors du téléchargement');
     }
   };
+
+  // Assurer les clés E2E au chargement de la page
+  // (la clé privée reste sur le téléphone ; seule la clé publique est enregistrée sur le serveur)
+  useEffect(() => {
+    const initE2E = async () => {
+      try {
+        if (userId) {
+          await ensureE2EKeys(userId);
+        }
+      } catch (error) {
+        logger.error('E2E init failed:', error);
+      }
+    };
+    initE2E();
+  }, [userId]);
 
   const handleDelete = async (captureId: string) => {
     try {
@@ -173,7 +236,12 @@ const ViewOnce = () => {
                 <Card key={capture.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <CardContent className="p-0">
                     <div className="aspect-square bg-muted flex items-center justify-center relative">
-                      {capture.media_url && capture.media_type === 'image' ? (
+                      {capture.encrypted ? (
+                        <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                          <Lock className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground" />
+                          <span className="text-xs">Chiffré E2E</span>
+                        </div>
+                      ) : capture.media_url && capture.media_type === 'image' ? (
                         <img 
                           src={buildMediaUrl(capture.media_url) || ''} 
                           alt={capture.media_type}
@@ -219,7 +287,7 @@ const ViewOnce = () => {
                           size="sm" 
                           variant="outline" 
                           className="flex-1 text-xs ios-scale"
-                          onClick={() => handleDownload(capture.id)}
+                          onClick={() => handleDownload(capture)}
                         >
                           <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                           <span className="hidden sm:inline">Télécharger</span>
