@@ -13,7 +13,7 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Installer TOUTES les dépendances (y compris devDependencies pour le build)
-RUN npm ci
+RUN npm install
 
 # Copier les sources
 COPY src ./src
