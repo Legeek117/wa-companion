@@ -34,8 +34,9 @@ export const listViewOnceCaptures = async (req: AuthRequest, res: Response): Pro
       media_url: c.encrypted ? undefined : c.mediaUrl,
       captured_at: c.capturedAt,
       created_at: c.createdAt,
-      file_size: c.fileSize,
+      file_size: c.fileSize ? c.fileSize.toString() : null,
       encrypted: c.encrypted,
+      mediaType: c.mediaType,
     }));
 
     res.json({
@@ -81,7 +82,7 @@ export const getViewOnceCaptureById = async (req: AuthRequest, res: Response): P
         media_type: capture.mediaType,
         captured_at: capture.capturedAt,
         created_at: capture.createdAt,
-        file_size: capture.fileSize,
+        file_size: capture.fileSize ? capture.fileSize.toString() : null,
         encrypted: capture.encrypted,
         media_url: capture.encrypted ? undefined : capture.mediaUrl,
       },
