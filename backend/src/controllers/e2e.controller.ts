@@ -84,6 +84,9 @@ export const getPublicKeyStatus = async (req: AuthRequest, res: Response): Promi
       success: true,
       data: {
         hasPublicKey: !!user?.publicKey,
+        // Renvoyée pour permettre au client de détecter un mismatch
+        // (clé privée régénérée après purge du localStorage) et de la ré-enregistrer.
+        publicKey: user?.publicKey || null,
       },
     });
   } catch (error) {

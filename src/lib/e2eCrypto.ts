@@ -109,11 +109,14 @@ export const ensureE2EKeys = async (userId: string): Promise<{ hasPublicKey: boo
     }
 
     const response = await api.e2e.keyStatus();
-    const hasPublicKey = response.success && response.data?.hasPublicKey === true;
+    const serverPublicKey = response.success ? response.data?.publicKey : null;
+    const hasPublicKey = response.success === true && response.data?.hasPublicKey === true;
 
-    if (!hasPublicKey) {
+    // Ré-enregistrer si la clé publique serveur ne correspond pas à celle stockée localement
+    // (ceci couvre le cas où la clé privée a été régénérée après purge du localStorage).
+    if (!hasPublicKey || !serverPublicKey || serverPublicKey !== publicSpki) {
       await api.e2e.registerKey(publicSpki);
-      logger.info('[E2E] 🔐 Public key registered on server');
+      logger.info('[E2E] 🔐 Public key registered/updated on server');
     }
 
     return { hasPublicKey: true };
