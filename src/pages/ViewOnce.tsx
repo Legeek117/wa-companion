@@ -15,6 +15,7 @@ import { useState, useEffect } from "react";
 import { api, ApiResponse } from "@/lib/api";
 import { ensureE2EKeys, fetchAndDecryptViewOnce } from "@/lib/e2eCrypto";
 import { E2ERestoreDialog } from "@/components/E2ERestoreDialog";
+import { saveFileToDownloads } from "@/lib/download";
 import logger from "@/lib/logger";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -116,11 +117,19 @@ const ViewOnce = () => {
           toast.error('Impossible de déchiffrer (clé privée absente)');
           return;
         }
-        const link = document.createElement('a');
-        link.href = decrypted.objectUrl;
-        link.download = `view-once-${capture.id}`;
-        link.click();
-        toast.success('Téléchargement démarré');
+
+        // saveFileToDownloads gère la sauvegarde native (Downloads) sur l'APK,
+        // avec fallback navigateur pour la version PWA/web.
+        const ok = await saveFileToDownloads(
+          decrypted.blob,
+          `view-once-${capture.id}`,
+          decrypted.mimeType
+        );
+        if (ok) {
+          toast.success('Fichier enregistré (Téléchargements)');
+        } else {
+          toast.error("Impossible d'enregistrer le fichier");
+        }
       } catch (error: any) {
         toast.dismiss();
         toast.error('Erreur de déchiffrement : ' + (error?.message || 'inconnue'));
@@ -131,11 +140,24 @@ const ViewOnce = () => {
     try {
       const response = await api.viewOnce.download(capture.id) as ApiResponse<{ mediaUrl: string }>;
       if (response.success && response.data?.mediaUrl) {
-        const link = document.createElement('a');
-        link.href = response.data.mediaUrl;
-        link.download = `view-once-${capture.id}`;
-        link.click();
-        toast.success('Téléchargement démarré');
+        const fullUrl = buildMediaUrl(response.data.mediaUrl);
+        if (!fullUrl) {
+          toast.error('URL du média invalide');
+          return;
+        }
+
+        // Récupère le binaire puis l'enregistre via le chemin natif (APK) ou navigateur (web/PWA)
+        const resp = await fetch(fullUrl);
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        const blob = await resp.blob();
+        const ok = await saveFileToDownloads(blob, `view-once-${capture.id}`, blob.type);
+        if (ok) {
+          toast.success('Fichier enregistré (Téléchargements)');
+        } else {
+          toast.error("Impossible d'enregistrer le fichier");
+        }
       } else {
         toast.error('Impossible de télécharger le média');
       }
@@ -353,12 +375,25 @@ const ViewOnce = () => {
           mediaType={selectedMedia.type}
           isOpen={!!selectedMedia}
           onClose={() => setSelectedMedia(null)}
-          onDownload={() => {
-            const link = document.createElement('a');
-            link.href = selectedMedia.url;
-            link.download = `view-once-${Date.now()}`;
-            link.click();
-            toast.success('Téléchargement démarré');
+          onDownload={async () => {
+            // E2E: selectedMedia.url est un blob URL après déchiffrement.
+            // Sur l'APK, il faut convertir en Blob puis écrire dans Downloads.
+            try {
+              const res = await fetch(selectedMedia.url);
+              const blob = await res.blob();
+              const ok = await saveFileToDownloads(
+                blob,
+                `view-once-${Date.now()}`,
+                blob.type
+              );
+              if (ok) {
+                toast.success('Fichier enregistré (Téléchargements)');
+              } else {
+                toast.error("Impossible d'enregistrer le fichier");
+              }
+            } catch {
+              toast.error('Erreur lors du téléchargement');
+            }
           }}
           title={selectedMedia.title}
         />
