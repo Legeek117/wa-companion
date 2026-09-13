@@ -99,6 +99,150 @@ export const getPublicKeyStatus = async (req: AuthRequest, res: Response): Promi
 };
 
 /**
+ * Save an encrypted backup of the device private key, protected by a user passphrase.
+ * The server stores the ciphertext, salt and IV — but never the passphrase nor the plaintext key.
+ * PUT /api/e2e/key-backup
+ * Body: { encryptedKey: string, salt: string, iv: string }
+ */
+export const saveKeyBackup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Unauthorized', statusCode: 401 },
+      });
+      return;
+    }
+
+    const { encryptedKey, salt, iv } = req.body;
+
+    if (
+      !encryptedKey || typeof encryptedKey !== 'string' ||
+      !salt || typeof salt !== 'string' ||
+      !iv || typeof iv !== 'string'
+    ) {
+      res.status(400).json({
+        success: false,
+        error: { message: 'encryptedKey, salt and iv (base64 strings) are required', statusCode: 400 },
+      });
+      return;
+    }
+
+    // Basic sanity check on base64 content
+    const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+    if (!base64Regex.test(encryptedKey.trim()) || !base64Regex.test(salt.trim()) || !base64Regex.test(iv.trim())) {
+      res.status(400).json({
+        success: false,
+        error: { message: 'encryptedKey, salt and iv must be base64 strings', statusCode: 400 },
+      });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        e2eKeyEncrypted: encryptedKey.trim(),
+        e2eKeySalt: salt.trim(),
+        e2eKeyIv: iv.trim(),
+      },
+    });
+
+    logger.info(`[E2E] 🔐 Private key backup saved for user ${userId}`);
+
+    res.json({
+      success: true,
+      data: { message: 'Private key backup saved' },
+    });
+  } catch (error) {
+    logger.error('[E2E] Error saving key backup:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error', statusCode: 500 },
+    });
+  }
+};
+
+/**
+ * Get the encrypted private key backup (ciphertext + salt + IV).
+ * GET /api/e2e/key-backup
+ */
+export const getKeyBackup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Unauthorized', statusCode: 401 },
+      });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { e2eKeyEncrypted: true, e2eKeySalt: true, e2eKeyIv: true },
+    });
+
+    const hasBackup = !!(user?.e2eKeyEncrypted && user?.e2eKeySalt && user?.e2eKeyIv);
+
+    res.json({
+      success: true,
+      data: {
+        hasBackup,
+        encryptedKey: hasBackup ? user?.e2eKeyEncrypted : null,
+        salt: hasBackup ? user?.e2eKeySalt : null,
+        iv: hasBackup ? user?.e2eKeyIv : null,
+      },
+    });
+  } catch (error) {
+    logger.error('[E2E] Error getting key backup:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error', statusCode: 500 },
+    });
+  }
+};
+
+/**
+ * Delete the encrypted private key backup.
+ * DELETE /api/e2e/key-backup
+ */
+export const deleteKeyBackup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Unauthorized', statusCode: 401 },
+      });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        e2eKeyEncrypted: null,
+        e2eKeySalt: null,
+        e2eKeyIv: null,
+      },
+    });
+
+    logger.info(`[E2E] 🗑️ Private key backup deleted for user ${userId}`);
+
+    res.json({
+      success: true,
+      data: { message: 'Private key backup deleted' },
+    });
+  } catch (error) {
+    logger.error('[E2E] Error deleting key backup:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error', statusCode: 500 },
+    });
+  }
+};
+
+/**
  * Stream encrypted view-once media with decryption metadata.
  * GET /api/view-once/:id/media
  *

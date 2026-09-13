@@ -296,6 +296,10 @@ export const api = {
   e2e: {
     keyStatus: () => apiClient.get('/api/e2e/key'),
     registerKey: (publicKey: string) => apiClient.put('/api/e2e/key', { publicKey }),
+    getKeyBackup: () => apiClient.get('/api/e2e/key-backup'),
+    saveKeyBackup: (data: { encryptedKey: string; salt: string; iv: string }) =>
+      apiClient.put('/api/e2e/key-backup', data),
+    deleteKeyBackup: () => apiClient.delete('/api/e2e/key-backup'),
   },
 
   // Deleted Messages

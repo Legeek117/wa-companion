@@ -14,6 +14,7 @@ import { Loading } from "@/components/Loading";
 import { useState, useEffect } from "react";
 import { api, ApiResponse } from "@/lib/api";
 import { ensureE2EKeys, fetchAndDecryptViewOnce } from "@/lib/e2eCrypto";
+import { E2ERestoreDialog } from "@/components/E2ERestoreDialog";
 import logger from "@/lib/logger";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -51,6 +52,7 @@ const ViewOnce = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; title: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [needsRestore, setNeedsRestore] = useState(false);
   
   const capturedCount = quota?.used || 0;
   const maxCaptures = quota?.limit || 3;
@@ -148,7 +150,8 @@ const ViewOnce = () => {
     const initE2E = async () => {
       try {
         if (userId) {
-          await ensureE2EKeys(userId);
+          const result = await ensureE2EKeys(userId);
+          setNeedsRestore(result.needsRestore === true);
         }
       } catch (error) {
         logger.error('E2E init failed:', error);
@@ -358,6 +361,23 @@ const ViewOnce = () => {
             toast.success('Téléchargement démarré');
           }}
           title={selectedMedia.title}
+        />
+      )}
+
+      {userId && (
+        <E2ERestoreDialog
+          open={needsRestore}
+          onOpenChange={(open) => {
+            setNeedsRestore(open);
+            if (!open) {
+              toast.info('Vous pourrez restaurer votre clé à tout moment depuis cette page.');
+            }
+          }}
+          userId={userId}
+          onRestored={() => {
+            setNeedsRestore(false);
+            toast.success('Vous pouvez maintenant déchiffrer vos captures !');
+          }}
         />
       )}
     </div>

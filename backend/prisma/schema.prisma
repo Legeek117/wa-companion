@@ -92,6 +92,9 @@ model User {
   subscriptionId String?  @map("subscription_id") @db.VarChar(255)
   logMessages Boolean  @default(false) @map("log_messages")
   publicKey  String?   @map("public_key") @db.Text
+  e2eKeyEncrypted String? @map("e2e_key_encrypted") @db.Text
+  e2eKeySalt String? @map("e2e_key_salt") @db.Text
+  e2eKeyIv String? @map("e2e_key_iv") @db.Text
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

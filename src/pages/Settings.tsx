@@ -6,12 +6,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlanBadge } from "@/components/PlanBadge";
-import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield, Eye, Phone } from "lucide-react";
+import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield, Eye, Phone, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import {
+  backupPrivateKeyWithPassphrase,
+  deletePrivateKeyBackup,
+} from "@/lib/e2eCrypto";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 
@@ -23,6 +27,13 @@ const Settings = () => {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   
+  // E2E key backup state
+  const [hasBackup, setHasBackup] = useState<boolean | null>(null);
+  const [backupPassphrase, setBackupPassphrase] = useState('');
+  const [isSavingBackup, setIsSavingBackup] = useState(false);
+  const [isDeletingBackup, setIsDeletingBackup] = useState(false);
+  const [isLoadingBackup, setIsLoadingBackup] = useState(true);
+  
   // View Once command config
   const [viewOnceCommand, setViewOnceCommand] = useState('.vv');
   const [viewOnceEmoji, setViewOnceEmoji] = useState<string>('');
@@ -33,7 +44,58 @@ const Settings = () => {
   useEffect(() => {
     setMounted(true);
     loadViewOnceCommandConfig();
+    loadKeyBackupStatus();
   }, []);
+
+  const loadKeyBackupStatus = async () => {
+    try {
+      setIsLoadingBackup(true);
+      const response = await api.e2e.getKeyBackup();
+      if (response.success) {
+        setHasBackup(response.data?.hasBackup === true);
+      }
+    } catch (error) {
+      console.error('Error loading key backup status:', error);
+      setHasBackup(false);
+    } finally {
+      setIsLoadingBackup(false);
+    }
+  };
+
+  const handleSaveKeyBackup = async () => {
+    if (!user?.id) return;
+    if (!backupPassphrase.trim() || backupPassphrase.trim().length < 6) {
+      toast.error('La phrase secrète doit contenir au moins 6 caractères');
+      return;
+    }
+    setIsSavingBackup(true);
+    try {
+      await backupPrivateKeyWithPassphrase(user.id, backupPassphrase);
+      toast.success(hasBackup ? 'Phrase secrète mise à jour !' : 'Clé sauvegardée !');
+      setBackupPassphrase('');
+      setHasBackup(true);
+    } catch (error: any) {
+      toast.error(error?.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setIsSavingBackup(false);
+    }
+  };
+
+  const handleDeleteKeyBackup = async () => {
+    if (!confirm('Supprimer la sauvegarde de votre clé de déchiffrement ? Sans elle, vos captures seront définitivement perdues si vous réinstallez l’application.')) {
+      return;
+    }
+    setIsDeletingBackup(true);
+    try {
+      await deletePrivateKeyBackup();
+      toast.success('Sauvegarde supprimée');
+      setHasBackup(false);
+    } catch (error: any) {
+      toast.error(error?.message || 'Erreur lors de la suppression');
+    } finally {
+      setIsDeletingBackup(false);
+    }
+  };
 
   const loadViewOnceCommandConfig = async () => {
     try {
@@ -570,6 +632,92 @@ const Settings = () => {
                   Supprimer mon compte
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5" />
+                Clé de déchiffrement E2E
+              </CardTitle>
+              <CardDescription>
+                Sauvegardez votre clé privée avec une phrase secrète pour la retrouver
+                après une réinstallation de l'application ou sur un autre téléphone.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingBackup ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : (
+                <>
+                  {hasBackup ? (
+                    <div className="p-3 sm:p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                      <p className="font-medium text-sm sm:text-base text-green-600">✓ Sauvegarde active</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        Votre clé de déchiffrement est sauvegardée de façon chiffrée sur le serveur.
+                        Gardez précieusement votre phrase secrète.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 sm:p-4 bg-muted border border-border rounded-lg">
+                      <p className="font-medium text-sm sm:text-base">Aucune sauvegarde</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        Configurez une phrase secrète pour protéger votre clé de déchiffrement.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="backupPassphrase" className="text-sm">
+                      {hasBackup ? 'Nouvelle phrase secrète' : 'Phrase secrète (min. 6 caractères)'}
+                    </Label>
+                    <Input
+                      id="backupPassphrase"
+                      type="password"
+                      placeholder="••••••••"
+                      value={backupPassphrase}
+                      onChange={(e) => setBackupPassphrase(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      ⚠️ La phrase ne peut pas être récupérée : notez-la dans un endroit sûr.
+                      Sans elle, impossible de restaurer vos anciennes captures.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      onClick={handleSaveKeyBackup}
+                      disabled={isSavingBackup}
+                      className="flex-1"
+                    >
+                      {isSavingBackup ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Sauvegarde...
+                        </>
+                      ) : hasBackup ? (
+                        'Mettre à jour la phrase'
+                      ) : (
+                        'Sauvegarder ma clé'
+                      )}
+                    </Button>
+                    {hasBackup && (
+                      <Button
+                        variant="destructive"
+                        onClick={handleDeleteKeyBackup}
+                        disabled={isDeletingBackup}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Supprimer
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
