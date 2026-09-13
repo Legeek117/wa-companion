@@ -137,40 +137,52 @@ export const decryptViewOnceMedia = async (
   const privateJwk = localStorage.getItem(privStorageKey);
 
   if (!privateJwk) {
-    throw new Error('Clé privée absente du téléphone');
+    throw new Error('Clé privée absente du téléphone (réinstallez l' + 'app et recapturez)');
   }
 
   const cryptoObj = window.crypto.subtle;
 
-  // 1. Import the private RSA key stored on the device
-  const privateKey = await cryptoObj.importKey('jwk', JSON.parse(privateJwk), RSA_ALGO, true, [
-    'decrypt',
-  ]);
+  try {
+    // 1. Import the private RSA key stored on the device
+    const privateKey = await cryptoObj.importKey('jwk', JSON.parse(privateJwk), RSA_ALGO, true, [
+      'decrypt',
+    ]);
 
-  // 2. Unwrap the AES-256-GCM key via RSA-OAEP
-  const wrappedKey = base64ToArrayBuffer(wrappedKeyBase64);
-  const aesKey = await cryptoObj.unwrapKey(
-    'raw',
-    wrappedKey,
-    privateKey,
-    RSA_ALGO,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt']
-  );
+    // 2. Unwrap the AES-256-GCM key via RSA-OAEP
+    //    NB: on décrypte le wrappedKey directement (subtle.decrypt) puis on importe la clé AES
+    //    en 'raw' — plutôt que subtle.unwrapKey — car la clé privée ne possède que l'usage
+    //    'decrypt' (unwrapKey nécessiterait l'usage 'unwrapKey').
+    const wrappedKey = base64ToArrayBuffer(wrappedKeyBase64);
+    const aesKeyMaterial = await cryptoObj.decrypt(RSA_ALGO, privateKey, wrappedKey);
+    const aesKey = await cryptoObj.importKey(
+      'raw',
+      aesKeyMaterial,
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt']
+    );
 
-  // 3. Decrypt the media with AES-256-GCM
-  const iv = base64ToArrayBuffer(ivBase64);
-  const plaintext = await cryptoObj.decrypt(
-    { name: 'AES-GCM', iv },
-    aesKey,
-    encryptedBuffer
-  );
+    // 3. Decrypt the media with AES-256-GCM
+    const iv = base64ToArrayBuffer(ivBase64);
+    const plaintext = await cryptoObj.decrypt(
+      { name: 'AES-GCM', iv },
+      aesKey,
+      encryptedBuffer
+    );
 
-  const blob = new Blob([plaintext], { type: mimeType });
-  const objectUrl = URL.createObjectURL(blob);
+    const blob = new Blob([plaintext], { type: mimeType });
+    const objectUrl = URL.createObjectURL(blob);
 
-  return { blob, objectUrl, mimeType };
+    return { blob, objectUrl, mimeType };
+  } catch (error: any) {
+    // Log l'erreur réelle (nom + message) pour diagnostic
+    const detail =
+      typeof error === 'object' && error !== null
+        ? `${error?.name || 'Error'}: ${error?.message || '(sans message)'}`
+        : String(error);
+    logger.error('[E2E] decryptViewOnceMedia failed', { detail, userId });
+    throw new Error(detail);
+  }
 };
 
 /**
