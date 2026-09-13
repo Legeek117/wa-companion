@@ -13,7 +13,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: S4HmEb69
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -32,7 +32,7 @@ services:
     container_name: amda-redis
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -56,7 +56,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "0.0.0.0:3003:3000"
+      - "127.0.0.1:3003:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
