@@ -1,6 +1,7 @@
 import makeWASocket, {
   WASocket,
   DisconnectReason,
+  WAMessageStubType,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
 } from '@whiskeysockets/baileys';
@@ -258,6 +259,21 @@ const isSelfJid = (socket: WASocket | null, jid?: string | null): boolean => {
     return false;
   }
   return normalizeJid(userJid) === normalizeJid(jid);
+};
+
+/**
+ * Vérifie qu'un socket Baileys est réellement connecté.
+ * `socket.user` reste présent même après une coupure réseau (les creds sont
+ * conservés en mémoire) : il faut donc inspecter l'état réel du WebSocket.
+ * readyState === 1 correspond à WebSocket.OPEN.
+ */
+const isSocketActuallyOpen = (socket: WASocket | null | undefined): boolean => {
+  if (!socket) {
+    return false;
+  }
+  const socketAny = socket as any;
+  const wss = socketAny?.ws;
+  return !!socket.user && !!socket.user.id && !!wss && wss.readyState === 1;
 };
 
 // Maximum reconnection attempts before giving up (increased from 3 to 10)
@@ -2392,7 +2408,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
   // If socket exists and is connected, we're definitely connected
   if (socket) {
     try {
-      const isActuallyConnected = socket.user && socket.user.id;
+      const isActuallyConnected = isSocketActuallyOpen(socket);
       if (isActuallyConnected) {
         const now = new Date();
         await updateSessionStatus(userId, {
@@ -2403,7 +2419,7 @@ export const getWhatsAppStatus = async (userId: string): Promise<{
         session.lastSeen = now;
         actualStatus = 'connected';
       } else {
-        logger.warn(`[WhatsApp] Socket exists but not connected for user ${userId}`);
+        logger.warn(`[WhatsApp] Socket exists but WebSocket is NOT open for user ${userId}`);
         activeSockets.delete(userId);
         actualStatus = 'disconnected';
       }
@@ -3085,9 +3101,9 @@ const startConnectionHealthMonitor = (userId: string, socket: WASocket): void =>
       }
 
       // Check if socket is still valid
-      if (!socket.user || !socket.user.id) {
+      if (!isSocketActuallyOpen(socket)) {
         consecutiveFailures++;
-        logger.warn(`[WhatsApp] ⚠️ Connection health check failed for user ${userId} - socket invalid (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+        logger.warn(`[WhatsApp] ⚠️ Connection health check failed for user ${userId} - socket not open (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
         
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           logger.warn(`[WhatsApp] ⚠️ Multiple consecutive health check failures for user ${userId}, triggering reconnection`);
@@ -3106,12 +3122,7 @@ const startConnectionHealthMonitor = (userId: string, socket: WASocket): void =>
 
       // Try to verify connection by checking socket state
       try {
-        // Try a lightweight operation to verify connection is alive
-        // Check if socket has valid connection state
-        const socketAny = socket as any;
-        const hasValidConnection = socketAny.ws && socketAny.ws.readyState !== undefined;
-        
-        if (hasValidConnection) {
+        if (isSocketActuallyOpen(socket)) {
           // Connection appears healthy
           consecutiveFailures = 0; // Reset failure counter
           lastHealthCheck = Date.now();
@@ -3169,6 +3180,65 @@ const stopConnectionHealthMonitor = (userId: string): void => {
     connectionHealthMonitors.delete(userId);
     logger.debug(`[WhatsApp] Connection health monitor stopped for user ${userId}`);
   }
+};
+
+// ─── WATCHDOG ────────────────────────────────────────────────────────────────
+// Chien de garde global indépendant des sockets : un unique interval au niveau
+// du serveur (jamais stoppé par les événements de fermeture) qui inspecte en
+// réalité chaque socket. Détecte les "zombies" (socket présent mais WebSocket
+// fermé) qu'aucun handler n'aurait nettoyé, et force une vraie reconnexion.
+const WATCHDOG_INTERVAL = 30 * 1000;
+
+let watchdogTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Démarre le watchdog global. Idempotent : si déjà lancé, ne fait rien.
+ */
+export const startWatchdog = (): void => {
+  if (watchdogTimer) {
+    return;
+  }
+  watchdogTimer = setInterval(() => {
+    void (async () => {
+      const sockets = Array.from(activeSockets.entries());
+      if (sockets.length === 0) return;
+
+      for (const [userId, socket] of sockets) {
+        try {
+          // Vérifie que le socket est réellement dans la map et identique
+          if (activeSockets.get(userId) !== socket) continue;
+
+          // Le socket est présent mais la WebSocket est morte → zombie.
+          // On ne traite pas le cas "socket absent" : reconnexion gérée par
+          // scheduleReconnection / reconnectWhatsAppIfCredentialsExist.
+          if (!isSocketActuallyOpen(socket)) {
+            logger.warn(`[Watchdog] 🐶 Session zombie détectée pour user ${userId} (socket présent mais WebSocket fermée), reconnexion forcée`);
+
+            stopConnectionHealthMonitor(userId);
+            stopKeepAlive(userId);
+            cancelScheduledReconnection(userId);
+
+            // Nettoyage du socket mort
+            activeSockets.delete(userId);
+            try { socket.end(undefined); } catch (e) { /* ignore */ }
+
+            liveLogService.emitLog('warn', '🐶 Session WhatsApp coupée — reconnexion automatique forcée', userId, { userId });
+
+            // Vraie reconnexion avec les credentials sauvegardés (si dispo)
+            reconnectWhatsAppIfCredentialsExist(userId).catch((err) => {
+              logger.error(`[Watchdog] Échec reconnexion forcée pour user ${userId}:`, err);
+            });
+          }
+        } catch (error) {
+          logger.error(`[Watchdog] Erreur lors de la vérification du user ${userId}:`, error);
+        }
+      }
+    })().catch((err) => {
+      logger.error('[Watchdog] Erreur dans le cycle watchdog:', err);
+    });
+  }, WATCHDOG_INTERVAL);
+
+  logger.info(`[Watchdog] ✅ Watchdog global démarré (vérification toutes les ${WATCHDOG_INTERVAL / 1000}s)`);
 };
 
 /**
@@ -3762,19 +3832,54 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
     logger.debug(`[WhatsApp] Could not set up debug connection.update handler:`, e);
   }
 
-  // ⚠️ DÉSACTIVÉ: messages.update peut capturer d'autres types d'événements (réactions, modifications, etc.)
-  // qui ne sont pas vraiment des suppressions, causant des faux positifs.
-  // On utilise uniquement messages.delete qui est plus fiable pour détecter les suppressions.
-  // Si messages.delete ne fonctionne pas correctement, on peut réactiver messages.update avec une détection très stricte.
-  
-  // Listen for message updates (edits, reactions, deletions, etc.)
-  // NOTE: Désactivé pour éviter les faux positifs - utiliser uniquement messages.delete
-  /*
-  socket.ev.on('messages.update', async (updates: any) => {
-    // Désactivé pour éviter de capturer des messages non supprimés
-    // On utilise uniquement messages.delete qui est plus fiable
+  // 📌 DÉTECTION DES MESSAGES SUPPRIMÉS "POUR TOUS" (REVOKE)
+  // En Baileys 6.x, quand un contact supprime un message "pour tous", l'événement
+  // arrive via `messages.update` avec `messageStubType: REVOKE` (et non via
+  // `messages.delete`, qui n'est émis que pour `deleteMessageForMeAction`).
+  // On filtre strictement les REVOKE pour éviter les faux positifs (réactions, edits...).
+  socket.ev.on('messages.update', (updates: any) => {
+    try {
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return;
+      }
+      const revokes = updates.filter((upd: any) =>
+        upd &&
+        upd.update &&
+        (upd.update.message === null || upd.update.message === undefined) &&
+        (upd.update.messageStubType === WAMessageStubType.REVOKE ||
+         upd.update.messageStubType === 1)
+      );
+
+      if (revokes.length === 0) {
+        return;
+      }
+
+      logger.info(`[WhatsApp] 🗑️ REVOKE(s) détecté(s) pour user ${userId}: ${revokes.length}`, {
+        revokes: revokes.map((r: any) => ({
+          id: r.key?.id,
+          remoteJid: r.key?.remoteJid,
+          fromMe: r.key?.fromMe,
+        })),
+      });
+
+      // Transformer en format { keys } attendu par handleMessageDeletion
+      const deletion = {
+        keys: revokes.map((r: any) => ({
+          id: r.key?.id,
+          remoteJid: r.key?.remoteJid,
+          participant: r.key?.participant,
+          fromMe: r.key?.fromMe,
+        })),
+        type: 'message-delete',
+      };
+
+      handleMessageDeletion(userId, socket, deletion).catch((err) => {
+        logger.error(`[WhatsApp] Error handling REVOKE deletion for user ${userId}:`, err);
+      });
+    } catch (error) {
+      logger.error(`[WhatsApp] Error processing messages.update for user ${userId}:`, error);
+    }
   });
-  */
 
   logger.info(`[WhatsApp] Message listeners set up successfully for user ${userId}`);
 };
@@ -3893,19 +3998,18 @@ const performReconnectWithCredentials = async (userId: string): Promise<boolean>
     if (activeSockets.has(userId)) {
       const oldSocket = activeSockets.get(userId);
       if (oldSocket?.user) {
-        // Verify socket is still connected by checking connection state
         try {
-          // Check if socket is still valid and connected
-          const isConnected = oldSocket.user && oldSocket.user.id;
-          if (isConnected) {
+          if (isSocketActuallyOpen(oldSocket)) {
             logger.info(`[WhatsApp] User ${userId} already connected with active socket, skipping auto-reconnect`);
             // Clear any reconnection attempts since we're connected
             reconnectionAttempts.delete(userId);
             conflictedSessions.delete(userId);
-            // Note: Listeners should already be set up, but if they were lost,
-            // they will be re-setup when messages arrive (Baileys handles this)
             return true;
           }
+          // Socket present mais WebSocket réellement fermé → nettoyer le zombie
+          logger.warn(`[WhatsApp] Existing socket for user ${userId} present but WebSocket NOT open, removing zombie and reconnecting`);
+          try { oldSocket.end(undefined); } catch (e) { /* ignore */ }
+          activeSockets.delete(userId);
         } catch (error) {
           // Socket might be invalid, continue with reconnect
           logger.warn(`[WhatsApp] Existing socket for user ${userId} appears invalid, will reconnect:`, error);
@@ -4041,6 +4145,10 @@ const performReconnectWithCredentials = async (userId: string): Promise<boolean>
             stopConnectionHealthMonitor(userId);
             stopKeepAlive(userId);
             
+            // Fix A: retirer le socket mort de activeSockets pour éviter le "zombie"
+            try { socket.end(undefined); } catch (e) { /* ignore */ }
+            activeSockets.delete(userId);
+            
             // Update status but schedule reconnection after a short delay
             await updateSessionStatus(userId, {
               status: 'disconnected',
@@ -4116,6 +4224,10 @@ const performReconnectWithCredentials = async (userId: string): Promise<boolean>
             // Stop health monitoring and keep-alive
             stopConnectionHealthMonitor(userId);
             stopKeepAlive(userId);
+            
+            // Fix A: retirer le socket mort de activeSockets
+            try { socket.end(undefined); } catch (e) { /* ignore */ }
+            activeSockets.delete(userId);
             
             // Schedule automatic reconnection with exponential backoff
             scheduleReconnection(userId);

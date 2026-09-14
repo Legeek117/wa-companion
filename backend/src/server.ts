@@ -4,7 +4,7 @@ import { logger } from './config/logger';
 import { getRedisClient } from './config/redis';
 
 import { logEnvironmentStatus, checkEnvironmentVariables } from './config/check-env';
-import { reconnectAllSessionsForAllUsers } from './services/whatsapp.service';
+import { reconnectAllSessionsForAllUsers, startWatchdog } from './services/whatsapp.service';
 import { initializeFirebaseAdmin } from './services/notifications.service';
 import { initializePairingQueue } from './services/pairingQueue.service';
 import { existsSync } from 'fs';
@@ -84,6 +84,12 @@ async function startServer(): Promise<void> {
         const result = await reconnectAllSessionsForAllUsers();
         logger.info(`🏁 [Startup] Auto-reconnect done: ${result.reconnected}/${result.total} sessions reconnected`);
       }, 3000);
+    }
+
+    // Start the watchdog process (detects zombie sessions and force-reconnects)
+    // Must start independently of sockets so it never gets stopped by disconnect handlers
+    if (env.NODE_ENV !== 'test') {
+      startWatchdog();
     }
 
     // Scheduled statuses feature is DISABLED
