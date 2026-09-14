@@ -6,15 +6,18 @@ import {
   Calendar,
   Sliders,
   MessageSquare,
+  MessageCircle,
   BarChart3,
   Crown,
   HelpCircle,
+  Settings,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const panelItems = [
+  { title: "Discussions", url: "/dashboard/discussions", icon: MessageCircle },
   { title: "Liste Status", url: "/dashboard/status/list", icon: List },
   { title: "Programmer Status", url: "/dashboard/status/schedule", icon: Calendar },
   { title: "Config Status", url: "/dashboard/status/config", icon: Sliders },
@@ -22,6 +25,7 @@ const panelItems = [
   { title: "Analytics", url: "/dashboard/analytics", icon: BarChart3, premium: true },
   { title: "Upgrade Premium", url: "/dashboard/upgrade", icon: Crown },
   { title: "Aide & Support", url: "/dashboard/help", icon: HelpCircle },
+  { title: "Paramètres", url: "/dashboard/settings", icon: Settings },
 ];
 
 interface ControlPanelProps {

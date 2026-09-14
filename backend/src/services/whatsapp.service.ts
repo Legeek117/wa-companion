@@ -262,10 +262,34 @@ const isSelfJid = (socket: WASocket | null, jid?: string | null): boolean => {
 };
 
 /**
+ * Compat à partir de Baileys 6.7.x : `socket.ws` n'est PLUS un WebSocket natif
+ * mais un `WebSocketClient` custom (getters `isOpen`/`isConnecting`/...).
+ * Sur anciennes versions, `readyState` (0=connecting,1=open,2=closing,3=closed)
+ * reste disponible. On gère les deux pour être sûr.
+ */
+const isWebSocketOpen = (wss: any): boolean => {
+  if (!wss) return false;
+  if (typeof wss.isOpen === 'boolean') return wss.isOpen === true;
+  return wss.readyState === 1;
+};
+
+const describeSocketState = (wss: any): string => {
+  if (!wss) return 'unknown';
+  if (typeof wss.isOpen === 'boolean') {
+    if (wss.isOpen) return 'open';
+    if (wss.isConnecting) return 'connecting';
+    if (wss.isClosing) return 'closing';
+    if (wss.isClosed) return 'closed';
+    return 'unknown';
+  }
+  const rs = wss.readyState;
+  return rs === 0 ? 'connecting' : rs === 1 ? 'open' : rs === 2 ? 'closing' : rs === 3 ? 'closed' : 'unknown';
+};
+
+/**
  * Vérifie qu'un socket Baileys est réellement connecté.
  * `socket.user` reste présent même après une coupure réseau (les creds sont
  * conservés en mémoire) : il faut donc inspecter l'état réel du WebSocket.
- * readyState === 1 correspond à WebSocket.OPEN.
  */
 const isSocketActuallyOpen = (socket: WASocket | null | undefined): boolean => {
   if (!socket) {
@@ -273,7 +297,7 @@ const isSocketActuallyOpen = (socket: WASocket | null | undefined): boolean => {
   }
   const socketAny = socket as any;
   const wss = socketAny?.ws;
-  return !!socket.user && !!socket.user.id && !!wss && wss.readyState === 1;
+  return !!socket.user && !!socket.user.id && isWebSocketOpen(wss);
 };
 
 // Maximum reconnection attempts before giving up (increased from 3 to 10)
@@ -1085,12 +1109,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
           if (currentSocket) {
             try {
               const socketAny = currentSocket as any;
-              if (socketAny.ws) {
-                socketState = socketAny.ws.readyState === 1 ? 'open' : 
-                             socketAny.ws.readyState === 0 ? 'connecting' :
-                             socketAny.ws.readyState === 2 ? 'closing' :
-                             socketAny.ws.readyState === 3 ? 'closed' : 'unknown';
-              }
+              socketState = describeSocketState(socketAny.ws);
             } catch (e) {
               socketState = 'error';
             }
@@ -1710,8 +1729,8 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
         
         // Check socket readiness before requesting pairing code
         const socketAny = socket as any;
-        if (socketAny.ws && socketAny.ws.readyState !== 1) {
-          logger.info(`[WhatsApp] Waiting for socket to be ready, current state: ${socketAny.ws.readyState}, user: ${userId}`);
+        if (socketAny.ws && !isWebSocketOpen(socketAny.ws)) {
+          logger.info(`[WhatsApp] Waiting for socket to be ready, current state: ${describeSocketState(socketAny.ws)}, user: ${userId}`);
           // Wait additional time if socket is not ready
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
@@ -4265,6 +4284,25 @@ const performReconnectWithCredentials = async (userId: string): Promise<boolean>
     }
     
     return false;
+  }
+};
+
+/**
+ * Get contact profile picture URL for a user's WhatsApp session.
+ * Retourne null si aucun socket connecté, pas d'image, ou si le contact
+ * n'a pas de photo de profil définie.
+ */
+export const getContactProfilePicture = async (userId: string, jid: string): Promise<string | null> => {
+  try {
+    const socket = activeSockets.get(userId);
+    if (!socket || !isSocketActuallyOpen(socket)) {
+      return null;
+    }
+    const url = await socket.profilePictureUrl(jid, 'preview', 10_000);
+    return url || null;
+  } catch (error) {
+    logger.debug(`[WhatsApp] No profile picture for ${jid} (user ${userId}):`, error);
+    return null;
   }
 };
 

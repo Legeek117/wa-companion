@@ -11,6 +11,7 @@ router.use(protect);
 // Routes
 router.get('/conversations', apiLimiter, messagesController.listConversations);
 router.get('/conversations/:contactId', apiLimiter, messagesController.getConversationMessages);
+router.get('/profile-picture/:contactId', apiLimiter, messagesController.getProfilePicture);
 router.post('/send', apiLimiter, messagesController.sendMessage);
 
 export default router;

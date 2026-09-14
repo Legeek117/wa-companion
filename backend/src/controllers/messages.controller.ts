@@ -60,6 +60,28 @@ export const getConversationMessages = async (req: AuthRequest, res: Response): 
 };
 
 /**
+ * Get the profile picture URL for a contact
+ * GET /api/messages/profile-picture/:contactId
+ */
+export const getProfilePicture = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: { message: 'Unauthorized', statusCode: 401 } });
+      return;
+    }
+
+    const contactId = decodeURIComponent(req.params.contactId);
+    const profilePicUrl = await whatsappService.getContactProfilePicture(userId, contactId);
+
+    res.json({ success: true, data: { profile_pic_url: profilePicUrl } });
+  } catch (error) {
+    logger.error('[Messages] Error getting profile picture:', error);
+    res.status(500).json({ success: false, error: { message: 'Internal server error', statusCode: 500 } });
+  }
+};
+
+/**
  * Send a message to a contact using the user's WhatsApp session
  * POST /api/messages/send
  */

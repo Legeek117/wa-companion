@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   ArrowLeft,
   Search,
@@ -218,6 +218,42 @@ const AvatarBubble = ({ name }: { name: string }) => (
   </div>
 );
 
+const profilePicCache = new Map<string, string | null>();
+
+const fetchProfilePic = async (contactId: string): Promise<string | null> => {
+  if (profilePicCache.has(contactId)) return profilePicCache.get(contactId) ?? null;
+  try {
+    const response = await api.messages.profilePicture(contactId);
+    const data = response.data as { profile_pic_url?: string | null } | undefined;
+    const url = response.success && data?.profile_pic_url ? data.profile_pic_url : null;
+    profilePicCache.set(contactId, url);
+    return url;
+  } catch {
+    profilePicCache.set(contactId, null);
+    return null;
+  }
+};
+
+const ContactAvatar = ({
+  name,
+  photoUrl,
+  className,
+}: {
+  name: string;
+  photoUrl?: string | null;
+  className?: string;
+}) => (
+  <Avatar className={cn("rounded-full overflow-hidden", className)}>
+    {photoUrl ? (
+      <AvatarImage src={photoUrl} alt={name} className="object-cover w-full h-full" />
+    ) : (
+      <AvatarFallback className="p-0">
+        <AvatarBubble name={name} />
+      </AvatarFallback>
+    )}
+  </Avatar>
+);
+
 export default function Discussions() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -230,6 +266,27 @@ export default function Discussions() {
   const { list: archivedList, toggle: toggleArchived, remove: unarchive } = useLocalList("amda:archived");
   const { list: hidden, add: hideConv } = useLocalList("amda:hiddenDiscussions");
   const { read, markRead, removeRead } = useReadState();
+  const [photos, setPhotos] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = Array.from(
+      new Set(conversations.map((c) => c.contact_id).filter((id) => !(id in photos)))
+    );
+    if (ids.length === 0) return;
+    (async () => {
+      for (const id of ids) {
+        if (cancelled) return;
+        const url = await fetchProfilePic(id).catch(() => null);
+        if (cancelled) return;
+        setPhotos((prev) => (prev[id] === url ? prev : { ...prev, [id]: url }));
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversations]);
 
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ["discussions", "conversations"],
@@ -330,6 +387,7 @@ export default function Discussions() {
           <ConversationRow
             key={c.contact_id}
             conv={c}
+            photoUrl={photos[c.contact_id] ?? null}
             unread={isConversationUnread(c)}
             muted={muted.includes(c.contact_id)}
             archived={archivedList.includes(c.contact_id)}
@@ -430,6 +488,7 @@ export default function Discussions() {
         {selected ? (
           <ChatPane
             conversation={selected}
+            photoUrl={photos[selected.contact_id] ?? null}
             onBack={() => setSelected(null)}
             onArchive={() => {
               toggleArchived(selected.contact_id);
@@ -464,6 +523,7 @@ export default function Discussions() {
       {peek && (
         <PeekOverlay
           conversation={peek}
+          photoUrl={photos[peek.contact_id] ?? null}
           muted={muted.includes(peek.contact_id)}
           unread={isConversationUnread(peek)}
           onClose={() => setPeek(null)}
@@ -559,6 +619,7 @@ function MessageCircleOutline() {
 
 interface ConversationRowProps {
   conv: Conversation;
+  photoUrl?: string | null;
   unread: boolean;
   muted: boolean;
   archived?: boolean;
@@ -566,7 +627,7 @@ interface ConversationRowProps {
   onPeek: () => void;
 }
 
-function ConversationRow({ conv, unread, muted, archived, onClick, onPeek }: ConversationRowProps) {
+function ConversationRow({ conv, photoUrl, unread, muted, archived, onClick, onPeek }: ConversationRowProps) {
   const longPress = useLongPress(onPeek);
   const last = conv.last_message;
   const preview = previewText(last);
@@ -583,17 +644,7 @@ function ConversationRow({ conv, unread, muted, archived, onClick, onPeek }: Con
       )}
     >
       <div className="relative flex-shrink-0">
-        <Avatar className="w-12 h-12 rounded-full overflow-hidden">
-          {conv.last_message.media_url && conv.last_message.media_type === "image" ? (
-            <AvatarFallback>
-              <AvatarBubble name={conv.contact_name} />
-            </AvatarFallback>
-          ) : (
-            <AvatarFallback className="p-0">
-              <AvatarBubble name={conv.contact_name} />
-            </AvatarFallback>
-          )}
-        </Avatar>
+        <ContactAvatar name={conv.contact_name} photoUrl={photoUrl} className="w-12 h-12" />
         {archived && (
           <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white dark:bg-[#222e35] border border-border/40 flex items-center justify-center shadow-sm">
             <ArchiveRestore className="w-3 h-3 text-muted-foreground" />
@@ -657,6 +708,7 @@ function EmptyChatPane() {
 
 function ChatPane({
   conversation,
+  photoUrl,
   onBack,
   onArchive,
   onUnread,
@@ -667,6 +719,7 @@ function ChatPane({
   onRefresh,
 }: {
   conversation: Conversation;
+  photoUrl?: string | null;
   onBack: () => void;
   onArchive: () => void;
   onUnread: () => void;
@@ -735,11 +788,7 @@ function ChatPane({
         <button onClick={onBack} className="md:hidden p-2 rounded-full hover:bg-muted">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <Avatar className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
-          <AvatarFallback className="p-0">
-            <AvatarBubble name={conversation.contact_name} />
-          </AvatarFallback>
-        </Avatar>
+        <ContactAvatar name={conversation.contact_name} photoUrl={photoUrl} className="w-9 h-9" />
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[15px] truncate">{conversation.contact_name}</p>
           <p className="text-xs text-muted-foreground">
@@ -887,12 +936,14 @@ function MessageBubble({ msg, grouped }: { msg: ChatMessage; grouped: boolean })
 
 function PeekOverlay({
   conversation,
+  photoUrl,
   muted,
   unread,
   onClose,
   onAction,
 }: {
   conversation: Conversation;
+  photoUrl?: string | null;
   muted: boolean;
   unread: boolean;
   onClose: () => void;
@@ -926,11 +977,7 @@ function PeekOverlay({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/60">
-          <Avatar className="w-11 h-11 rounded-full overflow-hidden flex-shrink-0">
-            <AvatarFallback className="p-0">
-              <AvatarBubble name={conversation.contact_name} />
-            </AvatarFallback>
-          </Avatar>
+          <ContactAvatar name={conversation.contact_name} photoUrl={photoUrl} className="w-11 h-11" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-[15px] truncate">{conversation.contact_name}</p>
             <p className="text-xs text-muted-foreground">

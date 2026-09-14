@@ -270,6 +270,7 @@ export const api = {
     conversations: (limit?: number) => apiClient.get(`/api/messages/conversations${limit ? `?limit=${limit}` : ''}`),
     conversationMessages: (contactId: string, limit?: number) =>
       apiClient.get(`/api/messages/conversations/${encodeURIComponent(contactId)}${limit ? `?limit=${limit}` : ''}`),
+    profilePicture: (contactId: string) => apiClient.get(`/api/messages/profile-picture/${encodeURIComponent(contactId)}`),
     send: (to: string, message: string) => apiClient.post('/api/messages/send', { to, message }),
   },
 

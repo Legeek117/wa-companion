@@ -51,13 +51,13 @@ const desktopMenuItems = [
   { title: "Paramètres", url: "/dashboard/settings", icon: Settings },
 ];
 
-// Bottom navigation items for mobile
+// Bottom navigation items for mobile (Accueil au centre)
 const bottomNavItems = [
-  { title: "Discussions", url: "/dashboard/discussions", icon: MessageCircle },
   { title: "Gestion Status", url: "/dashboard/status", icon: Heart },
   { title: "View Once", url: "/dashboard/view-once", icon: Eye },
   { title: "Accueil", url: "/dashboard", icon: Home },
   { title: "Messages Supprimés", url: "/dashboard/deleted-messages", icon: Trash2 },
+  { title: "Discussions", url: "/dashboard/discussions", icon: MessageCircle },
 ];
 
 export function AppSidebar() {
