@@ -32,10 +32,12 @@ import {
   Crown,
   HelpCircle,
 } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 
 // Desktop menu items (all items)
 const desktopMenuItems = [
   { title: "Accueil", url: "/dashboard", icon: Home },
+  { title: "Discussions", url: "/dashboard/discussions", icon: MessageCircle },
   { title: "Gestion Status", url: "/dashboard/status", icon: Heart },
   { title: "Liste Status", url: "/dashboard/status/list", icon: List },
   { title: "Programmer Status", url: "/dashboard/status/schedule", icon: Calendar },
@@ -51,11 +53,11 @@ const desktopMenuItems = [
 
 // Bottom navigation items for mobile
 const bottomNavItems = [
+  { title: "Discussions", url: "/dashboard/discussions", icon: MessageCircle },
   { title: "Gestion Status", url: "/dashboard/status", icon: Heart },
   { title: "View Once", url: "/dashboard/view-once", icon: Eye },
   { title: "Accueil", url: "/dashboard", icon: Home },
   { title: "Messages Supprimés", url: "/dashboard/deleted-messages", icon: Trash2 },
-  { title: "Paramètres", url: "/dashboard/settings", icon: Settings },
 ];
 
 export function AppSidebar() {

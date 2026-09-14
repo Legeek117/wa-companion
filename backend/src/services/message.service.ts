@@ -271,3 +271,75 @@ export const getContacts = async (userId: string) => {
     return Array.from(finalMap.values());
   }
 };
+
+/**
+ * Get all conversations for a user (grouped by contact).
+ * Each conversation exposes the latest message, total message count and the contact.
+ */
+export const getConversations = async (userId: string, limit: number = 200) => {
+  try {
+    const [groups, contacts, lastMsgs] = await Promise.all([
+      prisma.whatsappMessage.groupBy({
+        by: ['contactId'],
+        where: { userId },
+        _count: { _all: true },
+      }),
+      prisma.contact.findMany({
+        where: { userId },
+        select: { contactId: true, contactName: true },
+      }),
+      prisma.whatsappMessage.findMany({
+        where: { userId },
+        orderBy: { timestamp: 'desc' },
+        select: {
+          contactId: true,
+          messageId: true,
+          fromMe: true,
+          content: true,
+          mediaUrl: true,
+          mediaType: true,
+          timestamp: true,
+        },
+        take: 2000,
+      }),
+    ]);
+
+    const contactMap = new Map(contacts.map((c) => [c.contactId, c.contactName]));
+
+    const lastByContact = new Map<string, any>();
+    for (const m of lastMsgs) {
+      if (!lastByContact.has(m.contactId)) lastByContact.set(m.contactId, m);
+    }
+    const countMap = new Map(groups.map((g) => [g.contactId, g._count._all]));
+
+    const conversations = Array.from(lastByContact.entries()).map(([contactId, last]) => {
+      const num = contactId.split('@')[0];
+      const contactName = contactMap.get(contactId) || num;
+      const count = countMap.get(contactId) || 0;
+      return {
+        contact_id: contactId,
+        contact_name: contactName,
+        message_count: count,
+        last_message: {
+          message_id: last.messageId,
+          from_me: last.fromMe,
+          content: last.content,
+          media_url: last.mediaUrl,
+          media_type: last.mediaType,
+          timestamp: last.timestamp,
+        },
+      };
+    });
+
+    conversations.sort((a, b) => {
+      const ta = new Date(a.last_message.timestamp).getTime();
+      const tb = new Date(b.last_message.timestamp).getTime();
+      return tb - ta;
+    });
+
+    return conversations.slice(0, limit);
+  } catch (error) {
+    logger.error(`[MessageService] Error getting conversations for user ${userId}:`, error);
+    throw error;
+  }
+};

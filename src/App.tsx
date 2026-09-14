@@ -16,6 +16,7 @@ import StatusSchedule from "./pages/StatusSchedule";
 import StatusConfig from "./pages/StatusConfig";
 import ViewOnce from "./pages/ViewOnce";
 import DeletedMessages from "./pages/DeletedMessages";
+import Discussions from "./pages/Discussions";
 import Autoresponder from "./pages/Autoresponder";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="connect" element={<Connect />} />
+              <Route path="discussions" element={<Discussions />} />
               <Route path="status" element={<Status />} />
               <Route path="status/list" element={<StatusList />} />
               <Route path="status/:contactId" element={<StatusDetail />} />

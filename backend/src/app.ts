@@ -9,6 +9,7 @@ import { logger } from './config/logger';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
+import messagesRoutes from './routes/messages.routes';
 import whatsappRoutes from './routes/whatsapp.routes';
 import statusRoutes from './routes/status.routes';
 import viewOnceRoutes from './routes/viewOnce.routes';
@@ -359,6 +360,7 @@ app.use('/api', (req, _res, next) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/messages', messagesRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/status', statusRoutes);
 app.use('/api/view-once', viewOnceRoutes);
