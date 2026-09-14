@@ -6,13 +6,23 @@ import logger from '@/lib/logger';
 /**
  * Téléchargement d'un fichier sur l'appareil.
  *
- * Sur l'APK natif (Capacitor), `link.download` n'existe pas dans la WebView :
- * on écrit donc le fichier via le plugin natif (dossier Downloads/Documents),
- * avec un fallback robuste : si l'écriture directe échoue (permission, stockage
- * externe indisponible...), on bascule sur la feuille de partage Android qui
- * permet de sauvegarder le fichier dans Files / Galerie / autre app.
- * Sur le web / PWA, on retombe sur le téléchargement navigateur classique.
+ * Sur l'APK natif (Capacitor), `link.download` n'existe pas dans la WebView.
+ * Stratégie Android :
+ *  1. Demander la permission de stockage (WRITE_EXTERNAL_STORAGE) au runtime —
+ *     indispensable sur Android 10 et moins où elle n'est jamais accordée d'office.
+ *  2. Écrire directement dans Téléchargements (fonctionne sur Android ≤ 10 ;
+ *     parfois encore sur 11+ selon le device).
+ *  3. En échec, ouvrir la feuille de partage Android (Cache + Share) — fonctionne
+ *     sur TOUTES les versions, sans permission particulière.
+ * Sur iOS : écriture dans Documents (dossier privé, toujours accessible).
+ * Sur le web / PWA : téléchargement navigateur classique.
  */
+
+export type DownloadMethod = 'browser' | 'downloads' | 'documents' | 'shared';
+
+export type SaveResult =
+  | { ok: true; method: DownloadMethod }
+  | { ok: false; error: string; reason: 'empty' | 'permission' | 'write' | 'share' };
 
 const blobToBase64 = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -55,8 +65,26 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
 };
 
 /**
+ * Demande la permission de stockage publique sur Android si elle manque.
+ * Sur Android 11+ la demande est ignorée (scoped storage), c'est normal.
+ */
+const ensurePublicStoragePermission = async (): Promise<boolean> => {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return true;
+  try {
+    const status = await Filesystem.checkPermissions();
+    if (status.publicStorage === 'granted') return true;
+    const result = await Filesystem.requestPermissions();
+    return result.publicStorage === 'granted';
+  } catch (error) {
+    logger.warn('[Download] Storage permission request failed:', error);
+    return false;
+  }
+};
+
+/**
  * Écrit le fichier dans le cache puis ouvre la feuille de partage Android/iOS.
- * Ne nécessite aucune permission particulière (dossier Cache = privé à l'app).
+ * Ne nécessite aucune permission (dossier Cache = privé à l'app).
+ * Retourne true dès que la feuille de partage s'est ouverte.
  */
 const shareViaSystem = async (blob: Blob, filename: string, mimeType?: string): Promise<boolean> => {
   try {
@@ -71,80 +99,112 @@ const shareViaSystem = async (blob: Blob, filename: string, mimeType?: string): 
       title: filename,
       text: filename,
       url: uri,
-      dialogTitle: 'Télécharger / Partager',
+      dialogTitle: 'Enregistrer / Partager',
     });
     return true;
   } catch (error) {
-    logger.error('[Download] Share fallback failed:', error);
+    logger.error('[Download] Share sheet failed:', error);
     return false;
   }
 };
 
 /**
- * Sauvegarde directement dans le dossier Téléchargements (ou Documents sur iOS).
- * Retourne true si le fichier a pu être écrit côté natif ou partagé.
+ * Sauvegarde directement dans le dossier Téléchargements (Android).
+ * Peut échouer sur Android 11+ (scoped storage) — le fallback partage s'en charge.
+ */
+const writeToDownloads = async (
+  blob: Blob,
+  filename: string
+): Promise<boolean> => {
+  try {
+    const base64 = await blobToBase64(blob);
+    await Filesystem.writeFile({
+      path: filename,
+      data: base64,
+      directory: Directory.Downloads,
+      recursive: true,
+    });
+    logger.info(`[Download] Written to Downloads: ${filename}`);
+    return true;
+  } catch (error) {
+    logger.warn(`[Download] Direct Downloads write failed (${filename}):`, error);
+    return false;
+  }
+};
+
+/**
+ * Télécharge et enregistre le fichier sur l'appareil.
+ * Retourne un objet SaveResult détaillé pour affichage précis côté UI.
  */
 export const saveFileToDownloads = async (
   blob: Blob,
   title: string,
   mimeType?: string
-): Promise<boolean> => {
+): Promise<SaveResult> => {
   const filename = getFilename(title, mimeType);
 
-  // Web / PWA : téléchargement classique (fonctionne dans le navigateur, pas dans l'APK)
-  if (!Capacitor.isNativePlatform()) {
-    triggerBrowserDownload(blob, filename);
-    return true;
+  if (!blob || blob.size === 0) {
+    return { ok: false, error: 'Fichier vide', reason: 'empty' };
   }
 
-  try {
-    const base64 = await blobToBase64(blob);
-    const platform = Capacitor.getPlatform();
+  // Web / PWA : téléchargement navigateur classique
+  if (!Capacitor.isNativePlatform()) {
+    triggerBrowserDownload(blob, filename);
+    return { ok: true, method: 'browser' };
+  }
 
-    if (platform === 'android') {
+  const platform = Capacitor.getPlatform();
+
+  // iOS : Documents est toujours accessible
+  if (platform !== 'android') {
+    try {
+      const base64 = await blobToBase64(blob);
       await Filesystem.writeFile({
         path: filename,
         data: base64,
-        directory: Directory.Downloads,
+        directory: Directory.Documents,
         recursive: true,
       });
-      return true;
+      return { ok: true, method: 'documents' };
+    } catch (error) {
+      logger.error('[Download] iOS Documents write failed:', error);
+      const shared = await shareViaSystem(blob, filename, mimeType);
+      return shared ? { ok: true, method: 'shared' } : { ok: false, error: 'Écriture et partage échoués', reason: 'write' };
     }
-
-    // iOS : le dossier Downloads n'est pas accessible directement → on écrit dans Documents
-    await Filesystem.writeFile({
-      path: filename,
-      data: base64,
-      directory: Directory.Documents,
-      recursive: true,
-    });
-    return true;
-  } catch (error) {
-    logger.error('[Download] Filesystem write failed — fallback partage:', error);
-    // Fallback : feuille de partage Android (permet de sauvegarder dans Files/Galerie)
-    return shareViaSystem(blob, filename, mimeType);
   }
+
+  // ANDROID
+  try {
+    const canWrite = await ensurePublicStoragePermission();
+    if (canWrite) {
+      const written = await writeToDownloads(blob, filename);
+      if (written) return { ok: true, method: 'downloads' };
+    }
+  } catch (error) {
+    logger.warn('[Download] Android permission/write step failed:', error);
+  }
+
+  // Fallback : feuille de partage système (fiable sur toutes les versions Android)
+  const shared = await shareViaSystem(blob, filename, mimeType);
+  if (shared) return { ok: true, method: 'shared' };
+
+  return { ok: false, error: "Impossible d'écrire ou de partager le fichier", reason: 'share' };
 };
 
 /**
- * Télécharge et si possible ouvre le partage Android (permet de choisir l'app
+ * Ouvrir directement la feuille de partage Android (permet de choisir l'application
  * de destination). Fallback : enregistrement silencieux dans Downloads.
  */
 export const downloadAndShare = async (
   blob: Blob,
   title: string,
   mimeType?: string
-): Promise<boolean> => {
-  const filename = getFilename(title, mimeType);
-
+): Promise<SaveResult> => {
   if (!Capacitor.isNativePlatform()) {
-    triggerBrowserDownload(blob, filename);
-    return true;
+    return saveFileToDownloads(blob, title, mimeType);
   }
 
-  const shared = await shareViaSystem(blob, filename, mimeType);
-  if (shared) {
-    return true;
-  }
+  const shared = await shareViaSystem(blob, getFilename(title, mimeType), mimeType);
+  if (shared) return { ok: true, method: 'shared' };
   return saveFileToDownloads(blob, title, mimeType);
 };

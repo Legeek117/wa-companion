@@ -15,7 +15,7 @@ import { useState, useEffect } from "react";
 import { api, ApiResponse } from "@/lib/api";
 import { ensureE2EKeys, fetchAndDecryptViewOnce } from "@/lib/e2eCrypto";
 import { E2ERestoreDialog } from "@/components/E2ERestoreDialog";
-import { saveFileToDownloads } from "@/lib/download";
+import { saveFileToDownloads, SaveResult } from "@/lib/download";
 import logger from "@/lib/logger";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -108,6 +108,23 @@ const ViewOnce = () => {
     });
   };
 
+  const handleSaveResult = (result: SaveResult) => {
+    if (!result.ok) {
+      toast.error(`Impossible d'enregistrer le fichier`);
+      return;
+    }
+    switch (result.method) {
+      case 'shared':
+        toast.success('Partage ouvert — choisissez où enregistrer le fichier');
+        break;
+      case 'browser':
+        toast.success('Téléchargement démarré');
+        break;
+      default:
+        toast.success('Fichier enregistré (Téléchargements)');
+    }
+  };
+
   const handleDownload = async (capture: any) => {
     // Captures chiffrées E2E : déchiffrer puis télécharger
     if (capture.encrypted) {
@@ -122,16 +139,12 @@ const ViewOnce = () => {
 
         // saveFileToDownloads gère la sauvegarde native (Downloads) sur l'APK,
         // avec fallback navigateur pour la version PWA/web.
-        const ok = await saveFileToDownloads(
+        const result = await saveFileToDownloads(
           decrypted.blob,
           `view-once-${capture.id}`,
           decrypted.mimeType
         );
-        if (ok) {
-          toast.success('Fichier enregistré (Téléchargements)');
-        } else {
-          toast.error("Impossible d'enregistrer le fichier");
-        }
+        handleSaveResult(result);
       } catch (error: any) {
         toast.dismiss();
         toast.error('Erreur de déchiffrement : ' + (error?.message || 'inconnue'));
@@ -154,12 +167,8 @@ const ViewOnce = () => {
           throw new Error(`HTTP ${resp.status}`);
         }
         const blob = await resp.blob();
-        const ok = await saveFileToDownloads(blob, `view-once-${capture.id}`, blob.type);
-        if (ok) {
-          toast.success('Fichier enregistré (Téléchargements)');
-        } else {
-          toast.error("Impossible d'enregistrer le fichier");
-        }
+        const result = await saveFileToDownloads(blob, `view-once-${capture.id}`, blob.type);
+        handleSaveResult(result);
       } else {
         toast.error('Impossible de télécharger le média');
       }
@@ -392,16 +401,12 @@ const ViewOnce = () => {
                 blob = await res.blob();
                 mimeType = blob.type;
               }
-              const ok = await saveFileToDownloads(
+              const result = await saveFileToDownloads(
                 blob,
                 `view-once-${Date.now()}`,
                 mimeType
               );
-              if (ok) {
-                toast.success('Fichier enregistré (Téléchargements)');
-              } else {
-                toast.error("Impossible d'enregistrer le fichier");
-              }
+              handleSaveResult(result);
             } catch {
               toast.error('Erreur lors du téléchargement');
             }
