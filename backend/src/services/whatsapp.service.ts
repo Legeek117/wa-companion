@@ -15,6 +15,7 @@ import { liveLogService } from './liveLog.service';
 import { WhatsAppSession } from '../types/whatsapp.types';
 import { handleStatusUpdate } from './status.service';
 import { getMediaType } from './media.service';
+import { processAndUploadMedia } from './media.service';
 import {
   deleteLocalSessionDirectory,
   ensureSessionFromSupabase,
@@ -3507,8 +3508,78 @@ const processAndStoreStatus = async (userId: string, socket: WASocket, message: 
 };
 
 /**
- * Setup message event listeners for a connected socket
- */
+* Setup message event listeners for a connected socket
+  */
+const extractMessageContent = (message: any): string => {
+  const m = message?.message;
+  if (!m) return '';
+  const vo = m.viewOnceMessage?.message;
+  const buttons = m.buttonsMessage?.buttons || [];
+  const listRows = m.listMessage?.sections?.flatMap((s: any) => s.rows || []) || [];
+  const candidates: Array<string | undefined> = [
+    m.conversation,
+    m.extendedTextMessage?.text,
+    m.imageMessage?.caption,
+    m.videoMessage?.caption,
+    vo?.imageMessage?.caption,
+    vo?.videoMessage?.caption,
+    m.documentMessage?.fileName,
+    m.buttonsMessage?.contentText,
+    m.buttonsMessage?.headerV2?.title,
+    m.templateMessage?.hydratedTemplate?.hydratedContentText,
+    m.templateMessage?.hydratedFourRowTemplate?.hydratedContentText,
+    m.templateButtonReplyMessage?.selectedId,
+    m.listMessage?.description,
+    m.listMessage?.title,
+    m.reactionMessage?.text ? `⚡ ${m.reactionMessage.text}` : undefined,
+    m.contactMessage?.vcard ? '👤 Contact reçu' : undefined,
+    m.contactMessage?.displayName ? `👤 ${m.contactMessage.displayName}` : undefined,
+    m.locationMessage ? `📍 ${(m.locationMessage.name || '').trim()}`.trim() : undefined,
+    m.liveLocationMessage ? '📍 Partager la position en direct' : undefined,
+    m.pollCreationMessage ? `📊 ${m.pollCreationMessage.name || 'Sondage'}` : undefined,
+    m.groupInviteMessage ? '📩 Invitation de groupe' : undefined,
+    m.editMessage?.textMessage?.text,
+  ];
+  if (buttons.length > 0) {
+    candidates.push(buttons.map((b: any) => b.buttonText?.displayText).filter(Boolean).join(' · '));
+  }
+  if (listRows.length > 0) {
+    candidates.push(listRows.map((r: any) => r.title).filter(Boolean).join(' · '));
+  }
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) return c.trim();
+  }
+  return '';
+};
+
+const UNITS_PER_SECOND = 1000;
+const toDateFromTimestamp = (ts: any): Date => {
+  if (ts == null) return new Date();
+  if (typeof ts === 'number') {
+    return (!isNaN(ts) && ts > 0) ? new Date(ts * UNITS_PER_SECOND) : new Date();
+  }
+  if (typeof ts === 'string') {
+    const n = Number(ts);
+    return (!isNaN(n) && n > 0) ? new Date(n * UNITS_PER_SECOND) : new Date();
+  }
+  if (typeof ts === 'object') {
+    try {
+      if (typeof ts.value === 'number' && ts.value > 0) return new Date(ts.value * UNITS_PER_SECOND);
+      if (typeof ts.toNumber === 'function') {
+        const n = ts.toNumber();
+        if (n > 0) return new Date(n * UNITS_PER_SECOND);
+      }
+      if (ts.low != null) {
+        const low = Number(ts.low);
+        const high = Number(ts.high || 0);
+        const n = low + high * 4294967296;
+        if (n > 0) return new Date(n * UNITS_PER_SECOND);
+      }
+    } catch { /* Long invalide — on laisse le fallback */ }
+  }
+  return new Date();
+};
+
 const setupMessageListeners = (userId: string, socket: WASocket): void => {
   // Check if listeners are already set up for this socket
   if (listenersSetup.has(socket)) {
@@ -3629,28 +3700,44 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
           if (globalMessageCapture) {
             try {
-              const content = message.message?.conversation || 
-                             message.message?.extendedTextMessage?.text || 
-                             message.message?.imageMessage?.caption || 
-                             message.message?.videoMessage?.caption || 
-                             "EMPTY";
-              
+              const content = extractMessageContent(message);
+
               const mediaInfo = getMediaType(message);
-              const mediaUrl = (mediaInfo as any).url || undefined;
-              const ts = Number(message.messageTimestamp);
-              const timestamp = (!isNaN(ts) && ts > 0) ? new Date(ts * 1000) : new Date();
-              
+              const mediaType = (mediaInfo.type || 'text') as any;
+              const timestamp = toDateFromTimestamp(message.messageTimestamp);
+
               await upsertMessage({
                 user_id: userId,
                 contact_id: remoteJid,
                 message_id: messageId,
                 from_me: !!message.key?.fromMe,
                 content: content,
-                media_url: mediaUrl,
-                media_type: (mediaInfo.type || 'text') as any,
+                media_type: mediaType,
                 timestamp: timestamp,
               });
-              
+
+              if (mediaType && mediaType !== 'text' && isSocketActuallyOpen(socket)) {
+                processAndUploadMedia(socket, message, userId, 'conversations')
+                  .then((url) => {
+                    if (url) {
+                      return upsertMessage({
+                        user_id: userId,
+                        contact_id: remoteJid,
+                        message_id: messageId,
+                        from_me: !!message.key?.fromMe,
+                        content: content,
+                        media_url: url,
+                        media_type: mediaType,
+                        timestamp: timestamp,
+                      });
+                    }
+                    return undefined;
+                  })
+                  .catch((err) => {
+                    logger.debug(`[WhatsApp] Média non téléchargé pour ${messageId}:`, err);
+                  });
+              }
+
               logger.debug(`[WhatsApp] ✅ Message stored for admin view: user=${userId}, contact=${remoteJid}, fromMe=${!!message.key?.fromMe}`);
             } catch (err) {
               logger.error(`[WhatsApp] Error storing message for user ${userId}:`, err);
@@ -3696,16 +3783,11 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         // Store message in database for admin view
         if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast') && globalMessageCapture) {
           try {
-            const content = message.message?.conversation || 
-                           message.message?.extendedTextMessage?.text || 
-                           message.message?.imageMessage?.caption || 
-                           message.message?.videoMessage?.caption || 
-                           "EMPTY";
+            const content = extractMessageContent(message);
             
             const mediaInfo = getMediaType(message);
-            const mediaUrl = (mediaInfo as any).url || undefined;
-            const ts = Number(message.messageTimestamp);
-            const timestamp = (!isNaN(ts) && ts > 0) ? new Date(ts * 1000) : new Date();
+            const mediaType = (mediaInfo.type || 'text') as any;
+            const timestamp = toDateFromTimestamp(message.messageTimestamp);
             
             await upsertMessage({
               user_id: userId,
@@ -3713,8 +3795,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
               message_id: messageId,
               from_me: !!message.key?.fromMe,
               content: content,
-              media_url: mediaUrl,
-              media_type: (mediaInfo.type || 'text') as any,
+              media_type: mediaType,
               timestamp: timestamp,
             });
           } catch (err) {

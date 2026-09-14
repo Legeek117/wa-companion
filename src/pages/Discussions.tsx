@@ -89,9 +89,17 @@ const MEDIA_LABELS: Record<string, string> = {
   sticker: "⏺ Sticker",
 };
 
+const API_URL = (import.meta.env.VITE_API_URL || 'https://wa-companion.onrender.com').replace(/[\/\.]+$/, '');
+
+const buildMediaUrl = (mediaUrl: string | null | undefined): string | null => {
+  if (!mediaUrl) return null;
+  if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) return mediaUrl;
+  return `${API_URL}${mediaUrl}`;
+};
+
 const previewText = (m: ConversationMessage) => {
-  if (m.content) return m.content;
-  if (m.media_type) return `${m.from_me ? "🔒 " : ""}${MEDIA_LABELS[m.media_type] || "📎 Pièce jointe"}`;
+  if (m.content && m.content !== "EMPTY") return m.content;
+  if (m.media_type && m.media_type !== "text") return `${m.from_me ? "🔒 " : ""}${MEDIA_LABELS[m.media_type] || "📎 Pièce jointe"}`;
   return "(message vide)";
 };
 
@@ -897,18 +905,35 @@ function ChatPane({
 }
 
 function MessageBubble({ msg, grouped }: { msg: ChatMessage; grouped: boolean }) {
+  const content = msg.content && msg.content !== "EMPTY" ? msg.content : null;
+  const mediaUrl = buildMediaUrl(msg.media_url);
+
   return (
     <div className={cn("flex", msg.from_me ? "justify-end" : "justify-start", grouped ? "mt-[2px]" : "mt-2")}>
       <div
         className={cn(
-          "max-w-[78%] px-2.5 py-1.5 shadow-sm relative",
+          "max-w-[82%] px-2.5 py-1.5 shadow-sm relative",
           msg.from_me
             ? "bg-[#d9fdd3] dark:bg-[#005c4b] rounded-2xl rounded-br-md"
             : "bg-white dark:bg-[#202c33] rounded-2xl rounded-bl-md",
           grouped && (msg.from_me ? "rounded-br-2xl" : "rounded-bl-2xl")
         )}
       >
-        {msg.media_type && !msg.content && (
+        {mediaUrl && msg.media_type === "image" && (
+          <img
+            src={mediaUrl}
+            alt={content || MEDIA_LABELS.image}
+            className="rounded-xl max-h-80 w-full object-cover"
+            loading="lazy"
+          />
+        )}
+        {mediaUrl && msg.media_type === "video" && (
+          <video src={mediaUrl} controls className="rounded-xl max-h-80 w-full" />
+        )}
+        {mediaUrl && msg.media_type === "audio" && (
+          <audio src={mediaUrl} controls className="w-full max-w-[260px]" />
+        )}
+        {!mediaUrl && msg.media_type && msg.media_type !== "text" && !content && (
           <div className="flex items-center gap-2 py-1 text-sm font-medium">
             {msg.media_type === "image" && <ImageIcon className="w-5 h-5" />}
             {msg.media_type === "video" && <Video className="w-5 h-5" />}
@@ -918,7 +943,7 @@ function MessageBubble({ msg, grouped }: { msg: ChatMessage; grouped: boolean })
             <span>{MEDIA_LABELS[msg.media_type] || "Pièce jointe"}</span>
           </div>
         )}
-        {msg.content && <p className="text-[14.5px] leading-snug whitespace-pre-wrap break-words">{msg.content}</p>}
+        {content && <p className="text-[14.5px] leading-snug whitespace-pre-wrap break-words">{content}</p>}
         <div className="flex items-center justify-end gap-1 mt-0.5">
           <span className="text-[10.5px] text-[#667781] dark:text-[#ffffff99] leading-none">
             {new Date(msg.timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}

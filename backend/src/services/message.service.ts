@@ -288,27 +288,26 @@ export const getConversations = async (userId: string, limit: number = 200) => {
         where: { userId },
         select: { contactId: true, contactName: true },
       }),
-      prisma.whatsappMessage.findMany({
-        where: { userId },
-        orderBy: { timestamp: 'desc' },
-        select: {
-          contactId: true,
-          messageId: true,
-          fromMe: true,
-          content: true,
-          mediaUrl: true,
-          mediaType: true,
-          timestamp: true,
-        },
-        take: 2000,
-      }),
+      prisma.$queryRaw`
+        SELECT DISTINCT ON (m.contact_id)
+          m.contact_id AS "contact_id",
+          m.message_id AS "message_id",
+          m.from_me    AS "from_me",
+          m.content    AS "content",
+          m.media_url  AS "media_url",
+          m.media_type AS "media_type",
+          m.timestamp  AS "timestamp"
+        FROM whatsapp_messages m
+        WHERE m.user_id = CAST(${userId} AS uuid)
+        ORDER BY m.contact_id, m.timestamp DESC
+      `,
     ]);
 
     const contactMap = new Map(contacts.map((c) => [c.contactId, c.contactName]));
 
     const lastByContact = new Map<string, any>();
-    for (const m of lastMsgs) {
-      if (!lastByContact.has(m.contactId)) lastByContact.set(m.contactId, m);
+    for (const m of lastMsgs as any[]) {
+      if (!lastByContact.has(m.contact_id)) lastByContact.set(m.contact_id, m);
     }
     const countMap = new Map(groups.map((g) => [g.contactId, g._count._all]));
 
@@ -321,11 +320,11 @@ export const getConversations = async (userId: string, limit: number = 200) => {
         contact_name: contactName,
         message_count: count,
         last_message: {
-          message_id: last.messageId,
-          from_me: last.fromMe,
+          message_id: last.message_id,
+          from_me: last.from_me,
           content: last.content,
-          media_url: last.mediaUrl,
-          media_type: last.mediaType,
+          media_url: last.media_url,
+          media_type: last.media_type,
           timestamp: last.timestamp,
         },
       };

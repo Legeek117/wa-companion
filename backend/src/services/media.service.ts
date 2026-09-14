@@ -42,7 +42,7 @@ export const uploadMedia = async (
   buffer: Buffer,
   filename: string,
   mimeType: string,
-  subdirectory: 'deleted-messages' | 'view-once' | 'scheduled-status' = 'deleted-messages',
+  subdirectory: 'deleted-messages' | 'view-once' | 'scheduled-status' | 'conversations' = 'deleted-messages',
   userId?: string
 ): Promise<string> => {
   try {
@@ -210,7 +210,7 @@ export const processAndUploadMedia = async (
   socket: WASocket,
   message: any,
   userId: string,
-  subdirectory: 'deleted-messages' | 'view-once' | 'scheduled-status' = 'deleted-messages'
+  subdirectory: 'deleted-messages' | 'view-once' | 'scheduled-status' | 'conversations' = 'deleted-messages'
 ): Promise<string | null> => {
   try {
     const mediaInfo = getMediaType(message);
