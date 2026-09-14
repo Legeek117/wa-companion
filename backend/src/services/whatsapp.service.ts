@@ -223,6 +223,9 @@ const reconnectionTimers = new Map<string, NodeJS.Timeout>();
 // Track connection health monitoring intervals
 const connectionHealthMonitors = new Map<string, NodeJS.Timeout>();
 
+// Track in-flight reconnections to prevent concurrent socket creation for the same user
+const reconnectionInProgress = new Set<string>();
+
 const STATUS_RETENTION_MS = 24 * 60 * 60 * 1000; // 24h
 
 const normalizeJid = (jid?: string | null): string | null => {
@@ -2539,10 +2542,13 @@ export const disconnectWhatsApp = async (userId: string): Promise<void> => {
 
     if (socket) {
       try {
-        await socket.logout();
+        // End the connection WITHOUT logging out. socket.logout() would delink
+        // the device from WhatsApp permanently (even if creds.json is kept),
+        // forcing a QR re-scan. socket.end() just closes the connection and
+        // keeps the local session files valid for a future re-connect.
+        await socket.end(undefined);
       } catch (error) {
-        // If logout fails, try to end the connection
-        logger.warn(`[WhatsApp] Logout failed for user ${userId}, trying to end connection:`, error);
+        logger.warn(`[WhatsApp] Failed to end connection for user ${userId}:`, error);
         try {
           await socket.end(undefined);
         } catch (e) {
@@ -2574,10 +2580,9 @@ export const disconnectWhatsApp = async (userId: string): Promise<void> => {
     pairingCodes.delete(userId);
 
     const sessionPath = getSessionPath(userId);
-    await removeSessionFromSupabase(userId);
-    await deleteLocalSessionDirectory(sessionPath);
-
-    logger.info(`[WhatsApp] WhatsApp disconnected for user: ${userId}`);
+    // Keep the local session files so the user can re-connect WITHOUT scanning
+    // a new QR code. Only the connection is closed, credentials are preserved.
+    logger.info(`[WhatsApp] WhatsApp disconnected for user: ${userId} (session files preserved for re-connect)`);
   } catch (error) {
     logger.error('Error disconnecting WhatsApp:', error);
     throw new Error('Failed to disconnect WhatsApp');
@@ -3828,6 +3833,19 @@ export const reconnectAllSessionsForAllUsers = async (): Promise<{ total: number
 };
 
 export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promise<boolean> => {
+  if (reconnectionInProgress.has(userId)) {
+    logger.info(`[WhatsApp] ⏳ Reconnection already in progress for user ${userId}, skipping duplicate attempt`);
+    return false;
+  }
+  reconnectionInProgress.add(userId);
+  try {
+    return await performReconnectWithCredentials(userId);
+  } finally {
+    reconnectionInProgress.delete(userId);
+  }
+};
+
+const performReconnectWithCredentials = async (userId: string): Promise<boolean> => {
   try {
     if (autoReconnectDisabled.has(userId)) {
       logger.info(`[WhatsApp] ⏸️ Auto-reconnect is disabled for user ${userId}, skipping reconnect`);
@@ -3873,12 +3891,12 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
 
     // Check if already connected and socket is still active
     if (activeSockets.has(userId)) {
-      const socket = activeSockets.get(userId);
-      if (socket?.user) {
+      const oldSocket = activeSockets.get(userId);
+      if (oldSocket?.user) {
         // Verify socket is still connected by checking connection state
         try {
           // Check if socket is still valid and connected
-          const isConnected = socket.user && socket.user.id;
+          const isConnected = oldSocket.user && oldSocket.user.id;
           if (isConnected) {
             logger.info(`[WhatsApp] User ${userId} already connected with active socket, skipping auto-reconnect`);
             // Clear any reconnection attempts since we're connected
@@ -3891,11 +3909,13 @@ export const reconnectWhatsAppIfCredentialsExist = async (userId: string): Promi
         } catch (error) {
           // Socket might be invalid, continue with reconnect
           logger.warn(`[WhatsApp] Existing socket for user ${userId} appears invalid, will reconnect:`, error);
+          try { oldSocket.end(undefined); } catch (e) { /* ignore */ }
           activeSockets.delete(userId);
         }
       } else {
         // Socket exists but no user, remove it
         logger.warn(`[WhatsApp] Socket exists for user ${userId} but no user data, removing and reconnecting`);
+        try { oldSocket?.end(undefined); } catch (e) { /* ignore */ }
         activeSockets.delete(userId);
       }
     }

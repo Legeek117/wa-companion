@@ -1,13 +1,16 @@
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import logger from '@/lib/logger';
 
 /**
  * Téléchargement d'un fichier sur l'appareil.
  *
  * Sur l'APK natif (Capacitor), `link.download` n'existe pas dans la WebView :
  * on écrit donc le fichier via le plugin natif (dossier Downloads/Documents),
- * puis on ouvre le panneau de partage/système si besoin.
+ * avec un fallback robuste : si l'écriture directe échoue (permission, stockage
+ * externe indisponible...), on bascule sur la feuille de partage Android qui
+ * permet de sauvegarder le fichier dans Files / Galerie / autre app.
  * Sur le web / PWA, on retombe sur le téléchargement navigateur classique.
  */
 
@@ -33,6 +36,7 @@ const getFilename = (title: string, mimeType?: string): string => {
     'audio/ogg': 'ogg',
     'audio/mpeg': 'mp3',
     'application/pdf': 'pdf',
+    'text/plain': 'txt',
   };
   const ext = (mimeType && extMap[mimeType.toLowerCase()]) || 'bin';
   const baseName = title.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 60) || 'fichier';
@@ -51,8 +55,34 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
 };
 
 /**
+ * Écrit le fichier dans le cache puis ouvre la feuille de partage Android/iOS.
+ * Ne nécessite aucune permission particulière (dossier Cache = privé à l'app).
+ */
+const shareViaSystem = async (blob: Blob, filename: string, mimeType?: string): Promise<boolean> => {
+  try {
+    const base64 = await blobToBase64(blob);
+    const directory = Capacitor.getPlatform() === 'android' ? Directory.Cache : Directory.Documents;
+    const path = `amda_share_${Date.now()}_${filename}`;
+
+    await Filesystem.writeFile({ path, data: base64, directory, recursive: true });
+    const uri = (await Filesystem.getUri({ path, directory })).uri;
+
+    await Share.share({
+      title: filename,
+      text: filename,
+      url: uri,
+      dialogTitle: 'Télécharger / Partager',
+    });
+    return true;
+  } catch (error) {
+    logger.error('[Download] Share fallback failed:', error);
+    return false;
+  }
+};
+
+/**
  * Sauvegarde directement dans le dossier Téléchargements (ou Documents sur iOS).
- * Retourne true si le fichier a pu être écrit côté natif.
+ * Retourne true si le fichier a pu être écrit côté natif ou partagé.
  */
 export const saveFileToDownloads = async (
   blob: Blob,
@@ -61,7 +91,7 @@ export const saveFileToDownloads = async (
 ): Promise<boolean> => {
   const filename = getFilename(title, mimeType);
 
-  // Web / PWA : téléchargement classique (funciona dans le navigateur, pas dans l'APK)
+  // Web / PWA : téléchargement classique (fonctionne dans le navigateur, pas dans l'APK)
   if (!Capacitor.isNativePlatform()) {
     triggerBrowserDownload(blob, filename);
     return true;
@@ -90,8 +120,9 @@ export const saveFileToDownloads = async (
     });
     return true;
   } catch (error) {
-    console.error('[Download] Filesystem write failed:', error);
-    return false;
+    logger.error('[Download] Filesystem write failed — fallback partage:', error);
+    // Fallback : feuille de partage Android (permet de sauvegarder dans Files/Galerie)
+    return shareViaSystem(blob, filename, mimeType);
   }
 };
 
@@ -111,28 +142,9 @@ export const downloadAndShare = async (
     return true;
   }
 
-  try {
-    const base64 = await blobToBase64(blob);
-    const directory = Capacitor.getPlatform() === 'android' ? Directory.Cache : Directory.Documents;
-    const path = `amda_share_${Date.now()}_${filename}`;
-
-    await Filesystem.writeFile({ path, data: base64, directory, recursive: true });
-    const uri = await Filesystem.getUri({ path, directory });
-    const shareUrl = uri.uri;
-
-    try {
-      await Share.share({
-        title,
-        url: shareUrl,
-        dialogTitle: 'Télécharger / Partager',
-      });
-    } catch {
-      // Share annulé ou indisponible → enregistrement silencieux
-      await saveFileToDownloads(blob, title, mimeType);
-    }
+  const shared = await shareViaSystem(blob, filename, mimeType);
+  if (shared) {
     return true;
-  } catch (error) {
-    console.error('[Download] Share failed:', error);
-    return saveFileToDownloads(blob, title, mimeType);
   }
+  return saveFileToDownloads(blob, title, mimeType);
 };

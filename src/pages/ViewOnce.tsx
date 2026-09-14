@@ -51,7 +51,7 @@ const ViewOnce = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; title: string } | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; title: string; blob?: Blob; mimeType?: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [needsRestore, setNeedsRestore] = useState(false);
   
@@ -85,6 +85,8 @@ const ViewOnce = () => {
           url: decrypted.objectUrl,
           type: viewerType,
           title: `${capture.sender_name} - ${new Date(capture.captured_at).toLocaleString('fr-FR')}`,
+          blob: decrypted.blob,
+          mimeType: decrypted.mimeType,
         });
       } catch (error: any) {
         toast.dismiss();
@@ -376,15 +378,24 @@ const ViewOnce = () => {
           isOpen={!!selectedMedia}
           onClose={() => setSelectedMedia(null)}
           onDownload={async () => {
-            // E2E: selectedMedia.url est un blob URL après déchiffrement.
-            // Sur l'APK, il faut convertir en Blob puis écrire dans Downloads.
+            // E2E: si le blob déchiffré est disponible, on l'enregistre directement
+            // (sur l'APK, fetch(blob:...) échoue dans la WebView Android).
             try {
-              const res = await fetch(selectedMedia.url);
-              const blob = await res.blob();
+              let blob: Blob;
+              let mimeType: string | undefined;
+              if (selectedMedia.blob) {
+                blob = selectedMedia.blob;
+                mimeType = selectedMedia.mimeType;
+              } else {
+                const res = await fetch(selectedMedia.url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                blob = await res.blob();
+                mimeType = blob.type;
+              }
               const ok = await saveFileToDownloads(
                 blob,
                 `view-once-${Date.now()}`,
-                blob.type
+                mimeType
               );
               if (ok) {
                 toast.success('Fichier enregistré (Téléchargements)');
