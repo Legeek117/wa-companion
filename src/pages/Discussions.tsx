@@ -276,6 +276,18 @@ export default function Discussions() {
   const { read, markRead, removeRead } = useReadState();
   const [photos, setPhotos] = useState<Record<string, string | null>>({});
 
+  const { data: conversations = [], isLoading } = useQuery({
+    queryKey: ["discussions", "conversations"],
+    queryFn: async () => {
+      const response = await api.messages.conversations(200);
+      if (response.success && response.data) return response.data as Conversation[];
+      return [];
+    },
+    refetchInterval: 15 * 1000,
+    staleTime: 5 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
   useEffect(() => {
     let cancelled = false;
     const ids = Array.from(
@@ -295,18 +307,6 @@ export default function Discussions() {
       cancelled = true;
     };
   }, [conversations]);
-
-  const { data: conversations = [], isLoading } = useQuery({
-    queryKey: ["discussions", "conversations"],
-    queryFn: async () => {
-      const response = await api.messages.conversations(200);
-      if (response.success && response.data) return response.data as Conversation[];
-      return [];
-    },
-    refetchInterval: 15 * 1000,
-    staleTime: 5 * 1000,
-    refetchOnWindowFocus: true,
-  });
 
   const visible = conversations.filter((c) => !hidden.includes(c.contact_id));
   const archived = visible.filter((c) => archivedList.includes(c.contact_id));
