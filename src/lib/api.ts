@@ -76,7 +76,8 @@ class ApiClient {
       !endpoint.includes('/auth/login') && 
       !endpoint.includes('/auth/register') &&
       !endpoint.startsWith('/api/health') &&
-      !endpoint.startsWith('/api/admin/auth/');
+      !endpoint.startsWith('/api/admin/auth/') &&
+      !endpoint.startsWith('/api/version');
 
     // ONLY add it if not already provided in options.headers
     if (token && !(options.headers as any)?.['Authorization']) {
