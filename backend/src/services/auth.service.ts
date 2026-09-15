@@ -74,13 +74,6 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
     throw new ValidationError('Password must be at least 8 characters long');
   }
 
-  const isPremiumWhitelisted = (lowerEmail: string): boolean =>
-    (env.PREMIUM_WHITELIST_EMAILS || '')
-      .split(/[;,]/)
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean)
-      .includes(lowerEmail);
-
   try {
     const lowerEmail = email.toLowerCase();
     const existingUser = await prisma.user.findUnique({
@@ -92,7 +85,6 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
     }
 
     const passwordHash = await hashPassword(password);
-    const plan: 'free' | 'premium' = isPremiumWhitelisted(lowerEmail) ? 'premium' : 'free';
 
     // Create user and quota in a transaction
     const newUser = await prisma.$transaction(async (tx) => {
@@ -100,7 +92,7 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
         data: {
           email: lowerEmail,
           passwordHash,
-          plan,
+          plan: 'free',
         },
       });
 

@@ -58,11 +58,6 @@ interface EnvConfig {
   SMTP_USER?: string;
   SMTP_PASSWORD?: string;
 
-  // Premium
-  // Emails bénéficiant automatiquement du plan premium à l'inscription
-  // (séparés par des virgules ou des points-virgules)
-  PREMIUM_WHITELIST_EMAILS?: string;
-
   // Secret partagé pour les opérations sensibles (ex: publication de version APK)
   // en remplacement du compte admin
   ADMIN_SECRET?: string;
@@ -164,9 +159,6 @@ export const env: EnvConfig = {
 
   // Logging
   LOG_LEVEL: getEnvVar('LOG_LEVEL', 'info'),
-
-  // Premium
-  PREMIUM_WHITELIST_EMAILS: process.env.PREMIUM_WHITELIST_EMAILS,
 
   // Secret partagé (ex: publication de version)
   ADMIN_SECRET: process.env.ADMIN_SECRET,
