@@ -6,8 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlanBadge } from "@/components/PlanBadge";
-import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield, Eye, Phone, KeyRound, Loader2, Trash2 } from "lucide-react";
+import { User, Bot, Smartphone, CreditCard, Settings as SettingsIcon, Shield, Eye, Phone, KeyRound, Loader2, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
+import { APP_VERSION_NAME, APP_VERSION_CODE } from "@/config/appVersion";
 import { useAuth } from "@/hooks/useAuth";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +43,49 @@ const Settings = () => {
   const [viewOnceEnabled, setViewOnceEnabled] = useState(true);
   const [isLoadingCommandConfig, setIsLoadingCommandConfig] = useState(true);
   const [isSavingCommandConfig, setIsSavingCommandConfig] = useState(false);
+
+  // App update check
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    hasUpdate: boolean;
+    latest: { versionName: string; versionCode: number; downloadUrl: string; notes?: string | null };
+  } | null>(null);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const res = await api.version.getLatest();
+      if (!res.success || !res.data || typeof res.data.versionCode !== 'number') {
+        toast.error('Impossible de vérifier les mises à jour');
+        return;
+      }
+      const latest = res.data;
+      const hasUpdate = latest.versionCode > APP_VERSION_CODE;
+      setUpdateInfo({ hasUpdate, latest });
+      if (hasUpdate) {
+        toast.success(`Nouvelle version disponible : ${latest.versionName}`);
+      } else {
+        toast.success('Vous disposez déjà de la dernière version');
+      }
+    } catch {
+      toast.error('Impossible de vérifier les mises à jour');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const openUpdateDownload = async () => {
+    if (!updateInfo?.latest.downloadUrl) return;
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: updateInfo.latest.downloadUrl });
+      } else {
+        window.open(updateInfo.latest.downloadUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      window.open(updateInfo.latest.downloadUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -605,6 +651,56 @@ const Settings = () => {
                     {isSavingCommandConfig ? 'Enregistrement...' : 'Enregistrer la configuration'}
                   </Button>
                 </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Mise à jour de l'application</CardTitle>
+              <CardDescription>
+                Version installée : {APP_VERSION_NAME} (code {APP_VERSION_CODE})
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+                className="w-full sm:w-auto"
+              >
+                {checkingUpdate ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Vérification...
+                  </>
+                ) : (
+                  'Vérifier les mises à jour'
+                )}
+              </Button>
+
+              {updateInfo && updateInfo.hasUpdate && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-gray-100 dark:bg-gray-800 px-4 py-3 text-sm">
+                    <p className="font-medium text-gray-900 dark:text-white mb-1">
+                      Nouvelle version disponible : {updateInfo.latest.versionName}
+                    </p>
+                    {updateInfo.latest.notes && (
+                      <pre className="whitespace-pre-line text-xs text-muted-foreground">
+                        {updateInfo.latest.notes}
+                      </pre>
+                    )}
+                  </div>
+                  <Button onClick={openUpdateDownload} className="w-full sm:w-auto">
+                    <Download className="w-4 h-4 mr-2" />
+                    Mettre à jour
+                  </Button>
+                </div>
+              )}
+
+              {updateInfo && !updateInfo.hasUpdate && (
+                <p className="text-sm text-muted-foreground">
+                  Vous utilisez la dernière version.
+                </p>
               )}
             </CardContent>
           </Card>

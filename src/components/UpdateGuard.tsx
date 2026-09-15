@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
@@ -14,49 +14,74 @@ interface LatestVersion {
   notes?: string | null;
 }
 
+const CHECK_INTERVAL_MS = 45000;
+
 export const UpdateGuard = () => {
   const [latest, setLatest] = useState<LatestVersion | null>(null);
   const [localCode, setLocalCode] = useState<number>(APP_VERSION_CODE);
   const [localName, setLocalName] = useState<string>(APP_VERSION_NAME);
-  const [checked, setChecked] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [dismissedCode, setDismissedCode] = useState<number | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  const readInstalledVersion = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      const info = await CapApp.getInfo();
+      const buildCode = parseInt(info.build, 10);
+      if (!Number.isNaN(buildCode)) setLocalCode(buildCode);
+      if (info.version) setLocalName(info.version);
+    } catch {
+      // fallback to build-time env values
+    }
+  }, []);
 
-    (async () => {
-      // Native (Capacitor): read the true installed version from the APK
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const info = await CapApp.getInfo();
-          const buildCode = parseInt(info.build, 10);
-          if (!Number.isNaN(buildCode)) setLocalCode(buildCode);
-          if (info.version) setLocalName(info.version);
-        } catch {
-          // fallback to build-time env values
-        }
-      }
-
-      // Compare with the version published in the DB
-      try {
-        const res = await apiClient.get<LatestVersion>('/api/version');
-        if (active && res.data && typeof res.data.versionCode === 'number') {
+  const refreshLatest = useCallback(async () => {
+    try {
+      const res = await apiClient.get<LatestVersion>('/api/version');
+      if (res && res.success && res.data && typeof res.data.versionCode === 'number') {
+        if (!latest || res.data.versionCode !== latest.versionCode) {
           setLatest(res.data);
         }
-      } catch {
-        // No version published yet / offline -> never block the app
       }
+    } catch {
+      // No version published yet / offline -> never block the app
+    }
+  }, [latest]);
 
-      if (active) setChecked(true);
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      await readInstalledVersion();
+      await refreshLatest();
+      if (mounted) setReady(true);
     })();
 
+    const interval = setInterval(() => {
+      void refreshLatest();
+    }, CHECK_INTERVAL_MS);
+
+    let resumeListener: { remove: () => void } | null = null;
+    if (Capacitor.isNativePlatform()) {
+      // Re-check when the app comes back to the foreground
+      CapApp.addListener('resume', () => {
+        void readInstalledVersion();
+        void refreshLatest();
+      }).then((listener) => {
+        resumeListener = listener;
+      }).catch(() => {});
+    }
+
     return () => {
-      active = false;
+      mounted = false;
+      clearInterval(interval);
+      resumeListener?.remove();
     };
-  }, []);
+  }, [readInstalledVersion, refreshLatest]);
 
   const openDownload = async () => {
     if (!latest) return;
+    const versionCode = latest.versionCode;
     try {
       if (Capacitor.isNativePlatform()) {
         await Browser.open({ url: latest.downloadUrl });
@@ -66,11 +91,12 @@ export const UpdateGuard = () => {
     } catch {
       window.open(latest.downloadUrl, '_blank', 'noopener,noreferrer');
     }
-    setDismissed(true);
+    setDismissedCode(versionCode);
   };
 
-  if (!checked || dismissed || !latest) return null;
+  if (!ready || !latest) return null;
   if (latest.versionCode <= localCode) return null;
+  if (dismissedCode === latest.versionCode) return null;
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -87,7 +113,7 @@ export const UpdateGuard = () => {
         </p>
 
         {latest.notes ? (
-          <div className="mb-6 rounded-xl bg-gray-50 dark:bg-gray-800 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line text-left max-h-40 overflow-y-auto">
+          <div className="mb-6 rounded-xl bg-gray-100 dark:bg-gray-800 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line text-left max-h-40 overflow-y-auto">
             {latest.notes}
           </div>
         ) : (
@@ -104,7 +130,7 @@ export const UpdateGuard = () => {
         </button>
 
         <button
-          onClick={() => setDismissed(true)}
+          onClick={() => setDismissedCode(latest.versionCode)}
           className="mt-3 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition"
         >
           Plus tard
