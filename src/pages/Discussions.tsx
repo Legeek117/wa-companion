@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -26,6 +26,8 @@ import {
   Mic,
   MoreVertical,
   Inbox,
+  Play,
+  Pause,
 } from "lucide-react";
 
 interface ConversationMessage {
@@ -51,6 +53,8 @@ interface ChatMessage {
   content: string | null;
   media_url: string | null;
   media_type: string | null;
+  quoted_message_id?: string | null;
+  quoted_content?: string | null;
   timestamp: string;
 }
 
@@ -408,7 +412,7 @@ export default function Discussions() {
   };
 
   return (
-    <div className="ios-fade-in mx-[-12px] sm:mx-[-16px] md:mx-[-24px] mt-[-12px] sm:mt-[-16px] md:mt-[-24px] h-[calc(100dvh-80px)] md:h-[calc(100dvh-64px)] flex rounded-b-[1.75rem] md:rounded-none overflow-hidden border border-border/60 shadow-glass">
+    <div className="ios-fade-in mx-[-12px] sm:mx-[-16px] md:mx-[-24px] mt-[-12px] sm:mt-[-16px] md:mt-[-24px] h-[calc(100dvh-144px)] sm:h-[calc(100dvh-160px)] md:h-[calc(100dvh-64px)] flex rounded-b-[1.75rem] md:rounded-none overflow-hidden border border-border/60 shadow-glass">
       {/* LEFT PANE */}
       <div
         className={cn(
@@ -754,6 +758,12 @@ function ChatPane({
     staleTime: 3 * 1000,
   });
 
+  const msgById = useMemo(() => {
+    const map = new Map<string, ChatMessage>();
+    for (const m of messages) map.set(m.message_id, m);
+    return map;
+  }, [messages]);
+
   useEffect(() => {
     onRead();
     scrollToBottom();
@@ -863,7 +873,16 @@ function ChatPane({
                     </span>
                   </div>
                 )}
-                <MessageBubble msg={m} grouped={grouped} />
+                <MessageBubble
+                  msg={m}
+                  grouped={grouped}
+                  contactName={conversation.contact_name}
+                  quotedFromMe={
+                    m.quoted_message_id
+                      ? msgById.get(m.quoted_message_id)?.from_me ?? null
+                      : null
+                  }
+                />
               </div>
             );
           })
@@ -904,9 +923,186 @@ function ChatPane({
   );
 }
 
-function MessageBubble({ msg, grouped }: { msg: ChatMessage; grouped: boolean }) {
+const formatAudioTime = (s: number) => {
+  if (!isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+};
+
+let activeAudioReference: HTMLAudioElement | null = null;
+
+const BAR_COUNT = 34;
+
+function VoiceNote({ src, fromMe }: { src: string; fromMe: boolean }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const [bars, setBars] = useState<number[]>(() =>
+    Array.from({ length: BAR_COUNT }, (_, i) => 0.35 + Math.abs(Math.sin(i * 1.7)) * 0.55)
+  );
+  const decodedRef = useRef(false);
+
+  const decodeWaveform = () => {
+    const el = audioRef.current;
+    if (!el || decodedRef.current) return;
+    decodedRef.current = true;
+    try {
+      fetch(src)
+        .then((r) => r.arrayBuffer())
+        .then((buf) => {
+          const Ctx =
+            (window as any).AudioContext || (window as any).webkitAudioContext;
+          if (!Ctx) return;
+          const ctx = new Ctx();
+          ctx.decodeAudioData(
+            buf,
+            (audio: AudioBuffer) => {
+              const data = audio.getChannelData(0);
+              const block = Math.max(1, Math.floor(data.length / BAR_COUNT));
+              const out: number[] = [];
+              for (let i = 0; i < BAR_COUNT; i++) {
+                let max = 0;
+                for (let j = 0; j < block; j++) {
+                  const v = Math.abs(data[i * block + j]);
+                  if (v > max) max = v;
+                }
+                out.push(Math.max(0.16, Math.min(1, max * 1.6)));
+              }
+              setBars(out);
+            },
+            () => {}
+          );
+        })
+        .catch(() => {});
+    } catch {
+      /* audio non décodable — on garde la forme par défaut */
+    }
+  };
+
+  const togglePlay = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) {
+      if (activeAudioReference && activeAudioReference !== el && !activeAudioReference.paused) {
+        activeAudioReference.pause();
+      }
+      activeAudioReference = el;
+      el.playbackRate = speed;
+      decodeWaveform();
+      el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+  };
+
+  const onTimeUpdate = () => {
+    const el = audioRef.current;
+    if (!el || !isFinite(el.duration) || el.duration <= 0) return;
+    setProgress(el.currentTime / el.duration);
+  };
+
+  const onEnded = () => {
+    setPlaying(false);
+    setProgress(0);
+  };
+
+  const bumpSpeed = () => {
+    const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
+    setSpeed(next);
+    const el = audioRef.current;
+    if (el) el.playbackRate = next;
+  };
+
+  const filled = Math.round(progress * bars.length);
+  const playBg = "bg-[#00a884]";
+  const barActive = fromMe ? "bg-white/90" : "bg-[#00a884]";
+  const barIdle = fromMe ? "bg-white/25" : "bg-[#8696a0]/45";
+  const timeColor = fromMe ? "text-white/75" : "text-[#8696a0]";
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[210px] max-w-[290px] select-none">
+      <button
+        onClick={togglePlay}
+        aria-label={playing ? "Pause" : "Lecture"}
+        className={cn(
+          "w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center shadow-sm transition-transform active:scale-90",
+          playBg
+        )}
+      >
+        {playing ? (
+          <Pause className="w-5 h-5 text-white fill-white" />
+        ) : (
+          <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+        )}
+      </button>
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
+        <div className="flex items-center gap-[2px] h-8">
+          {bars.map((h, i) => (
+            <span
+              key={i}
+              className={cn(
+                "flex-1 rounded-full transition-colors",
+                i < filled ? barActive : barIdle
+              )}
+              style={{ height: `${Math.round(h * 100)}%` }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center justify-between text-[10.5px] leading-none">
+          <span className={timeColor}>{formatAudioTime((playing ? progress : 1) * (duration || 0))}</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              bumpSpeed();
+            }}
+            className={cn(
+              "text-[10px] font-semibold tracking-wide hover:opacity-80",
+              fromMe ? "text-white/85" : "text-[#00a884]"
+            )}
+            aria-label="Vitesse de lecture"
+          >
+            {speed === 1 ? "1x" : speed === 1.5 ? "1.5x" : "2x"}
+          </button>
+        </div>
+      </div>
+      {!fromMe && <Mic className="w-4 h-4 text-[#8696a0] flex-shrink-0" />}
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="auto"
+        onTimeUpdate={onTimeUpdate}
+        onEnded={onEnded}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+      />
+    </div>
+  );
+}
+
+function MessageBubble({
+  msg,
+  grouped,
+  contactName = "",
+  quotedFromMe,
+}: {
+  msg: ChatMessage;
+  grouped: boolean;
+  contactName?: string;
+  quotedFromMe?: boolean | null;
+}) {
   const content = msg.content && msg.content !== "EMPTY" ? msg.content : null;
   const mediaUrl = buildMediaUrl(msg.media_url);
+  const quoteAuthor = msg.quoted_content
+    ? quotedFromMe === true
+      ? "Vous"
+      : quotedFromMe === false
+        ? contactName || "Message cité"
+        : "Message cité"
+    : "";
 
   return (
     <div className={cn("flex", msg.from_me ? "justify-end" : "justify-start", grouped ? "mt-[2px]" : "mt-2")}>
@@ -919,6 +1115,30 @@ function MessageBubble({ msg, grouped }: { msg: ChatMessage; grouped: boolean })
           grouped && (msg.from_me ? "rounded-br-2xl" : "rounded-bl-2xl")
         )}
       >
+        {msg.quoted_content && (
+          <div
+            className={cn(
+              "flex items-center gap-2 mb-1.5 rounded-r-lg border-l-[3px] bg-black/5 dark:bg-white/5 px-2 py-1 min-w-0",
+              msg.from_me ? "border-[#ffd279]" : "border-[#00a884]"
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <p
+                className={cn(
+                  "text-[11px] font-semibold truncate leading-tight",
+                  msg.from_me
+                    ? "text-[#667781] dark:text-[#53bdeb]"
+                    : "text-[#00a884]"
+                )}
+              >
+                {quoteAuthor}
+              </p>
+              <p className="text-[12.5px] leading-snug truncate text-[#667781] dark:text-[#8696a0]">
+                {msg.quoted_content}
+              </p>
+            </div>
+          </div>
+        )}
         {mediaUrl && msg.media_type === "image" && (
           <img
             src={mediaUrl}
@@ -930,9 +1150,7 @@ function MessageBubble({ msg, grouped }: { msg: ChatMessage; grouped: boolean })
         {mediaUrl && msg.media_type === "video" && (
           <video src={mediaUrl} controls className="rounded-xl max-h-80 w-full" />
         )}
-        {mediaUrl && msg.media_type === "audio" && (
-          <audio src={mediaUrl} controls className="w-full max-w-[260px]" />
-        )}
+        {mediaUrl && msg.media_type === "audio" && <VoiceNote src={mediaUrl} fromMe={msg.from_me} />}
         {!mediaUrl && msg.media_type && msg.media_type !== "text" && !content && (
           <div className="flex items-center gap-2 py-1 text-sm font-medium">
             {msg.media_type === "image" && <ImageIcon className="w-5 h-5" />}
@@ -991,7 +1209,13 @@ function PeekOverlay({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const peekMsgs = messages.slice(-8).reverse();
+  const peekMsgs = messages.slice(-8);
+
+  const peekById = useMemo(() => {
+    const map = new Map<string, ChatMessage>();
+    for (const m of messages) map.set(m.message_id, m);
+    return map;
+  }, [messages]);
 
   return (
     <div className="fixed inset-0 z-[90]" onClick={onClose}>
@@ -1015,7 +1239,17 @@ function PeekOverlay({
           {peekMsgs.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-6">Aucun message enregistré</p>
           ) : (
-            peekMsgs.map((m) => <MessageBubble key={m.id} msg={m} grouped={false} />)
+            peekMsgs.map((m) => (
+              <MessageBubble
+                key={m.id}
+                msg={m}
+                grouped={false}
+                contactName={conversation.contact_name}
+                quotedFromMe={
+                  m.quoted_message_id ? peekById.get(m.quoted_message_id)?.from_me ?? null : null
+                }
+              />
+            ))
           )}
         </div>
       </div>

@@ -10,6 +10,8 @@ export interface WhatsAppMessage {
   content?: string;
   media_url?: string;
   media_type?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker';
+  quoted_message_id?: string;
+  quoted_content?: string;
   timestamp: Date;
 }
 
@@ -31,6 +33,8 @@ export const upsertMessage = async (message: WhatsAppMessage): Promise<void> => 
         content: message.content,
         mediaUrl: message.media_url,
         mediaType: message.media_type,
+        quotedMessageId: message.quoted_message_id,
+        quotedContent: message.quoted_content,
         timestamp: message.timestamp,
       },
       create: {
@@ -41,6 +45,8 @@ export const upsertMessage = async (message: WhatsAppMessage): Promise<void> => 
         content: message.content,
         mediaUrl: message.media_url,
         mediaType: message.media_type,
+        quotedMessageId: message.quoted_message_id,
+        quotedContent: message.quoted_content,
         timestamp: message.timestamp,
       }
     });

@@ -3553,6 +3553,42 @@ const extractMessageContent = (message: any): string => {
 };
 
 const UNITS_PER_SECOND = 1000;
+const QUOTE_MEDIA_LABELS: Record<string, string> = {
+  image: '📷 Photo',
+  video: '🎥 Vidéo',
+  audio: '🎵 Message vocal',
+  document: '📄 Document',
+  sticker: '⏺ Sticker',
+};
+
+const extractQuoteContext = (message: any): { id: string; content: string } | null => {
+  const m = message?.message;
+  if (!m) return null;
+  const candidates: any[] = [];
+  if (m.extendedTextMessage) candidates.push(m.extendedTextMessage);
+  if (m.imageMessage) candidates.push(m.imageMessage);
+  if (m.videoMessage) candidates.push(m.videoMessage);
+  if (m.audioMessage) candidates.push(m.audioMessage);
+  if (m.documentMessage) candidates.push(m.documentMessage);
+  if (m.buttonsMessage) candidates.push(m.buttonsMessage);
+  if (m.templateMessage) candidates.push(m.templateMessage);
+  if (m.contactMessage) candidates.push(m.contactMessage);
+  if (m.locationMessage) candidates.push(m.locationMessage);
+  const vo = m.viewOnceMessage?.message;
+  if (vo?.imageMessage) candidates.push(vo.imageMessage);
+  if (vo?.videoMessage) candidates.push(vo.videoMessage);
+  if (vo?.audioMessage) candidates.push(vo.audioMessage);
+  for (const c of candidates) {
+    const quoteMsg = c?.contextInfo?.quotedMessage;
+    if (!quoteMsg) continue;
+    const content = extractMessageContent({ message: quoteMsg });
+    const qMedia = getMediaType({ message: quoteMsg });
+    const label = qMedia.type ? QUOTE_MEDIA_LABELS[qMedia.type] || '📎 Pièce jointe' : '';
+    return { id: c?.contextInfo?.stanzaId || '', content: content || label };
+  }
+  return null;
+};
+
 const toDateFromTimestamp = (ts: any): Date => {
   if (ts == null) return new Date();
   if (typeof ts === 'number') {
@@ -3705,6 +3741,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
               const mediaInfo = getMediaType(message);
               const mediaType = (mediaInfo.type || 'text') as any;
               const timestamp = toDateFromTimestamp(message.messageTimestamp);
+              const quoted = extractQuoteContext(message);
 
               await upsertMessage({
                 user_id: userId,
@@ -3713,6 +3750,8 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
                 from_me: !!message.key?.fromMe,
                 content: content,
                 media_type: mediaType,
+                quoted_message_id: quoted?.id,
+                quoted_content: quoted?.content,
                 timestamp: timestamp,
               });
 
@@ -3728,6 +3767,8 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
                         content: content,
                         media_url: url,
                         media_type: mediaType,
+                        quoted_message_id: quoted?.id,
+                        quoted_content: quoted?.content,
                         timestamp: timestamp,
                       });
                     }
@@ -3788,6 +3829,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
             const mediaInfo = getMediaType(message);
             const mediaType = (mediaInfo.type || 'text') as any;
             const timestamp = toDateFromTimestamp(message.messageTimestamp);
+            const quoted = extractQuoteContext(message);
             
             await upsertMessage({
               user_id: userId,
@@ -3796,6 +3838,8 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
               from_me: !!message.key?.fromMe,
               content: content,
               media_type: mediaType,
+              quoted_message_id: quoted?.id,
+              quoted_content: quoted?.content,
               timestamp: timestamp,
             });
           } catch (err) {

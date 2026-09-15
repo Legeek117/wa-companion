@@ -204,6 +204,8 @@ model WhatsappMessage {
   content   String?   @db.Text
   mediaUrl  String?   @map("media_url") @db.Text
   mediaType MediaType? @map("media_type")
+  quotedMessageId String? @map("quoted_message_id") @db.VarChar(255)
+  quotedContent   String? @map("quoted_content") @db.Text
   timestamp DateTime  @db.Timestamptz
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
