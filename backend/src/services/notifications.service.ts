@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { logger } from '../config/logger';
 import * as admin from 'firebase-admin';
+import * as fs from 'fs';
 
 // Initialize Firebase Admin (will be done in a separate file)
 let firebaseAdmin: admin.app.App | null = null;
@@ -34,17 +35,31 @@ export const initializeFirebaseAdmin = (): void => {
   }
 
   try {
-    // Firebase Admin will be initialized with service account credentials
-    // You need to download the service account key from Firebase Console
-    // and set it as an environment variable or in a config file
+    // Firebase Admin is initialized from a service account key
+    // (FIREBASE_SERVICE_ACCOUNT_PATH = chemin du fichier JSON monté dans le conteneur,
+    //  sinon FIREBASE_SERVICE_ACCOUNT = contenu JSON directement dans la variable)
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 
-    if (!serviceAccount) {
+    let serviceAccountJson: any = null;
+    if (serviceAccountPath) {
+      try {
+        serviceAccountJson = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+      } catch (fileErr) {
+        logger.warn(`[NotificationsService] Unable to read ${serviceAccountPath}:`, fileErr);
+        serviceAccountJson = null;
+      }
+    }
+
+    if (!serviceAccountJson && serviceAccount) {
+      serviceAccountJson = JSON.parse(serviceAccount);
+    }
+
+    if (!serviceAccountJson) {
       logger.warn('[NotificationsService] Firebase service account not configured. Push notifications will be disabled.');
       return;
     }
 
-    const serviceAccountJson = JSON.parse(serviceAccount);
     firebaseAdmin = admin.initializeApp({
       credential: admin.credential.cert(serviceAccountJson),
     });

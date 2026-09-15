@@ -29,3 +29,7 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Firebase (crédentials - ne jamais commiter)
+google-services.json
+backend/firebase-service-account.json
