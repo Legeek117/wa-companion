@@ -36,19 +36,40 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
   });
 
 const getFilename = (title: string, mimeType?: string): string => {
+  // MIME params are ignored: "audio/ogg; codecs=opus" -> "audio/ogg"
+  const normalized = (mimeType || '').split(';')[0].trim().toLowerCase();
   const extMap: Record<string, string> = {
     'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
     'image/png': 'png',
     'image/gif': 'gif',
     'image/webp': 'webp',
+    'image/bmp': 'bmp',
     'video/mp4': 'mp4',
     'video/3gpp': '3gp',
+    'video/quicktime': 'mov',
+    'video/webm': 'webm',
+    'video/x-msvideo': 'avi',
     'audio/ogg': 'ogg',
+    'audio/opus': 'opus',
     'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/aac': 'aac',
+    'audio/amr': 'amr',
+    'audio/mp4': 'm4a',
+    'audio/x-m4a': 'm4a',
     'application/pdf': 'pdf',
     'text/plain': 'txt',
+    'application/zip': 'zip',
+    'application/x-rar-compressed': 'rar',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
   };
-  const ext = (mimeType && extMap[mimeType.toLowerCase()]) || 'bin';
+  const ext = (normalized && extMap[normalized]) || 'bin';
   const baseName = title.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 60) || 'fichier';
   return `${baseName}.${ext}`;
 };

@@ -8,6 +8,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { MediaViewer } from "@/components/ui/media-viewer";
 import { Trash2, MessageSquare, Crown, Image as ImageIcon, FileText, Eye, Download, Clock, User, XCircle, Play, FileDown, Calendar } from "lucide-react";
 import { useDeletedMessages } from "@/hooks/useDeletedMessages";
+import { saveFileToDownloads } from "@/lib/download";
 import { useNavigate } from "react-router-dom";
 import { Loading } from "@/components/Loading";
 import { useState } from "react";
@@ -60,6 +61,22 @@ const DeletedMessages = () => {
   
   const savedCount = quota?.used || 0;
   const maxSaved = quota?.limit || 3;
+
+  const handleDownloadMedia = async (mediaUrl: string, title: string) => {
+    try {
+      const resp = await fetch(mediaUrl);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      const result = await saveFileToDownloads(blob, title, blob.type);
+      if (result.ok) {
+        toast.success(result.method === 'browser' ? 'Téléchargement démarré' : `Fichier enregistré (${result.method})`);
+      } else {
+        toast.error(result.error || 'Erreur lors du téléchargement');
+      }
+    } catch (error) {
+      toast.error('Erreur lors du téléchargement du média');
+    }
+  };
   
   // Pagination
   const itemsPerPage = 10;
@@ -240,7 +257,7 @@ const DeletedMessages = () => {
                                 size="sm"
                                 variant="ghost"
                                 className="text-xs h-auto py-2 px-4 rounded-lg gap-2 ios-scale ios-transition-fast"
-                                onClick={() => window.open(fullMediaUrl, '_blank')}
+                                onClick={() => handleDownloadMedia(fullMediaUrl, `${msg.sender_name} - ${sentDate.toLocaleDateString('fr-FR')}-${sentDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`)}
                               >
                                 <Download className="w-4 h-4" />
                                 <span>Télécharger</span>
@@ -299,6 +316,7 @@ const DeletedMessages = () => {
           isOpen={!!selectedMedia}
           onClose={() => setSelectedMedia(null)}
           title={selectedMedia.title}
+          onDownload={() => handleDownloadMedia(selectedMedia.url, selectedMedia.title)}
         />
       )}
     </div>

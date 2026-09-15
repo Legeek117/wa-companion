@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
+import { openSync, readSync, closeSync } from 'fs';
 import { env } from './config/env';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
@@ -121,6 +122,43 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static media files (deleted messages media)
 // Must be before rate limiting to avoid CORS issues
+
+// Sniff the content type of a file by reading its magic bytes.
+// Used as a fallback for files with an unknown/".bin" extension so they are
+// served (and played) correctly (ex: Ogg voice notes captured with "audio/ogg; codecs=opus").
+const sniffMediaContentType = (filePath: string): string | null => {
+  try {
+    const fd = openSync(filePath, 'r');
+    const buf = Buffer.alloc(16);
+    let bytesRead = 0;
+    try {
+      bytesRead = readSync(fd, buf, 0, 16, 0);
+    } finally {
+      closeSync(fd);
+    }
+    const head = buf.subarray(0, bytesRead);
+    if (head.length < 4) return null;
+
+    if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) return 'image/jpeg';
+    if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return 'image/png';
+    if (head.subarray(0, 6).toString('latin1') === 'GIF87a' || head.subarray(0, 6).toString('latin1') === 'GIF89a') return 'image/gif';
+    if (head.subarray(0, 4).toString('latin1') === 'RIFF' && head.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+    if (head.subarray(0, 2).toString('latin1') === 'BM') return 'image/bmp';
+    if (head.subarray(0, 4).toString('latin1') === 'OggS') return 'audio/ogg';
+    if (head.subarray(0, 4).equals(Buffer.from([0x1A, 0x45, 0xDF, 0xA3]))) return 'video/webm';
+    if (head.subarray(0, 3).toString('latin1') === 'ID3' || (head[0] === 0xFF && (head[1] & 0xE0) === 0xE0)) return 'audio/mpeg';
+    if (head.subarray(0, 4).toString('latin1') === 'ftyp') {
+      const brand = head.subarray(8, 12).toString('latin1');
+      return brand.includes('M4A') ? 'audio/x-m4a' : brand.includes('qt') ? 'video/quicktime' : 'video/mp4';
+    }
+    if (head.subarray(0, 5).toString('latin1') === '%PDF-') return 'application/pdf';
+    if (head.subarray(0, 4).toString('latin1') === 'PK\x03\x04') return 'application/zip';
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 app.use('/api/media/deleted-messages', (req, res, next): void => {
   // Set CORS headers first
   const origin = req.headers.origin;
@@ -168,7 +206,7 @@ app.use('/api/media/deleted-messages', (req, res, next): void => {
       '.rar': 'application/x-rar-compressed',
     };
     
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const contentType = mimeTypes[ext] || sniffMediaContentType(filePath) || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
   },
 }));
@@ -213,7 +251,7 @@ app.use('/api/media/view-once', (req, res, next): void => {
       '.wav': 'audio/wav',
     };
 
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const contentType = mimeTypes[ext] || sniffMediaContentType(filePath) || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
   },
 }));
@@ -258,7 +296,7 @@ app.use('/api/media/conversations', (req, res, next): void => {
       '.wav': 'audio/wav',
     };
 
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const contentType = mimeTypes[ext] || sniffMediaContentType(filePath) || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
   },
 }));
@@ -310,7 +348,7 @@ app.use('/uploads', (req, res, next): void => {
       '.rar': 'application/x-rar-compressed',
     };
 
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const contentType = mimeTypes[ext] || sniffMediaContentType(filePath) || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
   },
 }));

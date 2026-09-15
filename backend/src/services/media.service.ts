@@ -6,23 +6,35 @@ import { uploadMediaToCloudinary } from './cloudinaryStorage.service';
 
 /**
  * Get file extension from mime type
+ * Ignores MIME parameters (ex: "audio/ogg; codecs=opus" -> "audio/ogg")
  */
 export const getExtensionFromMimeType = (mimeType: string): string => {
+  const normalized = (mimeType || '').split(';')[0].trim().toLowerCase();
   const mimeToExt: Record<string, string> = {
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
     'image/png': 'png',
     'image/gif': 'gif',
     'image/webp': 'webp',
+    'image/bmp': 'bmp',
+    'image/tiff': 'tif',
     'video/mp4': 'mp4',
     'video/quicktime': 'mov',
     'video/x-msvideo': 'avi',
+    'video/webm': 'webm',
+    'video/3gpp': '3gp',
+    'video/x-matroska': 'mkv',
     'audio/mpeg': 'mp3',
     'audio/mp3': 'mp3',
     'audio/ogg': 'ogg',
+    'audio/opus': 'opus',
     'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
     'audio/aac': 'aac',
     'audio/amr': 'amr',
+    'audio/mp4': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/aiff': 'aiff',
     'application/pdf': 'pdf',
     'application/msword': 'doc',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
@@ -30,9 +42,11 @@ export const getExtensionFromMimeType = (mimeType: string): string => {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
     'application/zip': 'zip',
     'application/x-rar-compressed': 'rar',
+    'application/vnd.android.package-archive': 'apk',
+    'text/plain': 'txt',
   };
   
-  return mimeToExt[mimeType.toLowerCase()] || 'bin';
+  return mimeToExt[normalized] || 'bin';
 };
 
 /**
@@ -229,14 +243,24 @@ export const processAndUploadMedia = async (
     }
     
     // Generate unique filename with user ID, timestamp, and random string
+    // Prefer the original document filename extension, then MIME-derived one.
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 8);
-    const extension = getExtensionFromMimeType(mediaInfo.mimeType || 'application/octet-stream') ||
-                     mediaInfo.filename?.split('.').pop() || 
-                     (mediaInfo.type === 'image' ? 'jpg' : 
-                      mediaInfo.type === 'video' ? 'mp4' : 
-                      mediaInfo.type === 'audio' ? 'ogg' : 
-                      mediaInfo.type === 'document' ? 'bin' : 'webp');
+    const rawMime = (mediaInfo.mimeType || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+
+    let originalExt = '';
+    if (mediaInfo.type === 'document' && mediaInfo.filename?.includes('.')) {
+      const candidate = (mediaInfo.filename.split('.').pop() || '').toLowerCase();
+      if (/^[a-z0-9]{1,8}$/.test(candidate)) originalExt = candidate;
+    }
+
+    const defaultExtByType =
+      mediaInfo.type === 'image' ? 'jpg' :
+      mediaInfo.type === 'video' ? 'mp4' :
+      mediaInfo.type === 'audio' ? 'ogg' :
+      mediaInfo.type === 'document' ? 'bin' : 'webp';
+
+    const extension = originalExt || getExtensionFromMimeType(rawMime) || defaultExtByType;
     const filename = `${userId}_${timestamp}_${randomStr}.${extension}`;
     
     // Upload media (Supabase Storage or local fallback)
