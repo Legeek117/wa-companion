@@ -10,7 +10,7 @@ export interface NotificationPayload {
   body: string;
   image?: string;
   data?: {
-    type: 'new_message' | 'view_once' | 'status_liked' | 'deleted_message';
+    type: 'view_once' | 'status_liked' | 'deleted_message' | 'broadcast';
     id?: string;
     [key: string]: any;
   };

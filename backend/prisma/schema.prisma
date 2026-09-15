@@ -457,6 +457,31 @@ model FcmToken {
   @@map("fcm_tokens")
 }
 
+enum BroadcastType {
+  advertisement
+  reminder
+
+  @@map("broadcast_type")
+}
+
+model PushBroadcast {
+  id           String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title        String        @db.VarChar(120)
+  body         String        @db.Text
+  imageUrl     String?       @map("image_url") @db.Text
+  type         BroadcastType @default(advertisement)
+  target       String        @default("all") @db.VarChar(20) // "all" | "premium"
+  data         Json?         @db.JsonB
+  scheduledFor DateTime?     @map("scheduled_for") @db.Timestamptz
+  sentAt       DateTime?     @map("sent_at") @db.Timestamptz
+  status       String        @default("pending") @db.VarChar(20) // pending | sent | failed
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("push_broadcasts")
+}
+
 
 model StatusConfig {
   id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid

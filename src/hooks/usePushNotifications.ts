@@ -33,7 +33,7 @@ export function usePushNotifications(onTap?: NotificationTapHandler) {
 
           await PushNotifications.addListener("pushNotificationActionPerformed", (action: ActionPerformed) => {
             const data = (action.notification.data || {}) as Record<string, any>;
-            const type = (data.type as string) || "new_message";
+            const type = (data.type as string) || "unknown";
             console.log("[Push] Notification tapped:", type, data);
             onTapRef.current?.({ type, id: data.id, contactId: data.contactId });
           });

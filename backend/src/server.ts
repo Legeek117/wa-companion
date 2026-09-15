@@ -6,6 +6,7 @@ import { getRedisClient } from './config/redis';
 import { logEnvironmentStatus, checkEnvironmentVariables } from './config/check-env';
 import { reconnectAllSessionsForAllUsers, startWatchdog } from './services/whatsapp.service';
 import { initializeFirebaseAdmin } from './services/notifications.service';
+import { startBroadcastScheduler } from './services/broadcast.service';
 import { initializePairingQueue } from './services/pairingQueue.service';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -51,6 +52,7 @@ async function startServer(): Promise<void> {
     if (env.NODE_ENV !== 'test') {
       try {
         initializeFirebaseAdmin();
+        startBroadcastScheduler();
       } catch (error) {
         logger.warn('Firebase Admin initialization failed, push notifications will be disabled:', error);
       }

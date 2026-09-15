@@ -3,7 +3,7 @@ import { PushNotifications, PermissionStatus, PushNotificationSchema, ActionPerf
 import { api } from "@/lib/api";
 
 export interface IncomingPushData {
-  type: 'new_message' | 'view_once' | 'status_liked' | 'deleted_message' | 'unknown';
+  type: 'view_once' | 'status_liked' | 'deleted_message' | 'broadcast' | 'unknown';
   id?: string;
   contactId?: string;
   title: string;

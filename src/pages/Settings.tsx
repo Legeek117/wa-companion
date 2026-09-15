@@ -53,7 +53,6 @@ const Settings = () => {
 
   // Push notification settings
   const [notifEnabled, setNotifEnabled] = useState(true);
-  const [notifNewMessage, setNotifNewMessage] = useState(true);
   const [notifViewOnce, setNotifViewOnce] = useState(true);
   const [notifDeletedMessage, setNotifDeletedMessage] = useState(true);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
@@ -65,7 +64,6 @@ const Settings = () => {
       .then((res: any) => {
         if (res?.success && res.data) {
           setNotifEnabled(res.data.enabled !== false);
-          setNotifNewMessage(res.data.newMessage !== false);
           setNotifViewOnce(res.data.viewOnce !== false);
           setNotifDeletedMessage(res.data.deletedMessage !== false);
         }
@@ -79,7 +77,6 @@ const Settings = () => {
     try {
       const res: any = await api.notifications.updateSettings({
         enabled: notifEnabled,
-        newMessage: notifNewMessage,
         viewOnce: notifViewOnce,
         deletedMessage: notifDeletedMessage,
       });
@@ -359,13 +356,6 @@ const Settings = () => {
 
               {notifEnabled && (
                 <div className="space-y-3 rounded-lg border p-3 sm:p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <Label className="text-sm">Nouveaux messages</Label>
-                      <p className="text-xs text-muted-foreground">Un client vous écrit sur WhatsApp</p>
-                    </div>
-                    <Switch checked={notifNewMessage} onCheckedChange={setNotifNewMessage} disabled={isLoadingNotifications} />
-                  </div>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
                       <Label className="text-sm">Captures de messages éphémères</Label>

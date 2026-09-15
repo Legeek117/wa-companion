@@ -18,7 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 interface Notification {
   id: string;
-  type: 'new_message' | 'view_once' | 'status_liked' | 'deleted_message';
+  type: 'view_once' | 'status_liked' | 'deleted_message';
   title: string;
   body: string;
   imageUrl?: string;

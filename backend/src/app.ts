@@ -25,6 +25,7 @@ import quotaRoutes from './routes/quota.routes';
 import mediaRoutes from './routes/media.routes';
 import notificationsRoutes from './routes/notifications.routes';
 import versionRoutes from './routes/version.routes';
+import pushRoutes from './routes/push.routes';
 import logsRoutes from './routes/logs.routes';
 
 const app: Application = express();
@@ -459,6 +460,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api', versionRoutes);
+app.use('/api/push', pushRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

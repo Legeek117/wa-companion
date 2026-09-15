@@ -31,12 +31,12 @@ const DashboardLayout = () => {
   // Initialize push notifications
   usePushNotifications((data) => {
     const navMap: Record<string, string> = {
-      new_message: "/dashboard/discussions",
       view_once: "/dashboard/view-once",
       deleted_message: "/dashboard/deleted-messages",
       status_liked: "/dashboard/status",
+      broadcast: "/dashboard",
     };
-    const path = navMap[data.type] || "/dashboard/discussions";
+    const path = navMap[data.type] || "/dashboard";
     navigate(path);
   });
 

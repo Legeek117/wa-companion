@@ -135,7 +135,7 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
 
       return {
         enabled: settings.enabled !== false,
-        newMessage: settings.newMessage !== false,
+        newMessage: settings.newMessage === true,
         viewOnce: settings.viewOnce !== false,
         statusLiked: false,
         deletedMessage: settings.deletedMessage !== false,
@@ -145,7 +145,7 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
     // Default settings
     return {
       enabled: true,
-      newMessage: true,
+      newMessage: false,
       viewOnce: true,
       statusLiked: false,
       deletedMessage: true,
@@ -169,14 +169,14 @@ export const updateNotificationSettings = async (
       create: {
         userId,
         enabled: settings.enabled !== undefined ? settings.enabled : true,
-        newMessage: settings.newMessage !== undefined ? settings.newMessage : true,
+        newMessage: false,
         viewOnce: settings.viewOnce !== undefined ? settings.viewOnce : true,
         statusLiked: false,
         deletedMessage: settings.deletedMessage !== undefined ? settings.deletedMessage : true,
       },
       update: {
         enabled: settings.enabled !== undefined ? settings.enabled : undefined,
-        newMessage: settings.newMessage !== undefined ? settings.newMessage : undefined,
+        newMessage: false,
         viewOnce: settings.viewOnce !== undefined ? settings.viewOnce : undefined,
         statusLiked: false,
         deletedMessage: settings.deletedMessage !== undefined ? settings.deletedMessage : undefined,
@@ -282,6 +282,9 @@ export const sendPushNotification = async (
         notification: {
           sound: 'default',
           channelId: 'amda_notifications',
+          icon: 'ic_launcher',
+          color: '#25D366',
+          clickAction: 'OPEN_AMDA',
         },
       },
       webpush: {
