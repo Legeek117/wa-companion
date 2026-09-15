@@ -18,7 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 interface Notification {
   id: string;
-  type: 'view_once' | 'status_liked' | 'deleted_message';
+  type: 'new_message' | 'view_once' | 'status_liked' | 'deleted_message';
   title: string;
   body: string;
   imageUrl?: string;
@@ -87,7 +87,9 @@ export function NotificationsDropdown() {
 
     // Navigate to appropriate page
     let path = '/dashboard';
-    if (notification.type === 'view_once') {
+    if (notification.type === 'new_message') {
+      path = '/dashboard/discussions';
+    } else if (notification.type === 'view_once') {
       path = '/dashboard/view-once';
     } else if (notification.type === 'status_liked') {
       path = '/dashboard/status/list';

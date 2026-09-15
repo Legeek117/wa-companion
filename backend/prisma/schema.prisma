@@ -76,6 +76,7 @@ enum SubscriptionStatus {
 }
 
 enum NotificationType {
+  new_message
   view_once
   status_liked
   deleted_message
@@ -428,6 +429,7 @@ model NotificationSettings {
   id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   userId         String   @unique @map("user_id") @db.Uuid
   enabled        Boolean  @default(true)
+  newMessage     Boolean  @default(true) @map("new_message")
   viewOnce       Boolean  @default(true) @map("view_once")
   statusLiked    Boolean  @default(true) @map("status_liked")
   deletedMessage Boolean  @default(true) @map("deleted_message")

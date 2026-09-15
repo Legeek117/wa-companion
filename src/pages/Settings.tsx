@@ -51,6 +51,50 @@ const Settings = () => {
     latest: { versionName: string; versionCode: number; downloadUrl: string; notes?: string | null };
   } | null>(null);
 
+  // Push notification settings
+  const [notifEnabled, setNotifEnabled] = useState(true);
+  const [notifNewMessage, setNotifNewMessage] = useState(true);
+  const [notifViewOnce, setNotifViewOnce] = useState(true);
+  const [notifDeletedMessage, setNotifDeletedMessage] = useState(true);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  useEffect(() => {
+    api.notifications
+      .getSettings()
+      .then((res: any) => {
+        if (res?.success && res.data) {
+          setNotifEnabled(res.data.enabled !== false);
+          setNotifNewMessage(res.data.newMessage !== false);
+          setNotifViewOnce(res.data.viewOnce !== false);
+          setNotifDeletedMessage(res.data.deletedMessage !== false);
+        }
+      })
+      .catch((err: unknown) => console.warn('Failed to load notification settings:', err))
+      .finally(() => setIsLoadingNotifications(false));
+  }, []);
+
+  const handleSaveNotifications = async () => {
+    setIsSavingNotifications(true);
+    try {
+      const res: any = await api.notifications.updateSettings({
+        enabled: notifEnabled,
+        newMessage: notifNewMessage,
+        viewOnce: notifViewOnce,
+        deletedMessage: notifDeletedMessage,
+      });
+      if (res?.success) {
+        toast.success('Préférences de notification enregistrées');
+      } else {
+        toast.error('Échec de la sauvegarde des préférences');
+      }
+    } catch {
+      toast.error('Échec de la sauvegarde des préférences');
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
+
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
     try {
@@ -307,11 +351,41 @@ const Settings = () => {
                 <div className="space-y-0.5 flex-1">
                   <Label className="text-sm">Notifications Push</Label>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Recevoir des notifications pour les événements importants
+                    Recevoir des alertes sur votre téléphone (nouveaux messages, captures, …)
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch checked={notifEnabled} onCheckedChange={setNotifEnabled} disabled={isLoadingNotifications} />
               </div>
+
+              {notifEnabled && (
+                <div className="space-y-3 rounded-lg border p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <Label className="text-sm">Nouveaux messages</Label>
+                      <p className="text-xs text-muted-foreground">Un client vous écrit sur WhatsApp</p>
+                    </div>
+                    <Switch checked={notifNewMessage} onCheckedChange={setNotifNewMessage} disabled={isLoadingNotifications} />
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <Label className="text-sm">Captures de messages éphémères</Label>
+                      <p className="text-xs text-muted-foreground">Quand un message Vue Unique est capturé</p>
+                    </div>
+                    <Switch checked={notifViewOnce} onCheckedChange={setNotifViewOnce} disabled={isLoadingNotifications} />
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <Label className="text-sm">Messages supprimés</Label>
+                      <p className="text-xs text-muted-foreground">Quand un message est supprimé par l'expéditeur</p>
+                    </div>
+                    <Switch checked={notifDeletedMessage} onCheckedChange={setNotifDeletedMessage} disabled={isLoadingNotifications} />
+                  </div>
+                  <Button onClick={handleSaveNotifications} disabled={isLoadingNotifications || isSavingNotifications} className="mt-1">
+                    {isSavingNotifications ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Enregistrer les préférences
+                  </Button>
+                </div>
+              )}
 
               <Button onClick={handleSave}>Enregistrer</Button>
             </CardContent>

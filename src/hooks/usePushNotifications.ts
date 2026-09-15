@@ -1,51 +1,71 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
+import { PushNotifications, ActionPerformed, PushNotificationSchema } from "@capacitor/push-notifications";
 import { initializePushNotifications, deleteFCMToken } from "@/services/pushNotifications.service";
+import { initPush, createPushChannel, removePushListeners } from "@/services/pushCapacitor.service";
 import { useAuth } from "./useAuth";
 
-export function usePushNotifications() {
+type NotificationTapHandler = (data: { type: string; id?: string; contactId?: string }) => void;
+
+export function usePushNotifications(onTap?: NotificationTapHandler) {
   const { user, isAuthenticated } = useAuth();
   const [isInitialized, setIsInitialized] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
+  const onTapRef = useRef(onTap);
+  onTapRef.current = onTap;
 
   useEffect(() => {
-    // Check if browser supports notifications
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
-      setIsSupported(false);
-      return;
-    }
+    if (!isAuthenticated || !user || isInitialized) return;
 
-    setIsSupported(true);
+    if (Capacitor.isNativePlatform()) {
+      setIsSupported(true);
+      let disposed = false;
+      (async () => {
+        try {
+          await createPushChannel();
+          const token = await initPush();
+          if (disposed) return;
+          if (token) setIsInitialized(true);
 
-    // Initialize push notifications when user is authenticated
-    if (isAuthenticated && user && !isInitialized) {
-      initializePushNotifications()
-        .then(() => {
-          setIsInitialized(true);
-          console.log("Push notifications initialized");
-        })
-        .catch((error) => {
-          console.error("Failed to initialize push notifications:", error);
-        });
-    }
-
-    // Cleanup: Delete token when user logs out
-    return () => {
-      if (!isAuthenticated && isInitialized) {
-        deleteFCMToken()
-          .then(() => {
-            setIsInitialized(false);
-            console.log("Push notifications token deleted");
-          })
-          .catch((error) => {
-            console.error("Failed to delete push notifications token:", error);
+          await PushNotifications.addListener("pushNotificationReceived", (notif: PushNotificationSchema) => {
+            console.log("[Push] Foreground received:", notif);
           });
-      }
-    };
+
+          await PushNotifications.addListener("pushNotificationActionPerformed", (action: ActionPerformed) => {
+            const data = (action.notification.data || {}) as Record<string, any>;
+            const type = (data.type as string) || "new_message";
+            console.log("[Push] Notification tapped:", type, data);
+            onTapRef.current?.({ type, id: data.id, contactId: data.contactId });
+          });
+        } catch (error) {
+          console.error("[Push] Native init error:", error);
+        }
+      })();
+
+      return () => {
+        disposed = true;
+        removePushListeners();
+      };
+    }
+
+    if ("Notification" in window && "serviceWorker" in navigator) {
+      setIsSupported(true);
+      initializePushNotifications()
+        .then(() => setIsInitialized(true))
+        .catch((error) => console.error("Failed to initialize push notifications:", error));
+    }
   }, [isAuthenticated, user, isInitialized]);
 
-  return {
-    isSupported,
-    isInitialized,
-  };
-}
+  useEffect(() => {
+    if (!isAuthenticated && isInitialized) {
+      if (Capacitor.isNativePlatform()) {
+        removePushListeners();
+      } else {
+        deleteFCMToken().catch(() => {});
+      }
+      setIsInitialized(false);
+    }
+  }, [isAuthenticated, isInitialized]);
 
+  return { isSupported, isInitialized };
+}

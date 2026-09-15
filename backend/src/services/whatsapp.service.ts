@@ -3751,6 +3751,35 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         // Store message for deletion detection
         storeMessage(userId, message);
 
+        // Send push notification for new incoming direct messages
+        if (update.type === 'notify' && !message.key?.fromMe && !remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
+          try {
+            const contactDisplay = resolveContactDisplay(userId, remoteJid, message.pushName);
+            const textContent = extractMessageContent(message);
+            const mediaInfo = getMediaType(message);
+            const mediaLabels: Record<string, string> = {
+              image: '[Image]',
+              video: '[Vidéo]',
+              audio: '[Audio]',
+              document: '[Document]',
+              sticker: '[Sticker]',
+            };
+            const body = (textContent || (mediaInfo.type ? mediaLabels[mediaInfo.type] : '[Média]')).slice(0, 160);
+            const { sendPushNotification } = await import('./notifications.service');
+            await sendPushNotification(userId, {
+              title: contactDisplay.name,
+              body,
+              data: {
+                type: 'new_message',
+                id: messageId,
+                contactId: remoteJid,
+              },
+            }).catch(() => {});
+          } catch (err) {
+            logger.debug(`[WhatsApp] Push notification error for user ${userId}:`, err);
+          }
+        }
+
         // Handle autoresponder
         await handleIncomingMessage(userId, socket, message).catch((err: any) => {
           logger.error(`[WhatsApp] Error handling incoming message for user ${userId}:`, err);

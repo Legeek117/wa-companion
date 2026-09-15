@@ -29,7 +29,16 @@ const DashboardLayout = () => {
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   
   // Initialize push notifications
-  usePushNotifications();
+  usePushNotifications((data) => {
+    const navMap: Record<string, string> = {
+      new_message: "/dashboard/discussions",
+      view_once: "/dashboard/view-once",
+      deleted_message: "/dashboard/deleted-messages",
+      status_liked: "/dashboard/status",
+    };
+    const path = navMap[data.type] || "/dashboard/discussions";
+    navigate(path);
+  });
 
   const minSwipeDistance = 50;
 

@@ -23,7 +23,7 @@ export const saveFCMToken = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    await notificationsService.saveFCMToken(userId, token);
+    await notificationsService.saveFCMToken(userId, token, req.body.deviceInfo);
     res.json({
       success: true,
       message: 'FCM token saved successfully',
@@ -98,12 +98,13 @@ export const updateNotificationSettings = async (req: AuthRequest, res: Response
       return;
     }
 
-    const { enabled, viewOnce, statusLiked, deletedMessage } = req.body;
+    const { enabled, newMessage, viewOnce, statusLiked, deletedMessage } = req.body;
     const settings = await notificationsService.updateNotificationSettings(userId, {
-      enabled: enabled !== undefined ? enabled : true,
-      viewOnce: viewOnce !== undefined ? viewOnce : true,
-      statusLiked: statusLiked !== undefined ? statusLiked : true,
-      deletedMessage: deletedMessage !== undefined ? deletedMessage : true,
+      enabled: enabled !== undefined ? enabled : undefined,
+      newMessage: newMessage !== undefined ? newMessage : undefined,
+      viewOnce: viewOnce !== undefined ? viewOnce : undefined,
+      statusLiked: statusLiked !== undefined ? statusLiked : undefined,
+      deletedMessage: deletedMessage !== undefined ? deletedMessage : undefined,
     });
 
     res.json({

@@ -7,6 +7,7 @@ let firebaseAdmin: admin.app.App | null = null;
 
 export interface NotificationSettings {
   enabled: boolean;
+  newMessage: boolean;
   viewOnce: boolean;
   statusLiked: boolean;
   deletedMessage: boolean;
@@ -17,8 +18,9 @@ export interface NotificationPayload {
   body: string;
   image?: string;
   data?: {
-    type: 'view_once' | 'status_liked' | 'deleted_message';
+    type: 'new_message' | 'view_once' | 'status_liked' | 'deleted_message';
     id?: string;
+    contactId?: string;
     [key: string]: any;
   };
 }
@@ -118,6 +120,7 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
 
       return {
         enabled: settings.enabled !== false,
+        newMessage: settings.newMessage !== false,
         viewOnce: settings.viewOnce !== false,
         statusLiked: false,
         deletedMessage: settings.deletedMessage !== false,
@@ -127,6 +130,7 @@ export const getNotificationSettings = async (userId: string): Promise<Notificat
     // Default settings
     return {
       enabled: true,
+      newMessage: true,
       viewOnce: true,
       statusLiked: false,
       deletedMessage: true,
@@ -150,12 +154,14 @@ export const updateNotificationSettings = async (
       create: {
         userId,
         enabled: settings.enabled !== undefined ? settings.enabled : true,
+        newMessage: settings.newMessage !== undefined ? settings.newMessage : true,
         viewOnce: settings.viewOnce !== undefined ? settings.viewOnce : true,
         statusLiked: false,
         deletedMessage: settings.deletedMessage !== undefined ? settings.deletedMessage : true,
       },
       update: {
         enabled: settings.enabled !== undefined ? settings.enabled : undefined,
+        newMessage: settings.newMessage !== undefined ? settings.newMessage : undefined,
         viewOnce: settings.viewOnce !== undefined ? settings.viewOnce : undefined,
         statusLiked: false,
         deletedMessage: settings.deletedMessage !== undefined ? settings.deletedMessage : undefined,
@@ -164,6 +170,7 @@ export const updateNotificationSettings = async (
 
     return {
       enabled: updated.enabled !== false,
+      newMessage: updated.newMessage !== false,
       viewOnce: updated.viewOnce !== false,
       statusLiked: false,
       deletedMessage: updated.deletedMessage !== false,
@@ -207,6 +214,9 @@ export const sendPushNotification = async (
     }
 
     // Check if this notification type is enabled
+    if (payload.data?.type === 'new_message' && !settings.newMessage) {
+      return false;
+    }
     if (payload.data?.type === 'view_once' && !settings.viewOnce) {
       return false;
     }

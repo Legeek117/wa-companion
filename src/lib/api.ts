@@ -385,10 +385,10 @@ export const api = {
 
   // Notifications
   notifications: {
-    saveToken: (data: { token: string }) => apiClient.post('/api/notifications/token', data),
+    saveToken: (data: { token: string; deviceInfo?: any }) => apiClient.post('/api/notifications/token', data),
     deleteToken: () => apiClient.delete('/api/notifications/token'),
     getSettings: () => apiClient.get('/api/notifications/settings'),
-    updateSettings: (settings: { enabled: boolean; viewOnce?: boolean; statusLiked?: boolean; deletedMessage?: boolean }) =>
+    updateSettings: (settings: { enabled: boolean; newMessage?: boolean; viewOnce?: boolean; statusLiked?: boolean; deletedMessage?: boolean }) =>
       apiClient.put('/api/notifications/settings', settings),
     list: (limit?: number, unreadOnly?: boolean) => 
       apiClient.get(`/api/notifications${limit || unreadOnly ? `?${limit ? `limit=${limit}` : ''}${limit && unreadOnly ? '&' : ''}${unreadOnly ? 'unreadOnly=true' : ''}` : ''}`),
