@@ -50,7 +50,7 @@ router.post('/broadcast', requireSecret, async (req: Request, res: Response): Pr
       success: true,
       data: {
         id: broadcast.id,
-        status: broadcast.status,
+        status: broadcast.scheduledFor ? 'pending' : 'sent',
         sent,
       },
     });

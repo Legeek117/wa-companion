@@ -27,8 +27,8 @@ export const createBroadcast = async (input: CreateBroadcastInput) =>
       target: input.target ?? 'all',
       scheduledFor: input.scheduledFor ?? null,
       data: input.data ?? undefined,
-      status: input.scheduledFor ? 'pending' : 'sent',
-      sentAt: input.scheduledFor ? null : new Date(),
+      status: 'pending',
+      sentAt: null,
     },
   });
 
