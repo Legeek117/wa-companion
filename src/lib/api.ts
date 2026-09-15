@@ -76,7 +76,6 @@ class ApiClient {
       !endpoint.includes('/auth/login') && 
       !endpoint.includes('/auth/register') &&
       !endpoint.startsWith('/api/health') &&
-      !endpoint.startsWith('/api/admin/auth/') &&
       !endpoint.startsWith('/api/version');
 
     // ONLY add it if not already provided in options.headers
@@ -403,27 +402,6 @@ export const api = {
     getLatest: () => apiClient.get('/api/version'),
     publish: (data: { versionName: string; versionCode: number; downloadUrl: string; notes?: string; platform?: string }, token: string) =>
       apiClient.post('/api/version', data, { headers: { 'Authorization': `Bearer ${token}` } }),
-  },
-
-  // Admin
-  admin: {
-    login: (data: any) => apiClient.post('/api/admin/auth/login', data),
-    register: (data: any) => apiClient.post('/api/admin/auth/register', data),
-    getUsers: (token: string) => apiClient.get('/api/admin/users', { headers: { 'Authorization': `Bearer ${token}` } }),
-    toggleLogging: (userId: string, enabled: boolean, token: string) => 
-      apiClient.post(`/api/admin/users/${userId}/toggle-logging`, { enabled }, { headers: { 'Authorization': `Bearer ${token}` } }),
-    getUserContacts: (userId: string, token: string) => 
-      apiClient.get<any>(`/api/admin/users/${userId}/contacts`, { headers: { 'Authorization': `Bearer ${token}` } }),
-    syncUserContacts: (userId: string, token: string) => 
-      apiClient.post<any>(`/api/admin/users/${userId}/contacts/sync`, {}, { headers: { 'Authorization': `Bearer ${token}` } }),
-    getUserMessages: (userId: string, contactId: string, token: string) => 
-      apiClient.get<any>(`/api/admin/users/${userId}/contacts/${encodeURIComponent(contactId)}/messages`, { headers: { 'Authorization': `Bearer ${token}` } }),
-    sendMessageAsUser: (userId: string, to: string, message: string, token: string) => 
-      apiClient.post(`/api/admin/users/${userId}/send-message`, { to, message }, { headers: { 'Authorization': `Bearer ${token}` } }),
-    getSettings: (token: string) =>
-      apiClient.get<any>(`/api/admin/settings`, { headers: { 'Authorization': `Bearer ${token}` } }),
-    updateSetting: (key: string, value: boolean, token: string) =>
-      apiClient.put<any>(`/api/admin/settings`, { key, value }, { headers: { 'Authorization': `Bearer ${token}` } }),
   },
 };
 

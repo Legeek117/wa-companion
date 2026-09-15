@@ -12,7 +12,7 @@
 #
 # Usage:
 #   VERSION_NAME=1.1 VERSION_CODE=2 NOTES="Corrections..." \
-#   ADMIN_EMAIL=... ADMIN_PASSWORD=... \
+#   ADMIN_SECRET=<secret> \
 #   DOWNLOAD_URL="https://.../AMDA-v1.1.apk" \
 #   ./scripts/release.sh
 #
@@ -29,8 +29,7 @@ VERSION_NAME="${VERSION_NAME:-}"
 VERSION_CODE="${VERSION_CODE:-}"
 NOTES="${NOTES:-}"
 DOWNLOAD_URL="${DOWNLOAD_URL:-}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
+ADMIN_SECRET="${ADMIN_SECRET:-}"
 API_URL="${API_URL:-https://amda.180.149.197.43.nip.io}"
 
 if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
@@ -44,8 +43,8 @@ if [ -z "$DOWNLOAD_URL" ]; then
   exit 1
 fi
 
-if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
-  echo "❌ ADMIN_EMAIL et ADMIN_PASSWORD sont requis (pour publier la version en BDD)."
+if [ -z "$ADMIN_SECRET" ]; then
+  echo "❌ ADMIN_SECRET est requis (secret partagé pour publier la version en BDD)."
   exit 1
 fi
 
@@ -91,15 +90,6 @@ echo "✅ APK copié: $APK_DEST ($(du -h "$APK_DEST" | cut -f1))"
 
 # 5. Publier la version en BDD -------------------------------------------------
 echo "🌐 Publication de la version sur l'API ($API_URL)..."
-LOGIN_JSON="$(curl -sS -X POST "$API_URL/api/admin/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")"
-
-TOKEN="$(printf '%s' "$LOGIN_JSON" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
-if [ -z "$TOKEN" ]; then
-  echo "❌ Échec du login admin : $LOGIN_JSON"
-  exit 1
-fi
 
 PAYLOAD="$(node -e "
 const p = JSON.parse(require('fs').readFileSync(0, 'utf8'));
@@ -114,7 +104,7 @@ console.log(JSON.stringify(p));
 
 RESP="$(curl -sS -X POST "$API_URL/api/version" \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $ADMIN_SECRET" \
   -d "$PAYLOAD")"
 echo "$RESP" | grep -q '"success":true' && echo "✅ Version publiée en BDD." || { echo "⚠️ Réponse API : $RESP"; }
 

@@ -63,6 +63,10 @@ interface EnvConfig {
   // (séparés par des virgules ou des points-virgules)
   PREMIUM_WHITELIST_EMAILS?: string;
 
+  // Secret partagé pour les opérations sensibles (ex: publication de version APK)
+  // en remplacement du compte admin
+  ADMIN_SECRET?: string;
+
   // Logging
   LOG_LEVEL: string;
 }
@@ -163,5 +167,8 @@ export const env: EnvConfig = {
 
   // Premium
   PREMIUM_WHITELIST_EMAILS: process.env.PREMIUM_WHITELIST_EMAILS,
+
+  // Secret partagé (ex: publication de version)
+  ADMIN_SECRET: process.env.ADMIN_SECRET,
 };
 

@@ -92,6 +92,8 @@ services:
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
       # ── Premium automatique à l'inscription (séparés par , ou ;) ──
       PREMIUM_WHITELIST_EMAILS: ${PREMIUM_WHITELIST_EMAILS:-}
+      # ── Secret partagé (publication de version APK, remplace l'admin) ──
+      ADMIN_SECRET: ${ADMIN_SECRET:-}
     volumes:
       - backend_uploads:/app/uploads
       - backend_sessions:/app/sessions

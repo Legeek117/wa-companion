@@ -22,9 +22,6 @@ import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
-import Admin from "./pages/Admin";
-import AdminAuth from "./pages/AdminAuth";
-import WhatsAppClone from "./pages/WhatsAppClone";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import NotFound from "./pages/NotFound";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
@@ -45,9 +42,6 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/admin/auth" element={<AdminAuth />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/admin/user/:userId" element={<WhatsAppClone />} />
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="connect" element={<Connect />} />
