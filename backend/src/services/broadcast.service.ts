@@ -53,7 +53,10 @@ export const listBroadcasts = (limit = 50) =>
 // ── Envoi ───────────────────────────────────────────────────
 
 const getAllUserTokens = async (target: 'all' | 'premium') => {
-  const where: any = { notificationSettings: { isNot: null, enabled: true } };
+  const where: any = {
+    // Users sans réglages (défaut activé) OU avec réglages activés
+    notificationSettings: { isNot: { enabled: false } },
+  };
 
   if (target === 'premium') {
     where.plan = 'premium';
