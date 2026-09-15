@@ -66,6 +66,11 @@ echo "✅ build.gradle: versionCode=$VERSION_CODE, versionName=\"$VERSION_NAME\"
 echo "🔨 Build frontend (VITE_APP_VERSION=$VERSION_NAME, VITE_APP_VERSION_CODE=$VERSION_CODE)..."
 VITE_APP_VERSION="$VERSION_NAME" VITE_APP_VERSION_CODE="$VERSION_CODE" npm run build
 
+# 2bis. Synchroniser Capacitor (copie dist/ → android/app/src/main/assets/public)
+# Sans cette étape, l'APK embarque un ancien bundle web !
+echo "🔁 Sync Capacitor (copie du bundle dans le projet Android)..."
+npx cap sync android
+
 # 3. Build APK -----------------------------------------------------------------
 echo "📦 Build APK (gradle)..."
 ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/sdk}"
