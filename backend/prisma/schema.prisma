@@ -492,3 +492,20 @@ model AdminSetting {
 
   @@map("admin_settings")
 }
+
+model AppVersion {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  platform    String   @default("android") @db.VarChar(50)
+  versionName String   @map("version_name") @db.VarChar(255)
+  versionCode Int      @map("version_code")
+  downloadUrl String   @map("download_url") @db.Text
+  notes       String?  @db.Text
+  isLatest    Boolean  @default(true) @map("is_latest")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([platform])
+  @@index([isLatest])
+  @@index([versionCode])
+  @@map("app_versions")
+}

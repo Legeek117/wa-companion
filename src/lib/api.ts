@@ -397,6 +397,13 @@ export const api = {
     markAllAsRead: () => apiClient.put('/api/notifications/read-all'),
   },
 
+  // App version (update check)
+  version: {
+    getLatest: () => apiClient.get('/api/version'),
+    publish: (data: { versionName: string; versionCode: number; downloadUrl: string; notes?: string; platform?: string }, token: string) =>
+      apiClient.post('/api/version', data, { headers: { 'Authorization': `Bearer ${token}` } }),
+  },
+
   // Admin
   admin: {
     login: (data: any) => apiClient.post('/api/admin/auth/login', data),

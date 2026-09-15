@@ -23,6 +23,7 @@ import analyticsRoutes from './routes/analytics.routes';
 import quotaRoutes from './routes/quota.routes';
 import mediaRoutes from './routes/media.routes';
 import notificationsRoutes from './routes/notifications.routes';
+import versionRoutes from './routes/version.routes';
 import adminRoutes from './routes/admin.routes';
 import logsRoutes from './routes/logs.routes';
 
@@ -421,6 +422,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/logs', logsRoutes);
+app.use('/api', versionRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
