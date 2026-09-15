@@ -1,7 +1,7 @@
 #!/bin/sh
 # ─────────────────────────────────────────────────────────────
 # Entrypoint du conteneur AMDA Backend
-# Ordre : db push → seed admins → démarrage serveur
+# Ordre : db push → démarrage serveur
 # ─────────────────────────────────────────────────────────────
 set -e
 
@@ -15,15 +15,7 @@ echo "📦 [Entrypoint] Application du schéma Prisma (db push)..."
 npx prisma db push --skip-generate --accept-data-loss
 echo "✅ [Entrypoint] Schéma appliqué"
 
-# ── 2. Créer les comptes admin (idempotent) ───────────────────
-echo ""
-echo "👤 [Entrypoint] Initialisation des comptes admin..."
-node dist/scripts/seed-admins.js 2>/dev/null || \
-  npx ts-node --skipProject scripts/seed-admins.ts 2>/dev/null || \
-  echo "⚠️  [Entrypoint] Seed admin ignoré (sera relancé au prochain démarrage)"
-echo "✅ [Entrypoint] Comptes admin prêts"
-
-# ── 3. Démarrer le serveur ────────────────────────────────────
+# ── 2. Démarrer le serveur ────────────────────────────────────
 echo ""
 echo "🌐 [Entrypoint] Démarrage du serveur Express..."
 exec node dist/server.js

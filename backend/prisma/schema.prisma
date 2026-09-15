@@ -122,17 +122,6 @@ model User {
   @@map("users")
 }
 
-model Admin {
-  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  email        String   @unique @db.VarChar(255)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
-
-  @@index([email])
-  @@map("admins")
-}
-
 model Subscription {
   id                  String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   userId              String               @map("user_id") @db.Uuid
