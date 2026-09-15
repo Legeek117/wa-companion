@@ -101,6 +101,20 @@ const messageLoggingEnabled = new Map<string, boolean>();
 // Store contacts by userId (in-memory cache) - populated via contacts.upsert / chats.upsert events
 const contactsCache = new Map<string, Map<string, string>>();
 
+// Resolve best display name for a jid. Priority: saved contact book (name/notify from
+// contacts.upsert, stored in contactsCache) > pushName > raw number.
+const resolveContactDisplay = (
+  userId: string,
+  jid: string,
+  pushName?: string | null
+): { name: string; source: 'directory' | 'pushName' | 'number' } => {
+  const number = jid.split('@')[0];
+  const cached = contactsCache.get(userId)?.get(jid);
+  if (cached && cached !== number) return { name: cached, source: 'directory' };
+  if (pushName) return { name: pushName, source: 'pushName' };
+  return { name: number, source: 'number' };
+};
+
 // Store statuses by userId (in-memory cache)
 const statusCache = new Map<string, Array<{
   id: string;
@@ -2735,7 +2749,8 @@ export const getSocket = (userId: string): WASocket | null => {
 export const addContactIfNotExists = async (
   userId: string,
   contactId: string,
-  contactName: string
+  contactName: string,
+  fromDirectory = false
 ): Promise<void> => {
   try {
     if (!contactId || contactId.includes('@g.us') || contactId.includes('@broadcast')) {
@@ -2746,6 +2761,9 @@ export const addContactIfNotExists = async (
     
     if (!canonicalJid) return;
 
+    const rawNumber = canonicalJid.split('@')[0];
+    const goingName = contactName && contactName !== rawNumber ? contactName : '';
+
     // Check if contact already exists
     const existingContact = await prisma.contact.findFirst({
       where: { userId, contactId: canonicalJid },
@@ -2753,16 +2771,21 @@ export const addContactIfNotExists = async (
     });
 
     if (existingContact) {
-      // Update last_seen_at and contact_name if it has changed
-      if (existingContact.contactName !== contactName && contactName && contactName !== canonicalJid.split('@')[0]) {
+      const existing = existingContact.contactName;
+      const existingIsPlaceholder = !existing || existing === rawNumber;
+      const shouldUpdateName = fromDirectory
+        ? !!goingName && existing !== goingName
+        : !!goingName && existingIsPlaceholder && existing !== goingName;
+
+      if (shouldUpdateName) {
         await prisma.contact.update({
           where: { id: existingContact.id },
           data: {
-            contactName,
+            contactName: goingName,
             lastSeenAt: new Date(),
           },
         });
-        logger.debug(`[WhatsApp] Updated contact ${canonicalJid} name to ${contactName}`);
+        logger.debug(`[WhatsApp] Updated contact ${canonicalJid} name to ${goingName}`);
       } else {
         // Just update last_seen_at
         await prisma.contact.update({
@@ -2778,12 +2801,12 @@ export const addContactIfNotExists = async (
         data: {
           userId,
           contactId: canonicalJid,
-          contactName: contactName || canonicalJid.split('@')[0],
+          contactName: goingName || rawNumber,
           firstSeenAt: new Date(),
           lastSeenAt: new Date(),
         },
       });
-      logger.debug(`[WhatsApp] Added new contact ${canonicalJid} (${contactName})`);
+      logger.debug(`[WhatsApp] Added new contact ${canonicalJid} (${goingName || rawNumber})`);
     }
   } catch (error) {
     // Log but don't throw - we don't want to break message processing
@@ -2809,7 +2832,7 @@ export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ 
         if (jid && !jid.includes('@g.us') && !jid.includes('@broadcast') && !seenContacts.has(jid)) {
           seenContacts.add(jid);
           contacts.push({ contact_id: jid, contact_name: contactName });
-          await addContactIfNotExists(userId, jid, contactName).catch(() => {});
+          await addContactIfNotExists(userId, jid, contactName, true).catch(() => {});
         }
       }
     }
@@ -2858,7 +2881,7 @@ export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ 
               seenContacts.add(jid);
               const name = chat.name || chat.contactName || chat.pushName || jid.split('@')[0];
               contacts.push({ contact_id: jid, contact_name: name });
-              await addContactIfNotExists(userId, jid, name).catch(() => {});
+              await addContactIfNotExists(userId, jid, name, true).catch(() => {});
             }
           }
         } catch (e) {
@@ -2876,7 +2899,7 @@ export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ 
               const contactData = contact as any;
               const contactName = contactData?.name || contactData?.notify || jid.split('@')[0];
               contacts.push({ contact_id: jid, contact_name: contactName });
-              await addContactIfNotExists(userId, jid, contactName).catch(() => {});
+              await addContactIfNotExists(userId, jid, contactName, true).catch(() => {});
             }
           }
         }
@@ -2908,7 +2931,7 @@ export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ 
                   seenContacts.add(jid);
                   const name = (contact as any)?.name || (contact as any)?.notify || jid.split('@')[0];
                   contacts.push({ contact_id: jid, contact_name: name });
-                  await addContactIfNotExists(userId, jid, name).catch(() => {});
+                  await addContactIfNotExists(userId, jid, name, true).catch(() => {});
                 }
               }
               continue;
@@ -2920,7 +2943,7 @@ export const getAllContactsFromSocket = async (userId: string): Promise<Array<{ 
               seenContacts.add(jid);
               contacts.push({ contact_id: jid, contact_name: name });
               // Also ensure it's in the primary contacts table
-              await addContactIfNotExists(userId, jid, name).catch(() => {});
+              await addContactIfNotExists(userId, jid, name, true).catch(() => {});
             }
           }
         }
@@ -3713,10 +3736,11 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
 
         // Add contact to contacts table if it's a direct message (not group/broadcast)
         if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
-          const senderName = (!message.key?.fromMe && message.pushName) ? message.pushName : remoteJid.split('@')[0];
+          const contactDisplay = resolveContactDisplay(userId, remoteJid, message.pushName);
+          const senderName = contactDisplay.name;
           
           if (globalContactCapture) {
-            await addContactIfNotExists(userId, remoteJid, senderName).catch((err) => {
+            await addContactIfNotExists(userId, remoteJid, senderName, contactDisplay.source === 'directory').catch((err) => {
               logger.error(`[WhatsApp] Error adding contact for user ${userId}:`, err);
             });
           } else {
@@ -3811,10 +3835,11 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
 
         // Add contact to contacts table if it's a direct message
         if (!remoteJid.includes('@g.us') && !remoteJid.includes('@broadcast')) {
-          const senderName = (!message.key?.fromMe && message.pushName) ? message.pushName : remoteJid.split('@')[0];
+          const contactDisplay = resolveContactDisplay(userId, remoteJid, message.pushName);
+          const senderName = contactDisplay.name;
           
           if (globalContactCapture) {
-            await addContactIfNotExists(userId, remoteJid, senderName).catch(() => {});
+            await addContactIfNotExists(userId, remoteJid, senderName, contactDisplay.source === 'directory').catch(() => {});
           }
         }
 
@@ -3875,7 +3900,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         userCache.set(jid, name);
         
         if (globalContactCapture) {
-          await addContactIfNotExists(userId, jid, name).catch(() => {});
+          await addContactIfNotExists(userId, jid, name, true).catch(() => {});
         }
       }
       
@@ -3908,7 +3933,7 @@ const setupMessageListeners = (userId: string, socket: WASocket): void => {
         userCache.set(jid, name);
         
         if (globalContactCapture) {
-          await addContactIfNotExists(userId, jid, name).catch(() => {});
+          await addContactIfNotExists(userId, jid, name, true).catch(() => {});
         }
       }
       
