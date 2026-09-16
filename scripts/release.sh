@@ -31,6 +31,8 @@ NOTES="${NOTES:-}"
 DOWNLOAD_URL="${DOWNLOAD_URL:-}"
 ADMIN_SECRET="${ADMIN_SECRET:-}"
 API_URL="${API_URL:-https://amda.180.149.197.43.nip.io}"
+# URL d'API figée dans le bundle au build. Par défaut = URL de prod (jamais localhost).
+VITE_API_URL="${VITE_API_URL:-$API_URL}"
 
 if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
   echo "❌ VERSION_NAME et VERSION_CODE sont requis."
@@ -63,10 +65,22 @@ fi
 echo "✅ build.gradle: versionCode=$VERSION_CODE, versionName=\"$VERSION_NAME\""
 
 # 2. Build frontend -----------------------------------------------------------
-echo "🔨 Build frontend (VITE_APP_VERSION=$VERSION_NAME, VITE_APP_VERSION_CODE=$VERSION_CODE)..."
-VITE_APP_VERSION="$VERSION_NAME" VITE_APP_VERSION_CODE="$VERSION_CODE" npm run build
+echo "🔨 Build frontend (VITE_APP_VERSION=$VERSION_NAME, VITE_APP_VERSION_CODE=$VERSION_CODE, VITE_API_URL=$VITE_API_URL)..."
+VITE_API_URL="$VITE_API_URL" VITE_APP_VERSION="$VERSION_NAME" VITE_APP_VERSION_CODE="$VERSION_CODE" npm run build
 
-# 2bis. Synchroniser Capacitor (copie dist/ → android/app/src/main/assets/public)
+# 2bis. Garde-fou : l'URL d'API doit être présente et correcte dans le bundle
+echo "🔎 Vérification de l'URL d'API dans le bundle..."
+if ! grep -rq "$VITE_API_URL" dist/assets/*.js; then
+  echo "❌ L'URL d'API ($VITE_API_URL) est absente du bundle. Build interrompu."
+  exit 1
+fi
+if grep -rqE "http://localhost:3000|127\.0\.0\.1:3000" dist/assets/*.js; then
+  echo "❌ Le bundle contient une URL localhost. Build interrompu."
+  exit 1
+fi
+echo "✅ URL d'API OK ($VITE_API_URL)."
+
+# 2ter. Synchroniser Capacitor (copie dist/ → android/app/src/main/assets/public)
 # Sans cette étape, l'APK embarque un ancien bundle web !
 echo "🔁 Sync Capacitor (copie du bundle dans le projet Android)..."
 npx cap sync android
