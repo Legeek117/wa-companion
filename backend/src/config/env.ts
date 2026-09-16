@@ -41,6 +41,14 @@ interface EnvConfig {
   STRIPE_PRICE_ID_MONTHLY: string;
   STRIPE_PRICE_ID_YEARLY: string;
 
+  // FedaPay (Mobile Money / cartes - marchés francophones ouest-africains)
+  FEDAPAY_API_KEY: string;
+  FEDAPAY_ENV: 'sandbox' | 'live';
+  FEDAPAY_WEBHOOK_SECRET: string;
+  FEDAPAY_CALLBACK_URL: string;
+  FEDAPAY_PRICE_MONTHLY_XOF: number;
+  FEDAPAY_PRICE_YEARLY_XOF: number;
+
   // Storage - Cloudinary
   CLOUDINARY_CLOUD_NAME?: string;
   CLOUDINARY_API_KEY?: string;
@@ -139,6 +147,14 @@ export const env: EnvConfig = {
   STRIPE_WEBHOOK_SECRET: getEnvVar('STRIPE_WEBHOOK_SECRET', 'whsec_placeholder'),
   STRIPE_PRICE_ID_MONTHLY: getEnvVar('STRIPE_PRICE_ID_MONTHLY', 'price_placeholder_monthly'),
   STRIPE_PRICE_ID_YEARLY: getEnvVar('STRIPE_PRICE_ID_YEARLY', 'price_placeholder_yearly'),
+
+  // FedaPay
+  FEDAPAY_API_KEY: getEnvVar('FEDAPAY_API_KEY', 'fk_test_placeholder'),
+  FEDAPAY_ENV: (getEnvVar('FEDAPAY_ENV', 'sandbox') === 'live' ? 'live' : 'sandbox') as 'sandbox' | 'live',
+  FEDAPAY_WEBHOOK_SECRET: getEnvVar('FEDAPAY_WEBHOOK_SECRET', 'whsec_fedapay_placeholder'),
+  FEDAPAY_CALLBACK_URL: process.env.FEDAPAY_CALLBACK_URL || 'http://localhost:5173',
+  FEDAPAY_PRICE_MONTHLY_XOF: getEnvNumber('FEDAPAY_PRICE_MONTHLY_XOF', 1500),
+  FEDAPAY_PRICE_YEARLY_XOF: getEnvNumber('FEDAPAY_PRICE_YEARLY_XOF', 15000),
 
   // Storage - Cloudinary
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,

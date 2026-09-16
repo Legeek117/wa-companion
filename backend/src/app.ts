@@ -1,4 +1,4 @@
-import express, { Application } from 'express';
+import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
@@ -117,7 +117,16 @@ app.use(helmet({
 }));
 
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
+// The `verify` callback stores the raw body so signatures (e.g. FedaPay webhooks)
+// can be verified against the exact payload received.
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req: Request, _res: Response, buf: Buffer) => {
+      (req as any).rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static media files (deleted messages media)

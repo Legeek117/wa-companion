@@ -14,11 +14,13 @@ export interface User {
 export interface Subscription {
   id: string;
   user_id: string;
-  stripe_subscription_id: string;
+  provider?: 'fedapay' | 'stripe';
+  provider_transaction_id?: string;
+  stripe_subscription_id?: string;
   plan: UserPlan;
-  status: 'active' | 'canceled' | 'past_due' | 'trialing';
-  current_period_start: Date;
-  current_period_end: Date;
+  status: 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete' | 'incomplete_expired';
+  current_period_start?: Date;
+  current_period_end?: Date;
   cancel_at_period_end: boolean;
   created_at: Date;
   updated_at: Date;

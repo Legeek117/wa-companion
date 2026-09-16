@@ -1,40 +1,19 @@
 import { Router } from 'express';
 import express from 'express';
+import * as subscriptionController from '../controllers/subscription.controller';
 import { protect } from '../middleware/auth.middleware';
-import { apiLimiter } from '../middleware/rateLimit.middleware';
+import { apiLimiter, looseLimiter } from '../middleware/rateLimit.middleware';
 
 const router = Router();
 
-// Public route for webhook (no auth required)
-router.post('/webhook', express.raw({ type: 'application/json' }), (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Stripe webhook not implemented yet',
-  });
-});
+// Public routes (no auth required)
+router.post('/webhook', express.json({ limit: '1mb' }), subscriptionController.webhook);
+router.get('/callback', subscriptionController.callback);
+router.get('/cb', subscriptionController.callback);
 
 // Protected routes
-router.use(protect);
-
-router.post('/create-checkout', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Create checkout session not implemented yet',
-  });
-});
-
-router.get('/status', (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Get subscription status not implemented yet',
-  });
-});
-
-router.post('/cancel', apiLimiter, (_req, res) => {
-  res.status(501).json({
-    success: false,
-    message: 'Cancel subscription not implemented yet',
-  });
-});
+router.get('/status', protect, looseLimiter, subscriptionController.getStatus);
+router.post('/create-checkout', protect, apiLimiter, subscriptionController.createCheckout);
+router.post('/cancel', protect, apiLimiter, subscriptionController.cancel);
 
 export default router;

@@ -332,8 +332,8 @@ export const api = {
 
   // Subscription
   subscription: {
-    createCheckout: (priceId: string) =>
-      apiClient.post('/api/subscription/create-checkout', { priceId }),
+    createCheckout: (plan: 'monthly' | 'yearly') =>
+      apiClient.post('/api/subscription/create-checkout', { plan }),
     getStatus: () => apiClient.get('/api/subscription/status'),
     cancel: () => apiClient.post('/api/subscription/cancel'),
   },

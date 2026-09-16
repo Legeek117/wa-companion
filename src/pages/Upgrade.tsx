@@ -2,8 +2,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Crown, Check, Zap } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 const Upgrade = () => {
+  const { user, isPremium } = useAuth();
+  const queryClient = useQueryClient();
+  const [pendingPlan, setPendingPlan] = useState<'monthly' | 'yearly' | null>(null);
+
   const features = {
     free: [
       "Voir tous les status automatiquement",
@@ -29,6 +38,45 @@ const Upgrade = () => {
     ],
   };
 
+  const checkoutMutation = useMutation({
+    mutationFn: (plan: 'monthly' | 'yearly') => {
+      setPendingPlan(plan);
+      return api.subscription.createCheckout(plan);
+    },
+    onSuccess: (response) => {
+      const checkoutUrl = response.data?.checkoutUrl as string | undefined;
+      if (!checkoutUrl) {
+        toast.error("Impossible de générer le lien de paiement. Réessayez.");
+        setPendingPlan(null);
+        return;
+      }
+      // `_system` opens the payment page in the system browser on mobile (Capacitor)
+      window.open(checkoutUrl, '_system');
+      toast.info("Paiement lancé. Revenez ici une fois le paiement effectué.");
+    },
+    onError: (error: unknown) => {
+      setPendingPlan(null);
+      const message =
+        (error as any)?.message || 'Erreur lors du lancement du paiement';
+      toast.error(message);
+    },
+    onSettled: () => setPendingPlan(null),
+  });
+
+  const checkSubscription = async () => {
+    try {
+      const status = await api.subscription.getStatus();
+      if (status.success) {
+        await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        toast.success("Statut vérifié avec succès");
+      } else {
+        toast.error(status.error?.message || 'Impossible de vérifier votre abonnement');
+      }
+    } catch {
+      toast.error('Erreur réseau. Réessayez dans un instant.');
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="text-center space-y-2 px-4">
@@ -36,6 +84,12 @@ const Upgrade = () => {
         <p className="text-base sm:text-lg md:text-xl text-muted-foreground">
           Débloquez toutes les fonctionnalités avancées
         </p>
+        {isPremium && (
+          <Badge className="bg-premium">
+            <Crown className="w-3 h-3 mr-1" />
+            Vous êtes Premium
+          </Badge>
+        )}
       </div>
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-2 max-w-5xl mx-auto px-4 sm:px-0">
@@ -86,10 +140,45 @@ const Upgrade = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button className="w-full bg-premium hover:bg-premium/90" size="lg">
-              <Crown className="w-5 h-5 mr-2" />
-              S'abonner maintenant
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                className="w-full bg-premium hover:bg-premium/90"
+                size="lg"
+                disabled={checkoutMutation.isPending || isPremium}
+                onClick={() => checkoutMutation.mutate('monthly')}
+              >
+                <Crown className="w-5 h-5 mr-2" />
+                {checkoutMutation.isPending && pendingPlan === 'monthly'
+                  ? 'Chargement...'
+                  : 'S\'abonner'}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                size="lg"
+                disabled={checkoutMutation.isPending || isPremium}
+                onClick={() => checkoutMutation.mutate('yearly')}
+              >
+                1 an - Économisez
+                {checkoutMutation.isPending && pendingPlan === 'yearly' && ' ...'}
+              </Button>
+            </div>
+
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={checkoutMutation.isPending}
+              onClick={checkSubscription}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              J'ai payé - Vérifier mon abonnement
             </Button>
+
+            <div className="text-xs text-muted-foreground text-center">
+              Paiement par <span className="font-medium">Mobile Money</span>,{" "}
+              <span className="font-medium">Wave</span> ou <span className="font-medium">carte</span>{" "}
+              (MTN, Moov, Orange, TOGOCEL, CELTIIS, CORIS, BMO, Free...)
+            </div>
 
             <ul className="space-y-2 sm:space-y-3">
               {features.premium.map((feature, index) => (
@@ -125,6 +214,14 @@ const Upgrade = () => {
             <h3 className="font-medium mb-1 text-sm sm:text-base">Comment fonctionne la garantie ?</h3>
             <p className="text-xs sm:text-sm text-muted-foreground">
               Si vous n'êtes pas satisfait dans les 30 premiers jours, nous vous remboursons intégralement.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-medium mb-1 text-sm sm:text-base">Quels moyens de paiement ?</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Mobile Money local (MTN, Moov, Orange, TOGOCEL, CELTIIS, CORIS, BMO, Free), Wave et cartes
+              Visa/MasterCard ou Orañe. Le choix s'affiche sur la page sécurisée après avoir cliqué sur S'abonner.
+              Grâce à votre compte {user?.email}, votre abonnement est activé automatiquement dès réception du paiement.
             </p>
           </div>
           <div>
