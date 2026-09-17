@@ -18,6 +18,15 @@ function isBanError(error: unknown): error is AuthorizationError {
 }
 
 /**
+ * Normalise un numéro WhatsApp : retire suffixe appareil et suffixe domaine.
+ * "22995798425:67@s.whatsapp.net" -> "22995798425"
+ */
+export function normalizePhone(value?: string | null): string {
+  if (!value) return '';
+  return value.trim().split('@')[0].split(':')[0];
+}
+
+/**
  * Enregistre le lien WhatsApp -> compte sur la session.
  */
 export async function registerWhatsappBinding(
@@ -31,7 +40,7 @@ export async function registerWhatsappBinding(
       where: { sessionId },
       data: {
         whatsappJid: normalizeJid(jid),
-        phoneNumber: phoneNumber || null,
+        phoneNumber: normalizePhone(phoneNumber) || null,
       },
     });
   } catch (error) {
@@ -78,7 +87,7 @@ async function checkBlacklist(userId: string, jid: string, phoneNumber?: string)
 
   if (bl) {
     const reason = `Numéro WhatsApp blacklisté pour fraude : ${bl.reason || 'réutilisation interdite'}`;
-    await banAccount(userId, reason, bl.jid, bl.phoneNumber || phoneNumber, 'auto');
+    await banAccount(userId, reason, bl.jid, normalizePhone(phoneNumber) || bl.phoneNumber || undefined, 'auto');
     throw new AuthorizationError(reason);
   }
 }
@@ -130,6 +139,7 @@ export async function enforceWhatsappUniqueness(
 ): Promise<void> {
   const normalized = normalizeJid(jid);
   if (!normalized) return;
+  const normalizedPhone = normalizePhone(phoneNumber);
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -161,7 +171,7 @@ export async function enforceWhatsappUniqueness(
       await prisma.whatsappBlacklist.create({
         data: {
           jid: normalized,
-          phoneNumber: phoneNumber || null,
+          phoneNumber: normalizedPhone || null,
           reason: 'Numéro lié à plusieurs comptes (ban)',
         },
       });

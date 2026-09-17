@@ -135,7 +135,7 @@ const runSecurityGuard = async (userId: string, socket: any, phoneNumber?: strin
     if (!session) return;
 
     const jid = String(jidRaw);
-    const phone = phoneNumber || jid.split('@')[0] || undefined;
+    const phone = phoneNumber || jid.split('@')[0].split(':')[0] || undefined;
     await enforceWhatsappUniqueness(userId, session.sessionId, jid, phone);
   } catch (error) {
     if (error instanceof AuthorizationError) {
