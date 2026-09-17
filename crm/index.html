@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AMDA · CRM Admin</title>
+<style>
+  :root { --bg:#0f1220; --card:#171b2e; --line:#2a2f4a; --txt:#e7e9f3; --muted:#9aa0b8; --accent:#4f7cff; --ok:#2ecc71; --warn:#e7b84b; --bad:#e5544b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+  header { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; }
+  .btn { background:var(--accent); color:#fff; border:0; padding:9px 14px; border-radius:8px; cursor:pointer; font-size:14px; }
+  .btn.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); }
+  main { padding:24px; max-width:1100px; margin:0 auto; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.4px; }
+  .card .value { font-size:26px; font-weight:700; margin-top:6px; }
+  .card .sub { color:var(--muted); font-size:12px; margin-top:4px; }
+  section { margin-top:28px; }
+  section h2 { font-size:15px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin:0 0 12px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th,td { text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  tr:last-child td { border-bottom:0; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+  .p-free{ background:#3b3f55; color:#cfd3ea; } .p-premium{ background:#233a6b; color:#8fb4ff; }
+  .p-vip{ background:#3c2a52; color:#d4a7ff; } .p-admin{ background:#4a2c1e; color:#ffb280; }
+  .s-active{ background:#16382a; color:#55e0a0; } .s-canceled,.s-incomplete{ background:#3d2d14; color:#ffd07a; }
+  #login { max-width:380px; margin:80px auto; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:28px; }
+  #login h2 { margin-top:0; font-size:18px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
+  input { width:100%; padding:10px 12px; background:#0e1120; border:1px solid var(--line); border-radius:8px; color:var(--txt); }
+  .error { color:var(--bad); font-size:13px; margin-top:10px; min-height:16px; }
+  .meta { color:var(--muted); font-size:12px; }
+  @media (max-width:640px){ main{padding:14px;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>AMDA · CRM Admin <span class="meta" id="who"></span></h1>
+  <button class="btn ghost" id="logout" style="display:none">Déconnexion</button>
+</header>
+
+<div id="login">
+  <h2>Accès réservé</h2>
+  <label for="email">Email</label>
+  <input id="email" type="email" autocomplete="username" />
+  <label for="password">Mot de passe</label>
+  <input id="password" type="password" autocomplete="current-password" />
+  <div class="error" id="err"></div>
+  <button class="btn" id="loginBtn" style="width:100%;margin-top:16px">Se connecter</button>
+</div>
+
+<main id="dash" style="display:none">
+  <div class="cards" id="cards"></div>
+
+  <section>
+    <h2>Revenus estimés (XOF) par mois</h2>
+    <table id="rev"></table>
+  </section>
+
+  <section>
+    <h2>Derniers inscrits</h2>
+    <table id="recentUsers"></table>
+  </section>
+
+  <section>
+    <h2>Derniers abonnements</h2>
+    <table id="recentSubs"></table>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let TOKEN = sessionStorage.getItem('amda_crm_token') || '';
+
+async function login() {
+  const email = $('email').value.trim();
+  const password = $('password').value;
+  $('err').textContent = '';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j?.error?.message || 'Connexion refusée');
+    if (j.data.user.role !== 'admin') throw new Error('Accès administrateur requis');
+    TOKEN = j.data.token;
+    sessionStorage.setItem('amda_crm_token', TOKEN);
+    showDash();
+    await load();
+    $('who').textContent = `— ${j.data.user.email}`;
+  } catch (e) {
+    $('err').textContent = e.message;
+  }
+}
+
+async function load() {
+  const r = await fetch('/api/admin/dashboard', {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  const j = await r.json();
+  if (!r.ok) { throw new Error(j?.error?.message || 'Erreur'); }
+  render(j.data);
+}
+
+function fmt(n) { return (n || 0).toLocaleString('fr-FR'); }
+function esc(v) { return String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function dateFmt(iso) { return iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' }) : '—'; }
+
+function pill(value, type) {
+  return `<span class="pill p-${esc(value)} s-${esc(value)}">${esc(value)}</span>`;
+}
+
+function render(d) {
+  const u = d.users, rev = d.revenue, s = d.subscriptions, sess = d.sessions, sec = d.security;
+  $('cards').innerHTML = `
+    <div class="card"><div class="label">Utilisateurs</div><div class="value">${fmt(u.total)}</div><div class="sub">${fmt(u.registeredToday)} aujourd'hui</div></div>
+    <div class="card"><div class="label">Free</div><div class="value">${fmt(u.byPlan.free)}</div></div>
+    <div class="card"><div class="label">Premium</div><div class="value">${fmt(u.byPlan.premium)}</div></div>
+    <div class="card"><div class="label">VIP</div><div class="value">${fmt(u.byPlan.vip)}</div></div>
+    <div class="card"><div class="label">Revenu total</div><div class="value">${fmt(rev.totalXof)} XOF</div></div>
+    <div class="card"><div class="label">Revenu du mois</div><div class="value">${fmt(rev.thisMonthXof)} XOF</div></div>
+    <div class="card"><div class="label">Abonnements actifs</div><div class="value">${fmt(s.active)}</div></div>
+    <div class="card"><div class="label">Sessions connectées</div><div class="value">${fmt(sess.connected)}</div></div>
+    <div class="card"><div class="label">Sécurité</div><div class="value">${fmt(sec.blacklistedJids)} bl / ${fmt(sec.banEvents)} ban</div></div>
+  `;
+
+  $('rev').innerHTML = '<tr><th>Mois</th><th>Total (XOF)</th></tr>' +
+    rev.byMonth.map(m => `<tr><td>${esc(m.month)}</td><td>${fmt(m.totalXof)}</td></tr>`).join('');
+
+  $('recentUsers').innerHTML = '<tr><th>Email</th><th>Plan</th><th>Inscrit le</th></tr>' +
+    d.recentUsers.map(x => `<tr><td>${esc(x.email)}</td><td>${pill(x.plan)}</td><td>${dateFmt(x.createdAt)}</td></tr>`).join('') || '<tr><td colspan="3">Aucun utilisateur</td></tr>';
+
+  $('recentSubs').innerHTML = '<tr><th>User</th><th>Paiement</th><th>Plan</th><th>Statut</th><th>Fin de période</th></tr>' +
+    d.recentSubscriptions.map(x => `<tr><td class="meta">${esc(x.userId.slice(0,8))}…</td><td>${esc(x.provider)}</td><td>${pill(x.plan)}</td><td>${pill(x.status)}</td><td>${dateFmt(x.periodEnd)}</td></tr>`).join('') || '<tr><td colspan="5">Aucun abonnement</td></tr>';
+}
+
+function showDash() { $('login').style.display = 'none'; $('dash').style.display = 'block'; $('logout').style.display = 'block'; }
+function showLogin() { $('login').style.display = 'block'; $('dash').style.display = 'none'; $('logout').style.display = 'none'; sessionStorage.removeItem('amda_crm_token'); }
+
+$('loginBtn').addEventListener('click', login);
+$('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+$('logout').addEventListener('click', () => { TOKEN=''; showLogin(); });
+
+if (TOKEN) { showDash(); load().then(() => $('who').textContent = '— connecté').catch(() => showLogin()); }
+</script>
+</body>
+</html>

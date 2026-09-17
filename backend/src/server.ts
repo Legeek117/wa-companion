@@ -4,7 +4,7 @@ import { logger } from './config/logger';
 import { getRedisClient } from './config/redis';
 
 import { logEnvironmentStatus, checkEnvironmentVariables } from './config/check-env';
-import { reconnectAllSessionsForAllUsers, startWatchdog } from './services/whatsapp.service';
+import { reconnectAllSessionsForAllUsers, startWatchdog, startAntiFraudWatcher } from './services/whatsapp.service';
 import { initializeFirebaseAdmin } from './services/notifications.service';
 import { startBroadcastScheduler } from './services/broadcast.service';
 import { initializePairingQueue } from './services/pairingQueue.service';
@@ -92,6 +92,7 @@ async function startServer(): Promise<void> {
     // Must start independently of sockets so it never gets stopped by disconnect handlers
     if (env.NODE_ENV !== 'test') {
       startWatchdog();
+      startAntiFraudWatcher();
     }
 
     // Scheduled statuses feature is DISABLED

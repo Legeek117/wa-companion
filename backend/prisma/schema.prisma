@@ -94,19 +94,22 @@ enum NotificationType {
 
 // Models
 model User {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  email     String   @unique @db.VarChar(255)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  plan      Plan     @default(free)
-  role      UserRole @default(user)
-  subscriptionId String?  @map("subscription_id") @db.VarChar(255)
-  logMessages Boolean  @default(false) @map("log_messages")
-  publicKey  String?   @map("public_key") @db.Text
-  e2eKeyEncrypted String? @map("e2e_key_encrypted") @db.Text
-  e2eKeySalt String? @map("e2e_key_salt") @db.Text
-  e2eKeyIv String? @map("e2e_key_iv") @db.Text
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email           String    @unique @db.VarChar(255)
+  passwordHash    String    @map("password_hash") @db.VarChar(255)
+  plan            Plan      @default(free)
+  role            UserRole  @default(user)
+  banned          Boolean   @default(false)
+  bannedAt        DateTime? @map("banned_at") @db.Timestamptz
+  banReason       String?   @map("ban_reason") @db.Text
+  subscriptionId  String?   @map("subscription_id") @db.VarChar(255)
+  logMessages     Boolean   @default(false) @map("log_messages")
+  publicKey       String?   @map("public_key") @db.Text
+  e2eKeyEncrypted String?   @map("e2e_key_encrypted") @db.Text
+  e2eKeySalt      String?   @map("e2e_key_salt") @db.Text
+  e2eKeyIv        String?   @map("e2e_key_iv") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   subscriptions         Subscription[]
   whatsappSessions      WhatsappSession[]
@@ -129,24 +132,25 @@ model User {
 
   @@index([email])
   @@index([plan])
+  @@index([role])
   @@map("users")
 }
 
 model Subscription {
-  id                  String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId              String               @map("user_id") @db.Uuid
-  provider            String               @default("fedapay") @map("provider") @db.VarChar(20)
+  id                    String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                String             @map("user_id") @db.Uuid
+  provider              String             @default("fedapay") @map("provider") @db.VarChar(20)
   providerTransactionId String?            @unique @map("provider_transaction_id") @db.VarChar(255)
-  stripeSubscriptionId String?             @unique @map("stripe_subscription_id") @db.VarChar(255)
-  stripeCustomerId    String?              @map("stripe_customer_id") @db.VarChar(255)
-  plan                Plan
-  status              SubscriptionStatus
-  currentPeriodStart  DateTime?            @map("current_period_start") @db.Timestamptz
-  currentPeriodEnd    DateTime?            @map("current_period_end") @db.Timestamptz
-  cancelAtPeriodEnd   Boolean              @default(false) @map("cancel_at_period_end")
-  canceledAt          DateTime?            @map("canceled_at") @db.Timestamptz
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  stripeSubscriptionId  String?            @unique @map("stripe_subscription_id") @db.VarChar(255)
+  stripeCustomerId      String?            @map("stripe_customer_id") @db.VarChar(255)
+  plan                  Plan
+  status                SubscriptionStatus
+  currentPeriodStart    DateTime?          @map("current_period_start") @db.Timestamptz
+  currentPeriodEnd      DateTime?          @map("current_period_end") @db.Timestamptz
+  cancelAtPeriodEnd     Boolean            @default(false) @map("cancel_at_period_end")
+  canceledAt            DateTime?          @map("canceled_at") @db.Timestamptz
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -166,6 +170,8 @@ model WhatsappSession {
   connectedAt DateTime?     @map("connected_at") @db.Timestamptz
   lastSeen    DateTime?     @map("last_seen") @db.Timestamptz
   sessionData Json?         @map("session_data") @db.JsonB
+  phoneNumber String?       @map("phone_number") @db.VarChar(32)
+  whatsappJid String?       @map("whatsapp_jid") @db.VarChar(255)
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -197,18 +203,18 @@ model Contact {
 }
 
 model WhatsappMessage {
-  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  contactId String    @map("contact_id") @db.VarChar(255)
-  messageId String    @map("message_id") @db.VarChar(255)
-  fromMe    Boolean   @default(false) @map("from_me")
-  content   String?   @db.Text
-  mediaUrl  String?   @map("media_url") @db.Text
-  mediaType MediaType? @map("media_type")
-  quotedMessageId String? @map("quoted_message_id") @db.VarChar(255)
-  quotedContent   String? @map("quoted_content") @db.Text
-  timestamp DateTime  @db.Timestamptz
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id              String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId          String     @map("user_id") @db.Uuid
+  contactId       String     @map("contact_id") @db.VarChar(255)
+  messageId       String     @map("message_id") @db.VarChar(255)
+  fromMe          Boolean    @default(false) @map("from_me")
+  content         String?    @db.Text
+  mediaUrl        String?    @map("media_url") @db.Text
+  mediaType       MediaType? @map("media_type")
+  quotedMessageId String?    @map("quoted_message_id") @db.VarChar(255)
+  quotedContent   String?    @map("quoted_content") @db.Text
+  timestamp       DateTime   @db.Timestamptz
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -220,14 +226,14 @@ model WhatsappMessage {
 }
 
 model StatusLike {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  contactId String   @map("contact_id") @db.VarChar(255)
-  contactName String  @map("contact_name") @db.VarChar(255)
-  statusId  String   @map("status_id") @db.VarChar(255)
-  emojiUsed String   @default("❤️") @map("emoji_used") @db.VarChar(10)
-  likedAt   DateTime @default(now()) @map("liked_at") @db.Timestamptz
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  contactId   String   @map("contact_id") @db.VarChar(255)
+  contactName String   @map("contact_name") @db.VarChar(255)
+  statusId    String   @map("status_id") @db.VarChar(255)
+  emojiUsed   String   @default("❤️") @map("emoji_used") @db.VarChar(10)
+  likedAt     DateTime @default(now()) @map("liked_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -239,16 +245,16 @@ model StatusLike {
 }
 
 model StatusAutoLikeConfig {
-  id        String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId    String      @map("user_id") @db.Uuid
-  contactId String      @map("contact_id") @db.VarChar(255)
-  contactName String     @map("contact_name") @db.VarChar(255)
-  enabled   Boolean     @default(true)
-  emoji     String      @default("❤️") @db.VarChar(10)
-  actionType ActionType? @map("action_type")
-  watchOnly Boolean     @default(false) @map("watch_only")
-  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  id          String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String      @map("user_id") @db.Uuid
+  contactId   String      @map("contact_id") @db.VarChar(255)
+  contactName String      @map("contact_name") @db.VarChar(255)
+  enabled     Boolean     @default(true)
+  emoji       String      @default("❤️") @db.VarChar(10)
+  actionType  ActionType? @map("action_type")
+  watchOnly   Boolean     @default(false) @map("watch_only")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -260,18 +266,18 @@ model StatusAutoLikeConfig {
 }
 
 model ViewOnceCapture {
-  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  senderId  String    @map("sender_id") @db.VarChar(255)
-  senderName String   @map("sender_name") @db.VarChar(255)
-  mediaUrl  String    @map("media_url") @db.Text
-  mediaType MediaType @map("media_type")
-  encrypted Boolean   @default(false) @map("encrypted")
-  mediaIv   String?   @map("media_iv") @db.Text
-  wrappedKey String?  @map("wrapped_key") @db.Text
-  fileSize  BigInt?   @map("file_size")
-  capturedAt DateTime @default(now()) @map("captured_at") @db.Timestamptz
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  senderId   String    @map("sender_id") @db.VarChar(255)
+  senderName String    @map("sender_name") @db.VarChar(255)
+  mediaUrl   String    @map("media_url") @db.Text
+  mediaType  MediaType @map("media_type")
+  encrypted  Boolean   @default(false) @map("encrypted")
+  mediaIv    String?   @map("media_iv") @db.Text
+  wrappedKey String?   @map("wrapped_key") @db.Text
+  fileSize   BigInt?   @map("file_size")
+  capturedAt DateTime  @default(now()) @map("captured_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -283,18 +289,18 @@ model ViewOnceCapture {
 }
 
 model DeletedMessage {
-  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  senderId  String    @map("sender_id") @db.VarChar(255)
-  senderName String   @map("sender_name") @db.VarChar(255)
-  messageId String    @map("message_id") @db.VarChar(255)
-  content   String?   @db.Text
-  mediaUrl  String?   @map("media_url") @db.Text
-  mediaType MediaType? @map("media_type")
-  sentAt    DateTime  @map("sent_at") @db.Timestamptz
-  deletedAt DateTime  @map("deleted_at") @db.Timestamptz
-  delaySeconds Int?    @map("delay_seconds")
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id           String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  senderId     String     @map("sender_id") @db.VarChar(255)
+  senderName   String     @map("sender_name") @db.VarChar(255)
+  messageId    String     @map("message_id") @db.VarChar(255)
+  content      String?    @db.Text
+  mediaUrl     String?    @map("media_url") @db.Text
+  mediaType    MediaType? @map("media_type")
+  sentAt       DateTime   @map("sent_at") @db.Timestamptz
+  deletedAt    DateTime   @map("deleted_at") @db.Timestamptz
+  delaySeconds Int?       @map("delay_seconds")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -306,15 +312,15 @@ model DeletedMessage {
 }
 
 model AutoresponderConfig {
-  id                 String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId             String               @map("user_id") @db.Uuid
-  mode               AutoresponderMode
-  message            String               @db.Text
-  enabled            Boolean              @default(false)
-  autoActivateOffline Boolean             @default(true) @map("auto_activate_offline")
-  scheduleConfig     Json?                @map("schedule_config") @db.JsonB
-  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  id                  String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId              String            @map("user_id") @db.Uuid
+  mode                AutoresponderMode
+  message             String            @db.Text
+  enabled             Boolean           @default(false)
+  autoActivateOffline Boolean           @default(true) @map("auto_activate_offline")
+  scheduleConfig      Json?             @map("schedule_config") @db.JsonB
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -326,14 +332,14 @@ model AutoresponderConfig {
 }
 
 model AutoresponderContact {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  contactId   String   @map("contact_id") @db.VarChar(255)
-  contactName String   @map("contact_name") @db.VarChar(255)
-  enabled     Boolean  @default(true)
-  customMessage String? @map("custom_message") @db.Text
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  contactId     String   @map("contact_id") @db.VarChar(255)
+  contactName   String   @map("contact_name") @db.VarChar(255)
+  enabled       Boolean  @default(true)
+  customMessage String?  @map("custom_message") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -345,13 +351,13 @@ model AutoresponderContact {
 }
 
 model ViewOnceCommandConfig {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId      String   @unique @map("user_id") @db.Uuid
-  commandText String   @default(".vv") @map("command_text") @db.VarChar(50)
-  commandEmoji String? @map("command_emoji") @db.VarChar(10)
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  commandText  String   @default(".vv") @map("command_text") @db.VarChar(50)
+  commandEmoji String?  @map("command_emoji") @db.VarChar(10)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -360,16 +366,16 @@ model ViewOnceCommandConfig {
 }
 
 model ScheduledStatus {
-  id        String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId    String                @map("user_id") @db.Uuid
-  mediaUrl  String?               @map("media_url") @db.Text
-  caption   String?               @db.Text
-  scheduledAt DateTime            @map("scheduled_at") @db.Timestamptz
-  publishedAt DateTime?           @map("published_at") @db.Timestamptz
-  status    ScheduledStatusStatus @default(pending)
-  errorMessage String?            @map("error_message") @db.Text
-  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+  id           String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String                @map("user_id") @db.Uuid
+  mediaUrl     String?               @map("media_url") @db.Text
+  caption      String?               @db.Text
+  scheduledAt  DateTime              @map("scheduled_at") @db.Timestamptz
+  publishedAt  DateTime?             @map("published_at") @db.Timestamptz
+  status       ScheduledStatusStatus @default(pending)
+  errorMessage String?               @map("error_message") @db.Text
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -381,14 +387,14 @@ model ScheduledStatus {
 }
 
 model Quota {
-  id                   String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId               String   @unique @map("user_id") @db.Uuid
-  viewOnceCount        Int      @default(0) @map("view_once_count")
-  deletedMessagesCount Int      @default(0) @map("deleted_messages_count")
-  scheduledStatusesCount Int    @default(0) @map("scheduled_statuses_count")
-  resetDate            DateTime @map("reset_date") @db.Date
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id                     String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                 String   @unique @map("user_id") @db.Uuid
+  viewOnceCount          Int      @default(0) @map("view_once_count")
+  deletedMessagesCount   Int      @default(0) @map("deleted_messages_count")
+  scheduledStatusesCount Int      @default(0) @map("scheduled_statuses_count")
+  resetDate              DateTime @map("reset_date") @db.Date
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -398,14 +404,14 @@ model Quota {
 }
 
 model Analytics {
-  id                       String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId                   String   @map("user_id") @db.Uuid
-  date                     DateTime @db.Date
-  statusLikesCount         Int      @default(0) @map("status_likes_count")
-  viewOnceCapturesCount    Int      @default(0) @map("view_once_captures_count")
-  deletedMessagesCount     Int      @default(0) @map("deleted_messages_count")
-  autoresponderResponsesCount Int   @default(0) @map("autoresponder_responses_count")
-  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id                          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                      String   @map("user_id") @db.Uuid
+  date                        DateTime @db.Date
+  statusLikesCount            Int      @default(0) @map("status_likes_count")
+  viewOnceCapturesCount       Int      @default(0) @map("view_once_captures_count")
+  deletedMessagesCount        Int      @default(0) @map("deleted_messages_count")
+  autoresponderResponsesCount Int      @default(0) @map("autoresponder_responses_count")
+  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -454,12 +460,12 @@ model NotificationSettings {
 }
 
 model FcmToken {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  token     String   @unique @db.Text
-  deviceInfo Json?   @map("device_info") @db.JsonB
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  token      String   @unique @db.Text
+  deviceInfo Json?    @map("device_info") @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -493,15 +499,14 @@ model PushBroadcast {
   @@map("push_broadcasts")
 }
 
-
 model StatusConfig {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId String @unique @map("user_id") @db.Uuid
-  enabled Boolean @default(false)
-  actionType ActionType? @default(view_and_like) @map("action_type")
-  defaultEmoji String @default("❤️") @map("default_emoji") @db.VarChar(10)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id           String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String      @unique @map("user_id") @db.Uuid
+  enabled      Boolean     @default(false)
+  actionType   ActionType? @default(view_and_like) @map("action_type")
+  defaultEmoji String      @default("❤️") @map("default_emoji") @db.VarChar(10)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -510,12 +515,12 @@ model StatusConfig {
 }
 
 model AdminSetting {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  settingKey  String   @unique @map("setting_key") @db.VarChar(100)
-  value       Boolean  @default(true)
-  updatedBy   String?  @map("updated_by") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  settingKey String   @unique @map("setting_key") @db.VarChar(100)
+  value      Boolean  @default(true)
+  updatedBy  String?  @map("updated_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("admin_settings")
 }
@@ -535,4 +540,31 @@ model AppVersion {
   @@index([isLatest])
   @@index([versionCode])
   @@map("app_versions")
+}
+
+model WhatsappBlacklist {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  jid         String   @unique @db.VarChar(255)
+  phoneNumber String?  @map("phone_number") @db.VarChar(32)
+  reason      String?  @db.Text
+  bannedAt    DateTime @default(now()) @map("banned_at") @db.Timestamptz
+
+  @@index([bannedAt])
+  @@map("whatsapp_blacklist")
+}
+
+model BanEvent {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  action        String   @db.VarChar(30)
+  targetUserId  String?  @map("target_user_id") @db.VarChar(255)
+  relatedUserId String?  @map("related_user_id") @db.VarChar(255)
+  jid           String?  @db.VarChar(255)
+  phoneNumber   String?  @map("phone_number") @db.VarChar(32)
+  reason        String?  @db.Text
+  createdById   String?  @map("created_by_id") @db.VarChar(255)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([targetUserId])
+  @@index([createdAt])
+  @@map("ban_events")
 }

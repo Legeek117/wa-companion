@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../services/auth.service';
 import { AuthenticationError, AuthorizationError } from '../utils/errors';
-import { UserPlan } from '../types/user.types';
+import { UserPlan, UserRole } from '../types/user.types';
 
 export interface AuthRequest extends Request {
   userId?: string;
   userEmail?: string;
   userPlan?: UserPlan;
+  userRole?: UserRole;
 }
 
 /**
@@ -32,6 +33,7 @@ export const protect = async (
     req.userId = decoded.userId;
     req.userEmail = decoded.email;
     req.userPlan = decoded.plan;
+    req.userRole = decoded.role;
 
     next();
   } catch (error) {
@@ -66,4 +68,38 @@ export const authorize = (...allowedPlans: UserPlan[]) => {
  * Require Premium plan
  */
 export const requirePremium = authorize('premium');
+
+/**
+ * Require admin role.
+ * La vérification se fait TOUJOURS côté backend (jamais frontend) :
+ * on recharge le rôle depuis la base de données à chaque appel, pour
+ * que le rôle ne puisse pas être falsifié via un ancien token.
+ */
+export const requireAdmin = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.userId) {
+      throw new AuthenticationError('User not authenticated');
+    }
+
+    const { getUserById } = await import('../services/auth.service');
+    const user = await getUserById(req.userId);
+
+    if (!user) {
+      throw new AuthenticationError('User not found');
+    }
+
+    if (user.role !== 'admin') {
+      throw new AuthorizationError('Admin access required');
+    }
+
+    req.userRole = user.role;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
 

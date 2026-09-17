@@ -1,10 +1,15 @@
 export type UserPlan = 'free' | 'premium' | 'vip';
+export type UserRole = 'user' | 'admin';
 
 export interface User {
   id: string;
   email: string;
   password_hash: string;
   plan: UserPlan;
+  role: UserRole;
+  banned: boolean;
+  bannedAt?: Date | null;
+  banReason?: string | null;
   subscription_id?: string;
   log_messages: boolean;
   created_at: Date;

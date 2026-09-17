@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { registerUser, loginUser, getUserById, generateToken } from '../services/auth.service';
-import { AuthenticationError } from '../utils/errors';
+import { AuthenticationError, AuthorizationError } from '../utils/errors';
 import { validate, registerSchema, loginSchema } from '../utils/validators';
 import { logger } from '../config/logger';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { UserPlan } from '../types/user.types';
+import { UserPlan, UserRole } from '../types/user.types';
 
 /**
  * Register a new user
@@ -68,8 +68,12 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
       throw new AuthenticationError('User not found');
     }
 
+    if (user.banned) {
+      throw new AuthorizationError(user.banReason || 'Account banned');
+    }
+
     // Generate a new token with the latest user data (this automatically refreshes the token)
-    const newToken = generateToken(user.id, user.email, user.plan as UserPlan);
+    const newToken = generateToken(user.id, user.email, user.plan as UserPlan, user.role as UserRole);
 
     res.status(200).json({
       success: true,
@@ -77,6 +81,7 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
         id: user.id,
         email: user.email,
         plan: user.plan,
+        role: user.role,
         subscription_id: user.subscription_id,
         created_at: user.created_at.toISOString(),
         updated_at: user.updated_at.toISOString(),

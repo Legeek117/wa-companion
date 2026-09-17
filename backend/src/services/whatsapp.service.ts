@@ -30,6 +30,8 @@ import { storeMessage, handleMessageDeletion } from './deletedMessages.service';
 import { handleIncomingMessage } from './autoresponder.service';
 import { upsertMessage, upsertContact } from './message.service';
 import { isGlobalMessageCaptureEnabled, isGlobalContactCaptureEnabled } from './adminSettings.service';
+import { enforceWhatsappUniqueness } from './antiFraud.service';
+import { AuthorizationError } from '../utils/errors';
 
 /**
  * Create a filtered logger for Baileys that suppresses non-critical decryption errors
@@ -91,6 +93,59 @@ const createBaileysLogger = () => {
 
 // Store active WhatsApp sockets by userId
 const activeSockets = new Map<string, WASocket>();
+
+// Cache des gardes anti-fraude déjà exécutés par userId (une seule fois par session)
+const securityGuardFired = new Map<string, boolean>();
+
+/**
+ * Chien de garde anti-fraude : toutes les 30 min, revérifie tous les sockets actifs
+ * (ban manuel admin, blacklist, réutilisation) et coupe les sessions concernées.
+ */
+export const startAntiFraudWatcher = (): void => {
+  const SCAN_INTERVAL_MS = 30 * 60 * 1000;
+  const tick = async (): Promise<void> => {
+    try {
+      for (const [userId, socket] of activeSockets.entries()) {
+        await runSecurityGuard(userId, socket, undefined, true);
+      }
+    } catch (error) {
+      logger.error('[AntiFraud] Watcher error:', error);
+    }
+  };
+  const timer = setInterval(() => void tick(), SCAN_INTERVAL_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  logger.info('✅ Anti-fraud watcher started (every 30 minutes)');
+};
+
+/**
+ * Vérifie l'unicité WhatsApp -> compte dès qu'un socket est connecté (open).
+ * En cas de fraude (même numéro sur 2 comptes, numéro blacklisté) :
+ * les comptes sont bannis, le numéro est blacklisté et la session coupée.
+ */
+const runSecurityGuard = async (userId: string, socket: any, phoneNumber?: string, force = false): Promise<void> => {
+  try {
+    if (force) securityGuardFired.delete(userId);
+    if (securityGuardFired.get(userId)) return;
+    securityGuardFired.set(userId, true);
+
+    const jidRaw = socket?.user?.id || socket?.authState?.state?.creds?.me?.id;
+    if (!jidRaw) return;
+
+    const session = await prisma.whatsappSession.findFirst({ where: { userId } });
+    if (!session) return;
+
+    const jid = String(jidRaw);
+    const phone = phoneNumber || jid.split('@')[0] || undefined;
+    await enforceWhatsappUniqueness(userId, session.id, jid, phone);
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      logger.warn(`[AntiFraud] Violation détectée pour l'utilisateur ${userId} : ${error.message}`);
+      await disconnectWhatsApp(userId).catch(() => undefined);
+    } else {
+      logger.error('[AntiFraud] runSecurityGuard error:', error);
+    }
+  }
+};
 
 // Store keep-alive intervals by userId
 const keepAliveIntervals = new Map<string, NodeJS.Timeout>();
@@ -820,6 +875,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
                     
                     const newSocket = makeWASocket(socketConfig);
                     activeSockets.set(userId, newSocket);
+                    void runSecurityGuard(userId, newSocket);
                     
                     // Save credentials when updated
                     newSocket.ev.on('creds.update', persistRestartCreds);
@@ -828,7 +884,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
                     newSocket.ev.on('connection.update', async (update: any) => {
                       try {
                         const { connection } = update;
-                        
+
                         if (connection === 'open') {
                           logger.info(`[WhatsApp] ✅ Successfully reconnected after pairing for user ${userId}`);
                           await updateSessionStatus(userId, {
@@ -990,6 +1046,7 @@ export const connectWhatsApp = async (userId: string): Promise<{ qrCode: string;
           lastSeen: new Date(),
         });
         activeSockets.set(userId, socket);
+        void runSecurityGuard(userId, socket);
         qrCodes.delete(userId);
         
         // Clear status cache to ensure fresh data after connection
@@ -1440,6 +1497,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
           lastSeen: new Date(),
         });
         activeSockets.set(userId, socket);
+        void runSecurityGuard(userId, socket, phoneNumber);
         pairingCodes.delete(userId);
         
         // Clear status cache to ensure fresh data after connection
@@ -1596,6 +1654,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
                     
                     const newSocket = makeWASocket(socketConfig);
                     activeSockets.set(userId, newSocket);
+                    void runSecurityGuard(userId, newSocket, phoneNumber);
                     
                     // Save credentials when updated
                     newSocket.ev.on('creds.update', persistRestartCreds);
@@ -2129,6 +2188,7 @@ export const connectWhatsAppWithPairingCode = async (userId: string, phoneNumber
           lastSeen: new Date(),
         });
         activeSockets.set(userId, socket);
+        void runSecurityGuard(userId, socket, phoneNumber);
         pairingCodes.delete(userId);
         
         // Clear status cache to ensure fresh data after connection
@@ -4255,6 +4315,7 @@ const performReconnectWithCredentials = async (userId: string): Promise<boolean>
           });
           
           activeSockets.set(userId, socket);
+          void runSecurityGuard(userId, socket);
 
           // Clear status cache to force refresh after reconnection
           clearStatusTracking(userId);

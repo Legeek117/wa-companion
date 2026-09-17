@@ -27,6 +27,7 @@ import notificationsRoutes from './routes/notifications.routes';
 import versionRoutes from './routes/version.routes';
 import pushRoutes from './routes/push.routes';
 import logsRoutes from './routes/logs.routes';
+import adminRoutes from './routes/admin.routes';
 
 const app: Application = express();
 
@@ -463,6 +464,7 @@ app.use('/api/autoresponder', autoresponderRoutes);
 // Scheduled statuses feature is DISABLED
 // app.use('/api/scheduled-status', scheduledStatusRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/quota', quotaRoutes);
 app.use('/api/media', mediaRoutes);

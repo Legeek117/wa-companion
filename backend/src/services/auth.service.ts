@@ -2,8 +2,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import prisma from '../config/database';
-import { AuthenticationError, ValidationError, ConflictError } from '../utils/errors';
-import { User, UserPlan } from '../types/user.types';
+import { AuthenticationError, ValidationError, ConflictError, AuthorizationError } from '../utils/errors';
+import { User, UserPlan, UserRole } from '../types/user.types';
 import { logger } from '../config/logger';
 
 export interface RegisterData {
@@ -21,6 +21,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     plan: UserPlan;
+    role: UserRole;
     subscription_id?: string;
     created_at: string;
     updated_at: string;
@@ -37,11 +38,12 @@ export const comparePassword = async (password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash);
 };
 
-export const generateToken = (userId: string, email: string, plan: UserPlan): string => {
+export const generateToken = (userId: string, email: string, plan: UserPlan, role: UserRole = 'user'): string => {
   const payload = {
     userId,
     email,
     plan,
+    role,
   };
 
   return jwt.sign(payload, env.JWT_SECRET, {
@@ -49,12 +51,13 @@ export const generateToken = (userId: string, email: string, plan: UserPlan): st
   } as jwt.SignOptions);
 };
 
-export const verifyToken = (token: string): { userId: string; email: string; plan: UserPlan } => {
+export const verifyToken = (token: string): { userId: string; email: string; plan: UserPlan; role: UserRole } => {
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET) as {
       userId: string;
       email: string;
       plan: UserPlan;
+      role: UserRole;
     };
     return decoded;
   } catch (error) {
@@ -111,7 +114,7 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
       return user;
     });
 
-    const token = generateToken(newUser.id, newUser.email, newUser.plan as UserPlan);
+    const token = generateToken(newUser.id, newUser.email, newUser.plan as UserPlan, newUser.role as UserRole);
 
     logger.info(`User registered: ${newUser.email}`);
 
@@ -120,6 +123,7 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
         id: newUser.id,
         email: newUser.email,
         plan: newUser.plan as UserPlan,
+        role: newUser.role as UserRole,
         subscription_id: newUser.subscriptionId || undefined,
         created_at: newUser.createdAt.toISOString(),
         updated_at: newUser.updatedAt.toISOString(),
@@ -152,7 +156,11 @@ export const loginUser = async (data: LoginData): Promise<AuthResponse> => {
       throw new AuthenticationError('Invalid email or password');
     }
 
-    const token = generateToken(user.id, user.email, user.plan as UserPlan);
+    if (user.banned) {
+      throw new AuthorizationError(user.banReason || 'Account banned');
+    }
+
+    const token = generateToken(user.id, user.email, user.plan as UserPlan, user.role as UserRole);
 
     logger.info(`User logged in: ${user.email}`);
 
@@ -161,6 +169,7 @@ export const loginUser = async (data: LoginData): Promise<AuthResponse> => {
         id: user.id,
         email: user.email,
         plan: user.plan as UserPlan,
+        role: user.role as UserRole,
         subscription_id: user.subscriptionId || undefined,
         created_at: user.createdAt.toISOString(),
         updated_at: user.updatedAt.toISOString(),
@@ -191,6 +200,10 @@ export const getUserById = async (userId: string): Promise<User | null> => {
       email: user.email,
       password_hash: user.passwordHash,
       plan: user.plan as UserPlan,
+      role: user.role as UserRole,
+      banned: user.banned,
+      bannedAt: user.bannedAt || null,
+      banReason: user.banReason || null,
       subscription_id: user.subscriptionId || undefined,
       log_messages: user.logMessages,
       created_at: user.createdAt,
@@ -217,6 +230,10 @@ export const getUserByEmail = async (email: string): Promise<User | null> => {
       email: user.email,
       password_hash: user.passwordHash,
       plan: user.plan as UserPlan,
+      role: user.role as UserRole,
+      banned: user.banned,
+      bannedAt: user.bannedAt || null,
+      banReason: user.banReason || null,
       subscription_id: user.subscriptionId || undefined,
       log_messages: user.logMessages,
       created_at: user.createdAt,
