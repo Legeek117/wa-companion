@@ -136,7 +136,7 @@ const runSecurityGuard = async (userId: string, socket: any, phoneNumber?: strin
 
     const jid = String(jidRaw);
     const phone = phoneNumber || jid.split('@')[0] || undefined;
-    await enforceWhatsappUniqueness(userId, session.id, jid, phone);
+    await enforceWhatsappUniqueness(userId, session.sessionId, jid, phone);
   } catch (error) {
     if (error instanceof AuthorizationError) {
       logger.warn(`[AntiFraud] Violation détectée pour l'utilisateur ${userId} : ${error.message}`);
