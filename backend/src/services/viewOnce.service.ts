@@ -550,13 +550,13 @@ export const captureViewOnceFromQuoted = async (
           select: { plan: true },
         });
 
-        const isPremium = user?.plan === 'premium';
-        const limit = isPremium ? 'illimité' : '3';
+        const isPremium = user?.plan === 'premium' || user?.plan === 'vip';
+        const limit = isPremium ? 'illimité' : 'aucun accès (plan gratuit)';
 
         return {
           success: false,
           error: 'quota_exceeded',
-          message: `⚠️ Limite de ${limit} View Once atteinte.\n\n💎 Passez à Premium pour captures illimitées !`,
+          message: `⚠️ ${isPremium ? '' : 'Les vues uniques sont réservées aux abonnés. '}Limite de ${limit} View Once atteinte.\n\n💎 Passez à Premium pour des captures !`,
         };
       }
       throw error;

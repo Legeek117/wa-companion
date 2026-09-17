@@ -17,24 +17,23 @@ const Upgrade = () => {
 
   const features = {
     free: [
-      "Voir tous les status automatiquement",
-      "Liker tous les status (1 emoji)",
-      "1 status programmé/semaine",
-      "3 view once/mois",
-      "3 messages supprimés/mois",
+      "Voir les status des contacts",
+      "Vu / like des status (08h - 20h)",
+      "10 messages supprimés par mois",
+      "5 status programmés par mois",
       "Répondeur automatique basique",
     ],
     premium: [
+      "Vu / like des status illimités",
+      "3 vues uniques par mois",
+      "Messages supprimés illimités",
+      "Status programmés illimités",
       "Like sélectif par contact",
       "Emoji personnalisé par contact",
-      "Status programmés illimités",
-      "View once illimités + galerie",
-      "Messages supprimés illimités",
       "Répondeur avancé avec filtrage",
       "Messages personnalisables",
       "Planification horaire",
       "Analytics complets",
-      "Statistiques avancées",
       "Export de données",
       "Support prioritaire",
     ],
@@ -112,7 +111,7 @@ const Upgrade = () => {
             <CardTitle className="text-2xl mt-2">Plan Gratuit</CardTitle>
             <CardDescription>Fonctionnalités de base</CardDescription>
             <div className="pt-4">
-              <span className="text-4xl font-bold">0€</span>
+              <span className="text-4xl font-bold">0 f</span>
               <span className="text-muted-foreground">/mois</span>
             </div>
           </CardHeader>

@@ -215,6 +215,37 @@ const ViewOnce = () => {
     }
   };
 
+  // Les vues uniques sont réservées aux abonnés (free = aucun accès)
+  if (!isPremium) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">View Once</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Messages éphémères sauvegardés automatiquement</p>
+          </div>
+          <div className="flex-shrink-0">
+            <PlanBadge plan="free" />
+          </div>
+        </div>
+
+        <Card className="border-premium bg-premium/5">
+          <CardContent className="pt-6 text-center py-10">
+            <Lock className="w-12 h-12 mx-auto mb-4 text-premium opacity-70" />
+            <h2 className="text-lg font-semibold mb-1">Fonctionnalité réservée aux abonnés</h2>
+            <p className="text-sm text-muted-foreground mb-5 max-w-md mx-auto">
+              La capture automatique des messages vus une fois est incluse dans le plan Premium.
+            </p>
+            <Button size="lg" className="bg-premium" onClick={() => navigate('/dashboard/upgrade')}>
+              <Crown className="w-4 h-4 mr-2" />
+              Découvrir Premium
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">

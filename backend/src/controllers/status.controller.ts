@@ -253,7 +253,7 @@ export const updateStatusConfig = async (req: AuthRequest, res: Response): Promi
         select: { plan: true }
       });
 
-      if (user?.plan === 'premium') {
+      if (user?.plan === 'premium' || user?.plan === 'vip') {
         // Update each contact config
         for (const contact of contacts) {
           // Support both formats: { contactId, contactName, ... } and { contact_id, contact_name, ... }
@@ -441,11 +441,11 @@ export const likeStatusController = async (req: AuthRequest, res: Response): Pro
       codePoints: codePoints.join(' '),
     });
 
-    // Check quota for status reactions (2/day for free, unlimited for premium)
+    // Check quota for status reactions (free: 2/day + horaires 08h-20h, premium/vip illimité)
     try {
       await checkStatusReactionQuota(userId);
     } catch (quotaError: any) {
-      if (quotaError instanceof Error && quotaError.message.includes('Quota')) {
+      if (quotaError instanceof Error && (quotaError.message.includes('Quota') || quotaError.message.includes('08h00'))) {
         res.status(403).json({
           success: false,
           error: {
@@ -833,7 +833,7 @@ export const getStatusContacts = async (req: AuthRequest, res: Response): Promis
       select: { plan: true }
     });
 
-    if (user?.plan !== 'premium') {
+    if (user?.plan !== 'premium' && user?.plan !== 'vip') {
       res.status(403).json({
         success: false,
         error: { message: 'This feature is only available for premium users', statusCode: 403 },

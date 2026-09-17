@@ -14,8 +14,16 @@ datasource db {
 enum Plan {
   free
   premium
+  vip
 
   @@map("plan")
+}
+
+enum UserRole {
+  user
+  admin
+
+  @@map("user_role")
 }
 
 enum SessionStatus {
@@ -90,6 +98,7 @@ model User {
   email     String   @unique @db.VarChar(255)
   passwordHash String   @map("password_hash") @db.VarChar(255)
   plan      Plan     @default(free)
+  role      UserRole @default(user)
   subscriptionId String?  @map("subscription_id") @db.VarChar(255)
   logMessages Boolean  @default(false) @map("log_messages")
   publicKey  String?   @map("public_key") @db.Text

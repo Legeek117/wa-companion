@@ -236,7 +236,7 @@ export const getAutoresponderConfig = async (userId: string) => {
       select: { plan: true }
     });
 
-    const isPremium = user?.plan === 'premium';
+    const isPremium = user?.plan === 'premium' || user?.plan === 'vip';
 
     // Get autoresponder configs
     const configs = await prisma.autoresponderConfig.findMany({

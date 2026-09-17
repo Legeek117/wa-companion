@@ -103,7 +103,7 @@ export const getAutoresponderContacts = async (req: AuthRequest, res: Response):
       select: { plan: true }
     });
 
-    if (user?.plan !== 'premium') {
+    if (user?.plan !== 'premium' && user?.plan !== 'vip') {
       res.status(403).json({
         success: false,
         error: { message: 'This feature is only available for premium users', statusCode: 403 },

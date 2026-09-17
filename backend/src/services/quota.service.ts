@@ -5,17 +5,41 @@ import { UserPlan } from '../types/user.types';
 
 const QUOTA_LIMITS = {
   free: {
-    viewOnce: 3,
-    deletedMessages: 3,
+    viewOnce: 0,
+    deletedMessages: 10,
     scheduledStatuses: 5,
     statusReactions: 2,
   },
   premium: {
+    viewOnce: 3,
+    deletedMessages: Infinity,
+    scheduledStatuses: Infinity,
+    statusReactions: Infinity,
+  },
+  vip: {
     viewOnce: Infinity,
     deletedMessages: Infinity,
     scheduledStatuses: Infinity,
     statusReactions: Infinity,
   },
+};
+
+// Les users Free ne peuvent utiliser « vu / vu+like » des status qu'entre ces heures.
+const STATUS_WINDOW = { startHour: 8, endHour: 20 }; // 08h00 -> 20h00
+
+const isWithinStatusWindow = (now: Date = new Date()): boolean => {
+  const hour = now.getHours();
+  return hour >= STATUS_WINDOW.startHour && hour < STATUS_WINDOW.endHour;
+};
+
+/**
+ * True si l'utilisateur peut utiliser le mode vu / vu+like des status.
+ * Premium et VIP : illimité (toujours OK). Free : uniquement dans la fenêtre 08h00-20h00.
+ */
+export const isStatusActionAllowed = async (userId: string): Promise<boolean> => {
+  const plan = await getUserPlan(userId);
+  if (plan !== 'free') return true;
+  return isWithinStatusWindow();
 };
 
 const getOrCreateQuota = async (userId: string) => {
@@ -149,8 +173,14 @@ export const incrementScheduledStatus = async (userId: string): Promise<void> =>
 export const checkStatusReactionQuota = async (userId: string): Promise<void> => {
   const plan = await getUserPlan(userId);
 
-  if (plan === 'premium') {
+  if (plan !== 'free') {
     return;
+  }
+
+  if (!isWithinStatusWindow()) {
+    throw new QuotaExceededError(
+      `Le mode vu / vu+like des status est disponible uniquement de 08h00 à 20h00 pour le plan gratuit.`
+    );
   }
 
   const today = new Date();
@@ -261,6 +291,7 @@ export const quotaService = {
   checkDeletedMessagesQuota,
   checkScheduledStatusQuota,
   checkStatusReactionQuota,
+  isStatusActionAllowed,
   incrementViewOnce,
   incrementDeletedMessages,
   incrementScheduledStatus,

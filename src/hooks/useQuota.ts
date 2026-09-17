@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { useAuth } from './useAuth';
 
 export interface Quota {
-  plan: 'free' | 'premium';
+  plan: 'free' | 'premium' | 'vip';
   viewOnce: {
     used: number;
     limit: number;
@@ -45,9 +45,9 @@ export function useQuota() {
       }
       // Return default quota if API fails, but use user's premium status from useAuth
       return {
-        plan: (userIsPremium ? 'premium' : 'free') as 'free' | 'premium',
-        viewOnce: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
-        deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
+        plan: (userIsPremium ? 'premium' : 'free') as 'free' | 'premium' | 'vip',
+        viewOnce: { used: 0, limit: userIsPremium ? 3 : 0, remaining: userIsPremium ? 3 : 0 },
+        deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 10, remaining: userIsPremium ? Infinity : 10 },
         scheduledStatuses: { used: 0, limit: userIsPremium ? Infinity : 5, remaining: userIsPremium ? Infinity : 5 },
         statusReactions: { used: 0, limit: userIsPremium ? Infinity : 2, remaining: userIsPremium ? Infinity : 2 },
         resetDate: new Date(),
@@ -62,9 +62,9 @@ export function useQuota() {
 
   return {
     quota: quota || {
-      plan: (userIsPremium ? 'premium' : 'free') as 'free' | 'premium',
-      viewOnce: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
-      deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 3, remaining: userIsPremium ? Infinity : 3 },
+      plan: (userIsPremium ? 'premium' : 'free') as 'free' | 'premium' | 'vip',
+      viewOnce: { used: 0, limit: userIsPremium ? 3 : 0, remaining: userIsPremium ? 3 : 0 },
+      deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 10, remaining: userIsPremium ? Infinity : 10 },
       scheduledStatuses: { used: 0, limit: userIsPremium ? Infinity : 5, remaining: userIsPremium ? Infinity : 5 },
       statusReactions: { used: 0, limit: userIsPremium ? Infinity : 2, remaining: userIsPremium ? Infinity : 2 },
       resetDate: new Date(),

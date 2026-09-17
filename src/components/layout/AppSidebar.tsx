@@ -69,6 +69,9 @@ export function AppSidebar() {
   const isActive = (path: string) => location.pathname === path;
   const collapsed = state === "collapsed";
 
+  // Le module View Once est réservé aux abonnés (free = aucun accès) : on masque l'entrée.
+  const isViewOnceVisible = isPremium;
+
   return (
     <>
       {/* Desktop Sidebar */}
@@ -100,7 +103,9 @@ export function AppSidebar() {
             )}
             <SidebarGroupContent>
               <SidebarMenu>
-                {desktopMenuItems.map((item) => (
+                {desktopMenuItems
+                  .filter((item) => isViewOnceVisible || item.url !== "/dashboard/view-once")
+                  .map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild>
                       <NavLink
@@ -154,7 +159,9 @@ export function AppSidebar() {
       <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
         <div className="mx-2 sm:mx-3 mb-2 sm:mb-4 pb-safe-area-inset-bottom rounded-2xl sm:rounded-3xl bg-background/80 backdrop-blur-2xl border border-border/50 shadow-glass overflow-hidden">
           <div className="flex items-center justify-around h-16 sm:h-20 px-0.5 sm:px-1">
-            {bottomNavItems.map((item) => (
+            {bottomNavItems
+            .filter((item) => isViewOnceVisible || item.url !== "/dashboard/view-once")
+            .map((item) => (
               <NavLink
                 key={item.title}
                 to={item.url}

@@ -2,6 +2,7 @@ import { WASocket } from '@whiskeysockets/baileys';
 import prisma from '../config/database';
 import { logger } from '../config/logger';
 import { likeStatus, addContactIfNotExists, hasRecentlyProcessedStatus, markStatusAsProcessed } from './whatsapp.service';
+import { isStatusActionAllowed } from './quota.service';
 
 // Cache for status configuration to avoid repeated DB queries
 interface CachedConfig {
@@ -10,7 +11,7 @@ interface CachedConfig {
     action_type: 'view_only' | 'view_and_like';
     default_emoji: string;
   } | null;
-  userPlan: 'free' | 'premium' | null;
+  userPlan: 'free' | 'premium' | 'vip' | null;
   contactConfigs: Map<string, {
     enabled: boolean;
     emoji: string;
@@ -111,7 +112,7 @@ const getCachedConfig = async (userId: string): Promise<CachedConfig> => {
   
   const newCache: CachedConfig = {
     globalConfig: globalConfigResult ? globalConfig : null,
-    userPlan: (userResult?.plan as 'free' | 'premium') || null,
+    userPlan: (userResult?.plan as 'free' | 'premium' | 'vip') || null,
     contactConfigs: contactConfigsMap,
     lastUpdated: now,
   };
@@ -148,7 +149,7 @@ export const getStatusConfig = async (userId: string) => {
     select: { plan: true }
   });
 
-  const isPremium = user?.plan === 'premium';
+  const isPremium = user?.plan === 'premium' || user?.plan === 'vip';
 
   // Build global config
   const config = {
@@ -182,7 +183,7 @@ export const shouldProcessStatus = async (
   // Get cached config (or fetch from DB if not cached)
   const cached = await getCachedConfig(userId);
   const globalConfig = cached.globalConfig;
-  const isPremium = cached.userPlan === 'premium';
+  const isPremium = cached.userPlan === 'premium' || cached.userPlan === 'vip';
 
   // If global config is disabled or doesn't exist, don't process
   if (!globalConfig || !globalConfig.enabled) {
@@ -192,6 +193,17 @@ export const shouldProcessStatus = async (
       shouldLike: false,
       emoji: globalConfig?.default_emoji || '❤️',
       actionType: globalConfig?.action_type || 'view_and_like',
+    };
+  }
+
+  // Free plan: « vu / vu+like » n'est actif que dans la fenêtre 08h00-20h00.
+  if (!isPremium && !(await isStatusActionAllowed(userId))) {
+    logger.info(`[Status] ⏱ Free user ${userId} hors fenêtre 08h-20h, status ignoré pour ${contactId}`);
+    return {
+      shouldWatch: false,
+      shouldLike: false,
+      emoji: globalConfig.default_emoji,
+      actionType: globalConfig.action_type,
     };
   }
 

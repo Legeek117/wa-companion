@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 export interface User {
   id: string;
   email: string;
-  plan: 'free' | 'premium';
+  plan: 'free' | 'premium' | 'vip';
   subscription_id?: string;
   created_at: string;
   updated_at: string;
@@ -134,7 +134,7 @@ export function useAuth() {
   });
 
   const isAuthenticated = !!apiClient.getToken() && !!user;
-  const isPremium = user?.plan === 'premium';
+  const isPremium = user?.plan === 'premium' || user?.plan === 'vip';
 
   // Generate/register the device E2E keypair once the user is known.
   // The private key stays on the phone; only the public key is registered on the server.

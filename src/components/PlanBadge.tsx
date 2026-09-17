@@ -2,13 +2,13 @@ import { Badge } from "@/components/ui/badge";
 import { Crown } from "lucide-react";
 
 interface PlanBadgeProps {
-  plan?: 'free' | 'premium';
+  plan?: 'free' | 'premium' | 'vip';
   isPremium?: boolean; // For backward compatibility
   className?: string;
 }
 
 export const PlanBadge = ({ plan, isPremium, className }: PlanBadgeProps) => {
-  const premium = plan === 'premium' || isPremium === true;
+  const premium = plan === 'premium' || plan === 'vip' || isPremium === true;
   
   return (
     <Badge 
