@@ -5,6 +5,8 @@ import { Crown, Check, Zap } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -50,8 +52,19 @@ const Upgrade = () => {
         setPendingPlan(null);
         return;
       }
-      // `_system` opens the payment page in the system browser on mobile (Capacitor)
-      window.open(checkoutUrl, '_system');
+      // On natif : ouvre la page de paiement dans le navigateur du système (Capacitor Browser)
+      const openCheckout = async () => {
+        try {
+          if (Capacitor.isNativePlatform()) {
+            await Browser.open({ url: checkoutUrl });
+          } else {
+            window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+          }
+        } catch {
+          window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        }
+      };
+      openCheckout();
       toast.info("Paiement lancé. Revenez ici une fois le paiement effectué.");
     },
     onError: (error: unknown) => {

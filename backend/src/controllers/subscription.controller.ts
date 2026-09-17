@@ -145,17 +145,17 @@ export const webhook = async (
   }
 };
 
-async function activateSubscriptionForTransaction(transactionId: number) {
+async function activateSubscriptionForTransaction(transactionId: number): Promise<boolean> {
   // Never trust the webhook alone - fetch the real status from the API
   const transaction = await getFedaPayTransaction(transactionId);
   if (!transaction) {
     logger.warn(`[FedaPay] Transaction ${transactionId} not found on API`);
-    return;
+    return false;
   }
 
   if (!isFedaPayTransactionPaid(transaction)) {
     logger.info(`[FedaPay] Transaction ${transactionId} not paid (status=${transaction.status})`);
-    return;
+    return false;
   }
 
   const subscription = await prisma.subscription.findUnique({
@@ -163,13 +163,27 @@ async function activateSubscriptionForTransaction(transactionId: number) {
   });
   if (!subscription) {
     logger.warn(`[FedaPay] No tracked subscription for transaction ${transactionId}`);
-    return;
+    return false;
   }
+
+  // Intervalle réel déduit du montant payé (mensuel vs annuel)
+  const intervalMonths =
+    transaction.amount === FEDAPAY_PLAN_CONFIG.yearly.amountXof
+      ? FEDAPAY_PLAN_CONFIG.yearly.intervalMonths
+      : FEDAPAY_PLAN_CONFIG.monthly.intervalMonths;
 
   const now = new Date();
   let periodStart = now;
-  let periodEnd = new Date(now);
-  periodEnd.setMonth(now.getMonth() + (subscription.currentPeriodEnd ? 0 : 1));
+  let periodEnd: Date;
+
+  // Garder la période stockée par createCheckout si elle est encore dans le futur,
+  // sinon (activation tardive / renouvellement) l'étendre d'un intervalle à partir de maintenant.
+  if (subscription.currentPeriodEnd && subscription.currentPeriodEnd > now) {
+    periodEnd = new Date(subscription.currentPeriodEnd);
+  } else {
+    periodEnd = new Date(now);
+    periodEnd.setMonth(periodEnd.getMonth() + intervalMonths);
+  }
 
   await prisma.$transaction([
     prisma.subscription.update({
@@ -189,17 +203,20 @@ async function activateSubscriptionForTransaction(transactionId: number) {
     }),
   ]);
 
-  logger.info(`[FedaPay] Subscription activated for user ${subscription.userId} (tx ${transactionId})`);
+  logger.info(
+    `[FedaPay] Subscription activated for user ${subscription.userId} (tx ${transactionId}, until ${periodEnd.toISOString()})`
+  );
+  return true;
 }
 
 /**
  * GET /api/subscription/callback
  * Public. Redirect target after a FedaPay payment (mobile/system browser).
- * Shows a simple "thank you / go back" page since we cannot deep-link easily.
+ * Re-checks the real transaction status from the API before showing a
+ * success / canceled / pending page - never assume the payment succeeded.
  */
-export const callback = (_req: Request, res: Response) => {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.status(200).send(`<!DOCTYPE html>
+const CALLBACK_PAGES: Record<string, string> = {
+  success: `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
@@ -208,7 +225,7 @@ export const callback = (_req: Request, res: Response) => {
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 16px; }
     .card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 32px 24px; max-width: 360px; text-align: center; }
-    .check { font-size: 56px; }
+    .icon { font-size: 56px; }
     h1 { font-size: 20px; color: #0f172a; margin: 12px 0 8px; }
     p { color: #64748b; font-size: 14px; line-height: 1.5; margin: 0; }
     .btn { display: inline-block; margin-top: 20px; background: #7c3aed; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; }
@@ -216,13 +233,132 @@ export const callback = (_req: Request, res: Response) => {
 </head>
 <body>
   <div class="card">
-    <div class="check">&#9989;</div>
+    <div class="icon">&#9989;</div>
     <h1>Paiement re&#231;u</h1>
     <p>Merci ! Votre abonnement Premium AMDA va &#234;tre activ&#233; automatiquement. Revenez sur l'application pour profiter de toutes les fonctionnalit&#233;s.</p>
     <a class="btn" href="#" onclick="window.close();">Fermer</a>
   </div>
 </body>
-</html>`);
+</html>`,
+  canceled: `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paiement annul&#233; - AMDA</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 16px; }
+    .card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 32px 24px; max-width: 360px; text-align: center; }
+    .icon { font-size: 56px; }
+    h1 { font-size: 20px; color: #0f172a; margin: 12px 0 8px; }
+    p { color: #64748b; font-size: 14px; line-height: 1.5; margin: 0; }
+    .btn { display: inline-block; margin-top: 20px; background: #7c3aed; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">&#10060;</div>
+    <h1>Paiement annul&#233;</h1>
+    <p>Vous avez annul&#233; le paiement. Aucun montant n'a &#233;t&#233; d&#233;bit&#233;. Vous pouvez r&#233;essayer depuis l'application AMDA.</p>
+    <a class="btn" href="#" onclick="window.close();">Fermer</a>
+  </div>
+</body>
+</html>`,
+  pending: `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paiement en attente - AMDA</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 16px; }
+    .card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 32px 24px; max-width: 360px; text-align: center; }
+    .icon { font-size: 56px; }
+    h1 { font-size: 20px; color: #0f172a; margin: 12px 0 8px; }
+    p { color: #64748b; font-size: 14px; line-height: 1.5; margin: 0; }
+    .btn { display: inline-block; margin-top: 20px; background: #7c3aed; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">&#9203;</div>
+    <h1>Paiement en attente</h1>
+    <p>Votre paiement est en cours de traitement. Revenez sur l'application AMDA pour v&#233;rifier votre abonnement dans quelques instants.</p>
+    <a class="btn" href="#" onclick="window.close();">Fermer</a>
+  </div>
+</body>
+</html>`,
+  unknown: `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Statut inconnu - AMDA</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 16px; }
+    .card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); padding: 32px 24px; max-width: 360px; text-align: center; }
+    .icon { font-size: 56px; }
+    h1 { font-size: 20px; color: #0f172a; margin: 12px 0 8px; }
+    p { color: #64748b; font-size: 14px; line-height: 1.5; margin: 0; }
+    .btn { display: inline-block; margin-top: 20px; background: #7c3aed; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">&#10067;</div>
+    <h1>Paiement introuvable</h1>
+    <p>Nous n'avons pas pu retrouver le statut de votre paiement. Revenez sur l'application AMDA et utilisez &laquo; J'ai pay&#233; - V&#233;rifier mon abonnement &raquo;.</p>
+    <a class="btn" href="#" onclick="window.close();">Fermer</a>
+  </div>
+</body>
+</html>`,
+};
+
+export const callback = async (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+  const transactionIdParam = req.query.id || req.query.transaction_id || req.query.tid;
+  const statusParam = typeof req.query.status === 'string' ? req.query.status.toLowerCase() : '';
+  const transactionId = Number(transactionIdParam);
+
+  let outcome: keyof typeof CALLBACK_PAGES = 'unknown';
+
+  if (transactionIdParam && !Number.isNaN(transactionId)) {
+    try {
+      const transaction = await getFedaPayTransaction(transactionId);
+      if (transaction) {
+        // Ne jamais se fier au redirect seul : statut réel depuis l'API FedaPay
+        if (isFedaPayTransactionPaid(transaction)) {
+          outcome = 'success';
+          // Double filet : active l'abonnement même si le webhook est en retard/perdu
+          await activateSubscriptionForTransaction(transactionId);
+        } else if (['canceled', 'declined'].includes(transaction.status || '')) {
+          outcome = 'canceled';
+        } else {
+          outcome = 'pending';
+        }
+      } else if (['approved', 'success', 'paid'].includes(statusParam)) {
+        outcome = 'success';
+      } else if (['canceled', 'declined'].includes(statusParam)) {
+        outcome = 'canceled';
+      } else if (['pending', 'initiated'].includes(statusParam)) {
+        outcome = 'pending';
+      }
+    } catch (error) {
+      logger.warn('[FedaPay] Callback: transaction status check failed', {
+        message: (error as Error).message,
+        transactionId,
+      });
+    }
+  } else if (['approved', 'success', 'paid'].includes(statusParam)) {
+    outcome = 'success';
+  } else if (['canceled', 'declined'].includes(statusParam)) {
+    outcome = 'canceled';
+  } else if (['pending', 'initiated'].includes(statusParam)) {
+    outcome = 'pending';
+  }
+
+  res.status(200).send(CALLBACK_PAGES[outcome]);
 };
 
 /**
@@ -239,6 +375,22 @@ export const getStatus = async (
 
     const user = await prisma.user.findUnique({ where: { id: req.userId } });
     if (!user) throw new NotFoundError('User not found');
+
+    // Conciliation : si une transaction est en attente, on revérifie le statut réel
+    // auprès de FedaPay avant de répondre (utile si le webhook n'est jamais arrivé).
+    const pending = await prisma.subscription.findFirst({
+      where: { userId: req.userId, status: 'incomplete' },
+    });
+    if (pending && pending.providerTransactionId) {
+      try {
+        await activateSubscriptionForTransaction(Number(pending.providerTransactionId));
+      } catch (error) {
+        logger.warn('[FedaPay] Reconcile failed while checking status', {
+          message: (error as Error).message,
+          userId: req.userId,
+        });
+      }
+    }
 
     const subscription = await prisma.subscription.findFirst({
       where: { userId: req.userId },

@@ -161,8 +161,10 @@ export function isFedaPayTransactionPaid(transaction: FedaPayTransaction): boole
 }
 
 /**
- * Verify the X-FEDAPAY-SIGNATURE header (scheme v1, HMAC-SHA256).
- * Header format: t=<timestamp>,v1=<signature>
+ * Verify the X-FEDAPAY-SIGNATURE header (HMAC-SHA256).
+ * Official FedaPay node SDK scheme: t=<timestamp>,s=<hex hmac-sha256(secret, "<ts>.<payload>")>.
+ * The legacy webhook headers used `v1=<signature>`; we accept both for compatibility.
+ * Example: t=<ts>,s=<sig>  ->  hmac = HMAC-SHA256(secret, "<ts>.<payload>")
  */
 export function constructFedaPayEvent(
   payload: string | Buffer,
@@ -177,9 +179,12 @@ export function constructFedaPayEvent(
   const signatures: string[] = [];
 
   for (const part of header.split(',')) {
-    const [key, value] = part.split('=');
+    const eqIndex = part.indexOf('=');
+    if (eqIndex === -1) continue;
+    const key = part.slice(0, eqIndex).trim();
+    const value = part.slice(eqIndex + 1).trim();
     if (key === 't') timestamp = parseInt(value, 10);
-    else if (key === 'v1') signatures.push(value);
+    else if (key === 's' || key === 'v1') signatures.push(value);
   }
 
   if (timestamp === -1 || signatures.length === 0) {
