@@ -33,6 +33,8 @@ export interface AuthResponse {
 }
 
 export const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const VERIFICATION_RESEND_THROTTLE_MS = 60 * 1000; // 1 mail / 60s
+const lastVerificationEmailSentAt = new Map<string, number>();
 
 /**
  * Verrouillage de compte après échecs de connexion (M2).
@@ -169,6 +171,7 @@ export const registerUser = async (data: RegisterData): Promise<{ user: AuthResp
   const verificationLink = buildVerificationLink(verificationToken);
   try {
     await sendVerificationEmail(newUser.email, verificationLink);
+    lastVerificationEmailSentAt.set(newUser.email, Date.now());
   } catch (error) {
     logger.error('[Auth] Échec envoi mail de vérification:', error);
   }
@@ -233,13 +236,10 @@ export const resendVerificationEmail = async (email: string): Promise<void> => {
     return;
   }
 
-  // Anti-spam : 1 mail / 60s max
-  if (user.verificationExpiresAt && user.verificationExpiresAt.getTime() > Date.now() - (VERIFICATION_TOKEN_TTL_MS - 60 * 1000) && user.verificationToken) {
-    // Ne renvoyer qu'une fois par minute : régénère quand même si le mail est vieux de +24h
-    const createdAtAge = Date.now() - user.createdAt.getTime();
-    if (createdAtAge < VERIFICATION_TOKEN_TTL_MS) {
-      return;
-    }
+  // Anti-spam : 1 email / 60s max (throttle en mémoire, comme le lockout login)
+  const lastSent = lastVerificationEmailSentAt.get(user.email);
+  if (lastSent && Date.now() - lastSent < VERIFICATION_RESEND_THROTTLE_MS) {
+    return;
   }
 
   const verificationToken = generateVerificationToken();
@@ -254,6 +254,7 @@ export const resendVerificationEmail = async (email: string): Promise<void> => {
   const verificationLink = buildVerificationLink(verificationToken);
   try {
     await sendVerificationEmail(user.email, verificationLink);
+    lastVerificationEmailSentAt.set(user.email, Date.now());
   } catch (error) {
     logger.error('[Auth] Échec renvoi mail de vérification:', error);
   }
