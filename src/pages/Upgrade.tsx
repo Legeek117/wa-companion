@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
-import { Browser } from "@capacitor/browser";
+import { InAppBrowser, DefaultWebViewOptions, ToolbarPosition } from "@capacitor/inappbrowser";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -45,21 +45,72 @@ const Upgrade = () => {
       return api.subscription.createCheckout(plan);
     },
     onSuccess: (response) => {
-      const checkoutUrl = response.data?.checkoutUrl as string | undefined;
+      const checkoutUrl = (response.data as { checkoutUrl?: string } | undefined)?.checkoutUrl;
       if (!checkoutUrl) {
         toast.error("Impossible de générer le lien de paiement. Réessayez.");
         setPendingPlan(null);
         return;
       }
-      // On natif : ouvre la page de paiement dans le navigateur du système (Capacitor Browser)
+      // Sur natif : ouvre la page de paiement dans une WebView INTÉGRÉE à l'app
+      // (l'utilisateur ne quitte jamais l'application).
       const openCheckout = async () => {
         try {
           if (Capacitor.isNativePlatform()) {
-            await Browser.open({ url: checkoutUrl });
+            let paymentCompleted = false;
+
+            // Nettoye tout listener résiduel d'une session précédente.
+            try { await InAppBrowser.removeAllListeners(); } catch { /* noop */ }
+
+            // Détecte la fin du paiement : FedaPay redirige vers
+            // /api/subscription/callback → validation + fermeture auto.
+            await InAppBrowser.addListener(
+              'browserPageNavigationCompleted',
+              async (data) => {
+                const url = data?.url || '';
+                if (url.includes('/api/subscription/callback')) {
+                  paymentCompleted = true;
+                  try { await InAppBrowser.close(); } catch { /* déjà fermé */ }
+                }
+              }
+            );
+
+            // Fermeture (auto après paiement, ou manuelle par l'utilisateur).
+            await InAppBrowser.addListener('browserClosed', async () => {
+              try { await InAppBrowser.removeAllListeners(); } catch { /* noop */ }
+              await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+              if (paymentCompleted) {
+                toast.success('Paiement traité. Vérification de votre abonnement...');
+                checkSubscription();
+              } else {
+                toast.info('Paiement interrompu. Aucun montant débité.');
+              }
+            });
+
+            await InAppBrowser.openInWebView({
+              url: checkoutUrl,
+              options: {
+                ...DefaultWebViewOptions,
+                showToolbar: true,
+                closeButtonText: 'Fermer',
+                toolbarPosition: ToolbarPosition.TOP,
+                showURL: false,
+                showNavigationButtons: true,
+                android: {
+                  ...DefaultWebViewOptions.android,
+                  allowZoom: false,
+                  hardwareBack: true,
+                  pauseMedia: true,
+                },
+              },
+            });
           } else {
             window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
           }
         } catch {
+          // Fallback : si la WebView intégrée échoue, ne pas bloquer l'utilisateur
+          if (Capacitor.isNativePlatform()) {
+            try { await InAppBrowser.removeAllListeners(); } catch { /* noop */ }
+          }
           window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
         }
       };
