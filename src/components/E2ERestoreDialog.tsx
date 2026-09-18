@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { KeyRound, Loader2 } from "lucide-react";
+import { KeyRound, Lock, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { restorePrivateKeyFromPassphrase } from "@/lib/e2eCrypto";
 import { toast } from "sonner";
@@ -23,8 +23,11 @@ interface E2ERestoreDialogProps {
 }
 
 /**
- * Demande la phrase secrète pour restaurer la clé privée E2E
- * après réinstallation de l'app / perte du localStorage.
+ * Demande la phrase secrète ET le mot de passe du compte pour restaurer
+ * la clé privée E2E après réinstallation de l'app / perte du localStorage.
+ *
+ * Le mot de passe du compte est exigé (C2) pour protéger le backup contre
+ * un vol silencieux du ciphertext et un brute-force hors-ligne.
  */
 export const E2ERestoreDialog = ({
   open,
@@ -33,9 +36,14 @@ export const E2ERestoreDialog = ({
   onRestored,
 }: E2ERestoreDialogProps) => {
   const [passphrase, setPassphrase] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
 
   const handleRestore = async () => {
+    if (!accountPassword.trim()) {
+      toast.error('Veuillez saisir votre mot de passe');
+      return;
+    }
     if (!passphrase.trim()) {
       toast.error('Veuillez saisir votre phrase secrète');
       return;
@@ -43,9 +51,10 @@ export const E2ERestoreDialog = ({
 
     setIsRestoring(true);
     try {
-      await restorePrivateKeyFromPassphrase(userId, passphrase);
+      await restorePrivateKeyFromPassphrase(userId, passphrase, accountPassword);
       toast.success('Clé de déchiffrement restaurée !');
       setPassphrase('');
+      setAccountPassword('');
       onRestored();
     } catch (error: any) {
       logger.error('E2E restore failed:', error);
@@ -65,36 +74,55 @@ export const E2ERestoreDialog = ({
           </DialogTitle>
           <DialogDescription>
             Une sauvegarde de votre clé chiffrée existe sur le serveur.
-            Saisissez votre phrase secrète pour la restaurer et déchiffrer
-            vos anciennes captures.
+            Saisissez votre mot de passe et votre phrase secrète pour la restaurer.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
-          <Label htmlFor="restore-passphrase" className="text-sm">Phrase secrète</Label>
-          <Input
-            id="restore-passphrase"
-            type="password"
-            placeholder="Votre phrase secrète..."
-            value={passphrase}
-            onChange={(e) => setPassphrase(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isRestoring) {
-                handleRestore();
-              }
-            }}
-            autoFocus
-          />
-          <p className="text-xs text-muted-foreground">
-            La clé est déchiffrée uniquement sur cet appareil avec votre phrase — elle ne quitte jamais votre téléphone en clair.
-          </p>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="restore-account-password" className="text-sm">Mot de passe du compte</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="restore-account-password"
+                type="password"
+                placeholder="Mot de passe AMDA..."
+                className="pl-10"
+                value={accountPassword}
+                onChange={(e) => setAccountPassword(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Requise pour sécuriser la récupération de la clé (protection contre le vol).
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="restore-passphrase" className="text-sm">Phrase secrète</Label>
+            <Input
+              id="restore-passphrase"
+              type="password"
+              placeholder="Votre phrase secrète..."
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isRestoring) {
+                  handleRestore();
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              La clé est déchiffrée uniquement sur cet appareil avec votre phrase — elle ne quitte jamais votre téléphone en clair.
+            </p>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isRestoring}>
             Plus tard
           </Button>
-          <Button onClick={handleRestore} disabled={isRestoring || !passphrase.trim()}>
+          <Button onClick={handleRestore} disabled={isRestoring || !accountPassword.trim() || !passphrase.trim()}>
             {isRestoring ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />

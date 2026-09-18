@@ -168,17 +168,28 @@ const sniffMediaContentType = (filePath: string): string | null => {
   }
 };
 
+/**
+ * Vérifie si une origine est autorisée à accéder aux médias statiques.
+ * M4 : plus de fallback '*' — on reflète uniquement les origines connues
+ * (WebView Capacitor https://localhost, frontend, arrières, localhost dev).
+ */
+const isAllowedOrigin = (origin: string): boolean => {
+  if (
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:') ||
+    origin.startsWith('https://localhost')
+  ) {
+    return true;
+  }
+  if (origin === env.FRONTEND_URL) return true;
+  return (env.ALLOWED_ORIGINS || []).includes(origin);
+};
+
 app.use('/api/media/deleted-messages', (req, res, next): void => {
   // Set CORS headers first
   const origin = req.headers.origin;
-  if (origin && (
-    origin.startsWith('http://localhost:') ||
-    origin.startsWith('http://127.0.0.1:') ||
-    origin === env.FRONTEND_URL
-  )) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -223,15 +234,8 @@ app.use('/api/media/deleted-messages', (req, res, next): void => {
 // Serve static media files (view once captures)
 app.use('/api/media/view-once', (req, res, next): void => {
   const origin = req.headers.origin;
-  if (origin && (
-    origin.startsWith('http://localhost:') ||
-    origin.startsWith('http://127.0.0.1:') ||
-    origin === env.FRONTEND_URL ||
-    (env.ALLOWED_ORIGINS || []).includes(origin)
-  )) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -268,15 +272,8 @@ app.use('/api/media/view-once', (req, res, next): void => {
 // Serve static media files for conversations media
 app.use('/api/media/conversations', (req, res, next): void => {
   const origin = req.headers.origin;
-  if (origin && (
-    origin.startsWith('http://localhost:') ||
-    origin.startsWith('http://127.0.0.1:') ||
-    origin === env.FRONTEND_URL ||
-    (env.ALLOWED_ORIGINS || []).includes(origin)
-  )) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -313,15 +310,8 @@ app.use('/api/media/conversations', (req, res, next): void => {
 // Serve static media files (generic uploads — statuses, etc.)
 app.use('/uploads', (req, res, next): void => {
   const origin = req.headers.origin;
-  if (origin && (
-    origin.startsWith('http://localhost:') ||
-    origin.startsWith('http://127.0.0.1:') ||
-    origin === env.FRONTEND_URL ||
-    (env.ALLOWED_ORIGINS || []).includes(origin)
-  )) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -366,14 +356,8 @@ app.use('/uploads', (req, res, next): void => {
 app.use('/api/media/scheduled-status', (req, res, next): void => {
   // Set CORS headers first
   const origin = req.headers.origin;
-  if (origin && (
-    origin.startsWith('http://localhost:') ||
-    origin.startsWith('http://127.0.0.1:') ||
-    origin === env.FRONTEND_URL
-  )) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

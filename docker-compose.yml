@@ -98,6 +98,9 @@ services:
       FEDAPAY_CALLBACK_URL: ${FEDAPAY_CALLBACK_URL:-https://amda.180.149.197.43.nip.io/api/subscription/callback}
       FEDAPAY_PRICE_MONTHLY_XOF: ${FEDAPAY_PRICE_MONTHLY_XOF:-1500}
       FEDAPAY_PRICE_YEARLY_XOF: ${FEDAPAY_PRICE_YEARLY_XOF:-15000}
+      # ── Brevo (mails transactionnels, vérification inscription) ──
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-henrikandahv@gmail.com}
       # ── Secret partagé (publication de version APK, remplace l'admin) ──
       ADMIN_SECRET: ${ADMIN_SECRET:-}
     volumes:

@@ -60,11 +60,10 @@ interface EnvConfig {
   AWS_S3_BUCKET?: string;
   AWS_REGION?: string;
 
-  // Email
-  SMTP_HOST?: string;
-  SMTP_PORT?: number;
-  SMTP_USER?: string;
-  SMTP_PASSWORD?: string;
+  // Email - Brevo (ex-Sendinblue) pour l'envoi des mails transactionnels
+  BREVO_API_KEY?: string;
+  BREVO_API_URL: string;
+  MAIL_FROM?: string;
 
   // Secret partagé pour les opérations sensibles (ex: publication de version APK)
   // en remplacement du compte admin
@@ -167,11 +166,10 @@ export const env: EnvConfig = {
   AWS_S3_BUCKET: process.env.AWS_S3_BUCKET,
   AWS_REGION: process.env.AWS_REGION,
 
-  // Email
-  SMTP_HOST: process.env.SMTP_HOST,
-  SMTP_PORT: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : undefined,
-  SMTP_USER: process.env.SMTP_USER,
-  SMTP_PASSWORD: process.env.SMTP_PASSWORD,
+  // Email - Brevo
+  BREVO_API_KEY: process.env.BREVO_API_KEY,
+  BREVO_API_URL: process.env.BREVO_API_URL || 'https://api.brevo.com/v3',
+  MAIL_FROM: process.env.MAIL_FROM || 'AMDA <amda@noreply.local>',
 
   // Logging
   LOG_LEVEL: getEnvVar('LOG_LEVEL', 'info'),

@@ -3,6 +3,21 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import prisma from '../config/database';
 import { logger } from '../config/logger';
 import { isValidPublicKey } from '../services/encryption.service';
+import { comparePassword } from '../services/auth.service';
+import { AuthenticationError } from '../utils/errors';
+
+/**
+ * Compares a plain-text password against the user's stored hash.
+ * Used for E2E recovery flows (re-authentication, anti brute-force).
+ */
+const verifyAccountPassword = async (userId: string, password: string): Promise<boolean> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true },
+  });
+  if (!user) return false;
+  return comparePassword(password, user.passwordHash);
+};
 
 /**
  * Register or update the user's E2E RSA public key (SPKI base64).
@@ -164,8 +179,48 @@ export const saveKeyBackup = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 /**
+ * Indique si un backup de clé privée existe (SANS exposer le ciphertext).
+ * GET /api/e2e/key-backup/status
+ * Utilisé par le client pour savoir s'il doit proposer la restauration.
+ */
+export const getKeyBackupStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Unauthorized', statusCode: 401 },
+      });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { e2eKeyEncrypted: true, e2eKeySalt: true, e2eKeyIv: true },
+    });
+
+    const hasBackup = !!(user?.e2eKeyEncrypted && user?.e2eKeySalt && user?.e2eKeyIv);
+
+    res.json({
+      success: true,
+      data: { hasBackup },
+    });
+  } catch (error) {
+    logger.error('[E2E] Error getting key backup status:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error', statusCode: 500 },
+    });
+  }
+};
+
+/**
  * Get the encrypted private key backup (ciphertext + salt + IV).
- * GET /api/e2e/key-backup
+ * POST /api/e2e/key-backup
+ *
+ * Sécurité (C2) : exige un password en body (= mot de passe du compte) pour
+ * servir le backup, afin de ne pas permettre un vol silencieux du ciphertext
+ * et un brute-force hors-ligne de la phrase secrète.
  */
 export const getKeyBackup = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -174,6 +229,27 @@ export const getKeyBackup = async (req: AuthRequest, res: Response): Promise<voi
       res.status(401).json({
         success: false,
         error: { message: 'Unauthorized', statusCode: 401 },
+      });
+      return;
+    }
+
+    const { password } = req.body;
+
+    // Re-authentification obligatoire avant de servir le backup de clé privée
+    if (!password || typeof password !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: { message: 'Password is required to retrieve your key backup', statusCode: 400 },
+      });
+      return;
+    }
+
+    const passwordValid = await verifyAccountPassword(userId, password);
+    if (!passwordValid) {
+      logger.warn(`[E2E] Échec re-auth mot de passe avant récupération du backup (user ${userId})`);
+      res.status(403).json({
+        success: false,
+        error: { message: 'Invalid password', statusCode: 403 },
       });
       return;
     }

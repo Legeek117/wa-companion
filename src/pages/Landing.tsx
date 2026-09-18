@@ -63,7 +63,7 @@ const Landing = () => {
     },
     {
       question: "Mes données sont-elles sécurisées ?",
-      answer: "Absolument ! Toutes vos données sont chiffrées et stockées de manière sécurisée. Nous ne partageons jamais vos informations avec des tiers."
+      answer: "Nous appliquons des mesures de sécurité strictes (authentification, chiffrement de vos captures View Once de bout en bout, sauvegarde chiffrée de votre clé). Nous ne vendons ni ne partageons vos informations avec des tiers."
     },
     {
       question: "Puis-je essayer Premium gratuitement ?",

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../services/auth.service';
 import { AuthenticationError, AuthorizationError } from '../utils/errors';
 import { UserPlan, UserRole } from '../types/user.types';
+import prisma from '../config/database';
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -12,6 +13,8 @@ export interface AuthRequest extends Request {
 
 /**
  * Protect routes - verify JWT token
+ * Vérifie aussi que le tokenVersion du token correspond à celui en base
+ * (permet la révocation via logout / changement de mot de passe).
  */
 export const protect = async (
   req: AuthRequest,
@@ -28,6 +31,20 @@ export const protect = async (
 
     // Verify token
     const decoded = verifyToken(token);
+
+    // Vérifie la version du token en base (révocation de token)
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { tokenVersion: true },
+    });
+
+    if (!user) {
+      throw new AuthenticationError('User not found');
+    }
+
+    if ((decoded.tokenVersion ?? 0) !== user.tokenVersion) {
+      throw new AuthenticationError('Token revoked. Please log in again');
+    }
 
     // Attach user info to request
     req.userId = decoded.userId;

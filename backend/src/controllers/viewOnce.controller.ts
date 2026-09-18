@@ -87,19 +87,21 @@ export const getViewOnceCaptureById = async (req: AuthRequest, res: Response): P
         media_url: capture.encrypted ? undefined : capture.mediaUrl,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     logger.error('[ViewOnce] Error getting capture:', error);
+    if (error?.statusCode === 404) {
+      res.status(404).json({
+        success: false,
+        error: { message: 'View once capture not found', statusCode: 404 },
+      });
+      return;
+    }
     res.status(500).json({
       success: false,
       error: { message: 'Internal server error', statusCode: 500 },
     });
   }
 };
-
-/**
- * Download a view once capture
- * GET /api/view-once/:id/download
- */
 export const downloadViewOnceCapture = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
@@ -123,8 +125,15 @@ export const downloadViewOnceCapture = async (req: AuthRequest, res: Response): 
         mediaType: capture.mediaType,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     logger.error('[ViewOnce] Error downloading capture:', error);
+    if (error?.statusCode === 404) {
+      res.status(404).json({
+        success: false,
+        error: { message: 'View once capture not found', statusCode: 404 },
+      });
+      return;
+    }
     res.status(500).json({
       success: false,
       error: { message: 'Internal server error', statusCode: 500 },

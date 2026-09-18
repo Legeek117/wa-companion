@@ -295,10 +295,9 @@ const Auth = () => {
                 <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
                   <li>Vos données personnelles sont stockées de manière sécurisée</li>
                   <li>Nous ne partageons pas vos informations avec des tiers sans votre consentement</li>
-                  <li>Les messages View Once et supprimés sont stockés uniquement pour votre usage personnel</li>
+                  <li>Les captures View Once sont chiffrées de bout en bout : seuls votre téléphone et votre clé de déchiffrement peuvent les lire</li>
                   <li>Vous pouvez supprimer vos données à tout moment depuis votre compte</li>
-                  <li>Nous utilisons des mesures de sécurité appropriées pour protéger vos données</li>
-                  <li>Les sessions WhatsApp sont stockées de manière chiffrée</li>
+                  <li>Votre compte et votre mot de passe sont protégés (verrouillage en cas de tentatives répétées)</li>
                 </ul>
               </div>
 

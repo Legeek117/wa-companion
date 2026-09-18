@@ -254,6 +254,9 @@ export const api = {
       apiClient.post('/api/auth/login', { email, password }),
     me: () => apiClient.get('/api/auth/me'),
     logout: () => apiClient.post('/api/auth/logout'),
+    verifyEmail: (token: string) => apiClient.post('/api/auth/verify-email', { token }),
+    resendVerification: (email: string) =>
+      apiClient.post('/api/auth/resend-verification', { email }),
   },
 
   // WhatsApp
@@ -303,7 +306,8 @@ export const api = {
   e2e: {
     keyStatus: () => apiClient.get('/api/e2e/key'),
     registerKey: (publicKey: string) => apiClient.put('/api/e2e/key', { publicKey }),
-    getKeyBackup: () => apiClient.get('/api/e2e/key-backup'),
+    getKeyBackup: (password: string) => apiClient.post('/api/e2e/key-backup', { password }),
+    getKeyBackupStatus: () => apiClient.get('/api/e2e/key-backup/status'),
     saveKeyBackup: (data: { encryptedKey: string; salt: string; iv: string }) =>
       apiClient.put('/api/e2e/key-backup', data),
     deleteKeyBackup: () => apiClient.delete('/api/e2e/key-backup'),

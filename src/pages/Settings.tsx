@@ -19,6 +19,7 @@ import {
   backupPrivateKeyWithPassphrase,
   deletePrivateKeyBackup,
 } from "@/lib/e2eCrypto";
+import { BrowserChooser } from "@/lib/browserChooser";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 
@@ -119,7 +120,12 @@ const Settings = () => {
     if (!updateInfo?.latest.downloadUrl) return;
     try {
       if (Capacitor.isNativePlatform()) {
-        await Browser.open({ url: updateInfo.latest.downloadUrl });
+        if (Capacitor.getPlatform() === 'android') {
+          // Android : proposer le choix du navigateur via intent chooser natif
+          await BrowserChooser.open({ url: updateInfo.latest.downloadUrl });
+        } else {
+          await Browser.open({ url: updateInfo.latest.downloadUrl });
+        }
       } else {
         window.open(updateInfo.latest.downloadUrl, '_blank', 'noopener,noreferrer');
       }
@@ -137,7 +143,7 @@ const Settings = () => {
   const loadKeyBackupStatus = async () => {
     try {
       setIsLoadingBackup(true);
-      const response = await api.e2e.getKeyBackup();
+      const response = await api.e2e.getKeyBackupStatus();
       if (response.success) {
         setHasBackup(response.data?.hasBackup === true);
       }

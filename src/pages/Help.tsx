@@ -32,7 +32,7 @@ const Help = () => {
     },
     {
       question: "Mes données sont-elles sécurisées ?",
-      answer: "Oui, toutes vos données sont chiffrées et stockées de manière sécurisée.",
+      answer: "Vos captures View Once sont chiffrées de bout en bout : seuls votre téléphone et votre clé de déchiffrement peuvent les lire. Votre compte est protégé par mot de passe et nous ne partageons jamais vos informations avec des tiers.",
     },
   ];
 

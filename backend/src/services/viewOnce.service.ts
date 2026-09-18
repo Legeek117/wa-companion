@@ -2,6 +2,7 @@ import { WASocket, downloadMediaMessage, proto } from '@whiskeysockets/baileys';
 import prisma from '../config/database';
 import { logger } from '../config/logger';
 import { checkViewOnceQuota, incrementViewOnce } from './quota.service';
+import { NotFoundError } from '../utils/errors';
 
 /**
  * Handle view once message - capture and save automatically
@@ -162,13 +163,16 @@ export const getViewOnceCapture = async (userId: string, captureId: string) => {
     });
 
     if (!capture) {
-      throw new Error('View once capture not found');
+      throw new NotFoundError('View once capture not found');
     }
 
     return capture;
   } catch (error) {
+    if (error instanceof NotFoundError) {
+      throw error;
+    }
     logger.error('[ViewOnce] Error getting capture:', error);
-    throw new Error('Failed to get view once capture');
+    throw error;
   }
 };
 

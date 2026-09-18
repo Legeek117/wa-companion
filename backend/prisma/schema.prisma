@@ -94,17 +94,21 @@ enum NotificationType {
 
 // Models
 model User {
-  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  email           String    @unique @db.VarChar(255)
-  passwordHash    String    @map("password_hash") @db.VarChar(255)
-  plan            Plan      @default(free)
-  role            UserRole  @default(user)
-  banned          Boolean   @default(false)
-  bannedAt        DateTime? @map("banned_at") @db.Timestamptz
-  banReason       String?   @map("ban_reason") @db.Text
-  subscriptionId  String?   @map("subscription_id") @db.VarChar(255)
-  logMessages     Boolean   @default(false) @map("log_messages")
-  publicKey       String?   @map("public_key") @db.Text
+  id                    String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email                 String    @unique @db.VarChar(255)
+  passwordHash          String    @map("password_hash") @db.VarChar(255)
+  plan                  Plan      @default(free)
+  role                  UserRole  @default(user)
+  banned                Boolean   @default(false)
+  bannedAt              DateTime? @map("banned_at") @db.Timestamptz
+  banReason             String?   @map("ban_reason") @db.Text
+  subscriptionId        String?   @map("subscription_id") @db.VarChar(255)
+  logMessages           Boolean   @default(false) @map("log_messages")
+  publicKey             String?   @map("public_key") @db.Text
+  emailVerified         Boolean   @default(false) @map("email_verified")
+  verificationToken     String?   @map("verification_token") @db.VarChar(255)
+  verificationExpiresAt DateTime? @map("verification_expires_at") @db.Timestamptz
+  tokenVersion          Int       @default(0) @map("token_version")
   e2eKeyEncrypted String?   @map("e2e_key_encrypted") @db.Text
   e2eKeySalt      String?   @map("e2e_key_salt") @db.Text
   e2eKeyIv        String?   @map("e2e_key_iv") @db.Text

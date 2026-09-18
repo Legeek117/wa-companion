@@ -290,7 +290,7 @@ const Upgrade = () => {
           <div>
             <h3 className="font-medium mb-1 text-sm sm:text-base">Mes données sont-elles sécurisées ?</h3>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              Toutes vos données sont chiffrées et sécurisées. Nous ne partageons jamais vos informations.
+              Vos captures View Once sont chiffrées de bout en bout (seules vous pouvez les déchiffrer) et votre compte est protégé par mot de passe. Nous ne partageons jamais vos informations.
             </p>
           </div>
         </CardContent>

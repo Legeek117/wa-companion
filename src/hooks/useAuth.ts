@@ -11,13 +11,14 @@ export interface User {
   email: string;
   plan: 'free' | 'premium' | 'vip';
   subscription_id?: string;
+  email_verified?: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface AuthResponse {
   user: User;
-  token: string;
+  token?: string;
 }
 
 /**
@@ -68,24 +69,21 @@ export function useAuth() {
     refetchOnReconnect: true, // Refetch when network reconnects
   });
 
-  // Register mutation
+  // Register mutation — crée le compte mais ne connecte pas (email non vérifié)
   const registerMutation = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
       const response = await api.auth.register(email, password);
-      if (response.success && response.data) {
-        const authData = response.data as AuthResponse;
-        apiClient.setToken(authData.token);
-        return authData;
+      if (response.success) {
+        return { email };
       }
       throw new Error(response.error?.message || 'Registration failed');
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['auth', 'me'], data.user);
-      toast.success('Compte créé avec succès ! Bienvenue 🎉');
-      navigate('/dashboard');
+    onSuccess: (_data, variables) => {
+      toast.success('Email envoyé ! Vérifiez votre boîte de réception 📧');
+      navigate('/auth/verify-email', { state: { email: variables.email } });
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Erreur lors de l\'inscription');
+      toast.error(error.message || "Erreur lors de l'inscription");
     },
   });
 
@@ -95,7 +93,7 @@ export function useAuth() {
       const response = await api.auth.login(email, password);
       if (response.success && response.data) {
         const authData = response.data as AuthResponse;
-        apiClient.setToken(authData.token);
+        apiClient.setToken(authData.token!);
         return authData;
       }
       throw new Error(response.error?.message || 'Login failed');
@@ -105,8 +103,15 @@ export function useAuth() {
       toast.success('Connexion réussie !');
       navigate('/dashboard');
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Erreur lors de la connexion');
+    onError: (error: Error, variables) => {
+      const msg = error.message || 'Erreur lors de la connexion';
+      if (msg.toLowerCase().includes('verify your email')) {
+        toast.error('Veuillez vérifier votre adresse email avant de vous connecter');
+        // Redirige vers le rappel de vérification avec l'email pré-rempli
+        navigate('/auth/verify-email', { state: { email: variables.email } });
+      } else {
+        toast.error(msg);
+      }
     },
   });
 
@@ -160,4 +165,3 @@ export function useAuth() {
     isLoggingOut: logoutMutation.isPending,
   };
 }
-

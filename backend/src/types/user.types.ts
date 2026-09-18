@@ -12,6 +12,8 @@ export interface User {
   banReason?: string | null;
   subscription_id?: string;
   log_messages: boolean;
+  email_verified?: boolean;
+  token_version?: number;
   created_at: Date;
   updated_at: Date;
 }

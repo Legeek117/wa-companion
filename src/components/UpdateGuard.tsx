@@ -5,6 +5,7 @@ import { Browser } from "@capacitor/browser";
 import { Download } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { APP_VERSION_CODE, APP_VERSION_NAME } from "@/config/appVersion";
+import { BrowserChooser } from "@/lib/browserChooser";
 
 interface LatestVersion {
   platform: string;
@@ -84,7 +85,13 @@ export const UpdateGuard = () => {
     const versionCode = latest.versionCode;
     try {
       if (Capacitor.isNativePlatform()) {
-        await Browser.open({ url: latest.downloadUrl });
+        if (Capacitor.getPlatform() === 'android') {
+          // Android : proposer le choix du navigateur via intent chooser natif
+          await BrowserChooser.open({ url: latest.downloadUrl });
+        } else {
+          // iOS : pas de chooser, ouverture directe dans Safari
+          await Browser.open({ url: latest.downloadUrl });
+        }
       } else {
         window.open(latest.downloadUrl, '_blank', 'noopener,noreferrer');
       }

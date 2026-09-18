@@ -85,8 +85,8 @@ export const ensureE2EKeys = async (userId: string): Promise<E2EKeyInitResult> =
     // Si oui, on NE génère PAS une nouvelle clé (qui rendrait les anciennes captures illisibles) :
     // on signale à l'UI de demander la phrase secrète pour restaurer la clé d'origine.
     if (!privateJwk) {
-      const backupResponse = await api.e2e.getKeyBackup();
-      if (backupResponse.success === true && backupResponse.data?.hasBackup === true) {
+      const backupStatus = await api.e2e.getKeyBackupStatus();
+      if (backupStatus.success === true && backupStatus.data?.hasBackup === true) {
         logger.info('[E2E] 🔑 Backup de clé détecté — restauration requise');
         return { hasPublicKey: false, needsRestore: true, hasBackup: true };
       }
@@ -245,10 +245,12 @@ export const backupPrivateKeyWithPassphrase = async (
  */
 export const restorePrivateKeyFromPassphrase = async (
   userId: string,
-  passphrase: string
+  passphrase: string,
+  accountPassword: string
 ): Promise<boolean> => {
   try {
-    const response = await api.e2e.getKeyBackup();
+    // Le mot de passe du compte est exigé pour récupérer le backup (anti vol / brute-force hors-ligne)
+    const response = await api.e2e.getKeyBackup(accountPassword);
 
     if (!response.success || response.data?.hasBackup !== true) {
       throw new Error('Aucune sauvegarde de clé trouvée sur le serveur');

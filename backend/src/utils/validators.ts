@@ -34,6 +34,25 @@ export const loginSchema = z.object({
 });
 
 /**
+ * Verify email validation schema (token in body or query)
+ */
+export const verifyEmailSchema = z.object({
+  token: z
+    .string()
+    .min(1, 'Verification token is required'),
+});
+
+/**
+ * Resend verification email validation schema
+ */
+export const resendVerificationSchema = z.object({
+  email: z
+    .string()
+    .email('Invalid email format')
+    .min(1, 'Email is required'),
+});
+
+/**
  * Validate request body against a schema
  */
 export const validate = <T>(schema: z.ZodSchema<T>, data: unknown): T => {
