@@ -17,8 +17,7 @@ import viewOnceRoutes from './routes/viewOnce.routes';
 import e2eRoutes from './routes/e2e.routes';
 import deletedMessagesRoutes from './routes/deletedMessages.routes';
 import autoresponderRoutes from './routes/autoresponder.routes';
-// Scheduled statuses feature is DISABLED
-// import scheduledStatusRoutes from './routes/scheduledStatus.routes';
+import scheduledStatusRoutes from './routes/scheduledStatus.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import quotaRoutes from './routes/quota.routes';
@@ -363,59 +362,58 @@ app.use('/uploads', (req, res, next): void => {
   },
 }));
 
-// Scheduled statuses feature is DISABLED
-// Scheduled statuses feature is DISABLED
-// app.use('/api/media/scheduled-status', (req, res, next): void => {
-//   // Set CORS headers first
-//   const origin = req.headers.origin;
-//   if (origin && (
-//     origin.startsWith('http://localhost:') ||
-//     origin.startsWith('http://127.0.0.1:') ||
-//     origin === env.FRONTEND_URL
-//   )) {
-//     res.setHeader('Access-Control-Allow-Origin', origin);
-//   } else {
-//     res.setHeader('Access-Control-Allow-Origin', '*');
-//   }
-//   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-//   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-//   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-//   res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
-//   
-//   if (req.method === 'OPTIONS') {
-//     res.sendStatus(200);
-//     return;
-//   }
-//   next();
-// }, express.static(path.join(process.cwd(), 'uploads', 'scheduled-status'), {
-//   setHeaders: (res, filePath) => {
-//     // Set appropriate content type based on file extension
-//     const ext = path.extname(filePath).toLowerCase();
-//     const mimeTypes: Record<string, string> = {
-//       '.jpg': 'image/jpeg',
-//       '.jpeg': 'image/jpeg',
-//       '.png': 'image/png',
-//       '.gif': 'image/gif',
-//       '.webp': 'image/webp',
-//       '.mp4': 'video/mp4',
-//       '.mov': 'video/quicktime',
-//       '.avi': 'video/x-msvideo',
-//       '.mp3': 'audio/mpeg',
-//       '.ogg': 'audio/ogg',
-//       '.wav': 'audio/wav',
-//       '.pdf': 'application/pdf',
-//       '.doc': 'application/msword',
-//       '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-//       '.xls': 'application/vnd.ms-excel',
-//       '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-//       '.zip': 'application/zip',
-//       '.rar': 'application/x-rar-compressed',
-//     };
-//     
-//     const contentType = mimeTypes[ext] || 'application/octet-stream';
-//     res.setHeader('Content-Type', contentType);
-//   },
-// }));
+// Scheduled statuses — serve uploaded media (images/videos)
+app.use('/api/media/scheduled-status', (req, res, next): void => {
+  // Set CORS headers first
+  const origin = req.headers.origin;
+  if (origin && (
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:') ||
+    origin === env.FRONTEND_URL
+  )) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+}, express.static(path.join(process.cwd(), 'uploads', 'scheduled-status'), {
+  setHeaders: (res, filePath) => {
+    // Set appropriate content type based on file extension
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.mp3': 'audio/mpeg',
+      '.ogg': 'audio/ogg',
+      '.wav': 'audio/wav',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xls': 'application/vnd.ms-excel',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.zip': 'application/zip',
+      '.rar': 'application/x-rar-compressed',
+    };
+
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+  },
+}));
 
 // Rate limiting (after static files to avoid blocking media)
 app.use('/api', apiLimiter);
@@ -461,8 +459,7 @@ app.use('/api/view-once', viewOnceRoutes);
 app.use('/api/e2e', e2eRoutes);
 app.use('/api/deleted-messages', deletedMessagesRoutes);
 app.use('/api/autoresponder', autoresponderRoutes);
-// Scheduled statuses feature is DISABLED
-// app.use('/api/scheduled-status', scheduledStatusRoutes);
+app.use('/api/scheduled-status', scheduledStatusRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/analytics', analyticsRoutes);

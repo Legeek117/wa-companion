@@ -8,8 +8,6 @@ import {
   likeStatusController,
   getStatusStats,
   getStatusContacts,
-  getAvailableStatuses,
-  getContactStatusesController,
 } from '../controllers/status.controller';
 
 const router = Router();
@@ -19,8 +17,6 @@ router.use(protect);
 
 // Status routes
 router.get('/', apiLimiter, getStatusLikes);
-router.get('/available', apiLimiter, getAvailableStatuses);
-router.get('/contact/:contactId', apiLimiter, getContactStatusesController);
 router.get('/stats', apiLimiter, getStatusStats);
 router.get('/contacts', apiLimiter, getStatusContacts);
 router.post('/like', apiLimiter, likeStatusController);

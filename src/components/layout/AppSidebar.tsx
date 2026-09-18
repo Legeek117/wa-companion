@@ -24,7 +24,6 @@ import {
 import { cn } from "@/lib/utils";
 
 import {
-  List,
   Calendar,
   Sliders,
   MessageSquare,
@@ -39,7 +38,6 @@ const desktopMenuItems = [
   { title: "Accueil", url: "/dashboard", icon: Home },
   { title: "Discussions", url: "/dashboard/discussions", icon: MessageCircle },
   { title: "Gestion Status", url: "/dashboard/status", icon: Heart },
-  { title: "Liste Status", url: "/dashboard/status/list", icon: List },
   { title: "Programmer Status", url: "/dashboard/status/schedule", icon: Calendar },
   { title: "Config Status", url: "/dashboard/status/config", icon: Sliders },
   { title: "View Once", url: "/dashboard/view-once", icon: Eye },

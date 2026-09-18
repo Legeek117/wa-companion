@@ -33,25 +33,31 @@ export interface Quota {
 export function useQuota() {
   const { user, isPremium: userIsPremium } = useAuth();
 
+  const defaultQuota = (): Quota => ({
+    plan: (userIsPremium ? 'premium' : 'free') as 'free' | 'premium' | 'vip',
+    viewOnce: { used: 0, limit: userIsPremium ? 3 : 0, remaining: userIsPremium ? 3 : 0 },
+    deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 10, remaining: userIsPremium ? Infinity : 10 },
+    scheduledStatuses: { used: 0, limit: userIsPremium ? Infinity : 5, remaining: userIsPremium ? Infinity : 5 },
+    statusReactions: { used: 0, limit: userIsPremium ? Infinity : 2, remaining: userIsPremium ? Infinity : 2 },
+    resetDate: new Date(),
+  });
+
   const { data: quota, isLoading } = useQuery({
     queryKey: ['quota', user?.id],
     queryFn: async () => {
       const response = await api.quota.get();
       if (response.success && response.data) {
+        const data = response.data as Partial<Record<string, unknown>> & {
+          resetDate?: string | Date;
+          plan?: Quota['plan'];
+        };
         return {
-          ...response.data,
-          resetDate: new Date(response.data.resetDate),
+          ...(response.data as unknown as Quota),
+          resetDate: new Date((data.resetDate ?? new Date()) as string | Date),
         } as Quota;
       }
       // Return default quota if API fails, but use user's premium status from useAuth
-      return {
-        plan: (userIsPremium ? 'premium' : 'free') as 'free' | 'premium' | 'vip',
-        viewOnce: { used: 0, limit: userIsPremium ? 3 : 0, remaining: userIsPremium ? 3 : 0 },
-        deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 10, remaining: userIsPremium ? Infinity : 10 },
-        scheduledStatuses: { used: 0, limit: userIsPremium ? Infinity : 5, remaining: userIsPremium ? Infinity : 5 },
-        statusReactions: { used: 0, limit: userIsPremium ? Infinity : 2, remaining: userIsPremium ? Infinity : 2 },
-        resetDate: new Date(),
-      };
+      return defaultQuota();
     },
     enabled: !!user,
     refetchInterval: 30 * 1000, // Refetch every 30 seconds to detect premium changes quickly
@@ -61,17 +67,7 @@ export function useQuota() {
   });
 
   return {
-    quota: quota || {
-      plan: (userIsPremium ? 'premium' : 'free') as 'free' | 'premium' | 'vip',
-      viewOnce: { used: 0, limit: userIsPremium ? 3 : 0, remaining: userIsPremium ? 3 : 0 },
-      deletedMessages: { used: 0, limit: userIsPremium ? Infinity : 10, remaining: userIsPremium ? Infinity : 10 },
-      scheduledStatuses: { used: 0, limit: userIsPremium ? Infinity : 5, remaining: userIsPremium ? Infinity : 5 },
-      statusReactions: { used: 0, limit: userIsPremium ? Infinity : 2, remaining: userIsPremium ? Infinity : 2 },
-      resetDate: new Date(),
-    },
+    quota: quota || defaultQuota(),
     isLoading,
   };
 }
-
-
-

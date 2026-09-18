@@ -11,9 +11,8 @@ import { initializePairingQueue } from './services/pairingQueue.service';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { startRenderKeepAlive } from './utils/renderKeepAlive';
-// Scheduled statuses feature is DISABLED
-// import cron from 'node-cron';
-// import { processScheduledStatusesJob } from './jobs/scheduledStatus.job';
+import cron from 'node-cron';
+import { processScheduledStatusesJob } from './jobs/scheduledStatus.job';
 
 const PORT = env.PORT;
 
@@ -95,36 +94,35 @@ async function startServer(): Promise<void> {
       startAntiFraudWatcher();
     }
 
-    // Scheduled statuses feature is DISABLED
-    // This feature has been disabled because Baileys API does not support publishing statuses correctly
-    // The statuses were being sent as regular messages instead of actual WhatsApp statuses
-    // if (env.NODE_ENV !== 'test') {
-    //   // Run every minute at second 0 (e.g., 21:13:00, 21:14:00, etc.)
-    //   cron.schedule('* * * * *', async () => {
-    //     try {
-    //       const startTime = new Date();
-    //       logger.info(`[Cron] Scheduled statuses job triggered at ${startTime.toISOString()} (${startTime.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })})`);
-    //       await processScheduledStatusesJob();
-    //       const endTime = new Date();
-    //       const duration = endTime.getTime() - startTime.getTime();
-    //       logger.info(`[Cron] Scheduled statuses job completed in ${duration}ms`);
-    //     } catch (error) {
-    //       logger.error('Error in scheduled statuses cron job:', error);
-    //       // Don't throw, let the cron continue
-    //     }
-    //   });
-    //   logger.info('✅ Scheduled statuses cron job started (runs every minute at second 0)');
-    //   
-    //   // Also run immediately on startup to catch any missed statuses
-    //   setTimeout(async () => {
-    //     try {
-    //       logger.info('[Cron] Running initial scheduled statuses check on startup...');
-    //       await processScheduledStatusesJob();
-    //     } catch (error) {
-    //       logger.error('Error in initial scheduled statuses check:', error);
-    //     }
-    //   }, 5000); // Wait 5 seconds after server start
-    // }
+    // Publish scheduled statuses every minute (publication de SON propre statut)
+    // Méthode validée : envoi vers status@broadcast avec broadcast:true
+    if (env.NODE_ENV !== 'test') {
+      // Run every minute at second 0
+      cron.schedule('* * * * *', async () => {
+        try {
+          const startTime = new Date();
+          logger.info(`[Cron] Scheduled statuses job triggered at ${startTime.toISOString()} (${startTime.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })})`);
+          await processScheduledStatusesJob();
+          const endTime = new Date();
+          const duration = endTime.getTime() - startTime.getTime();
+          logger.info(`[Cron] Scheduled statuses job completed in ${duration}ms`);
+        } catch (error) {
+          logger.error('Error in scheduled statuses cron job:', error);
+          // Don't throw, let the cron continue
+        }
+      });
+      logger.info('✅ Scheduled statuses cron job started (runs every minute at second 0)');
+
+      // Also run immediately on startup to catch any missed statuses
+      setTimeout(async () => {
+        try {
+          logger.info('[Cron] Running initial scheduled statuses check on startup...');
+          await processScheduledStatusesJob();
+        } catch (error) {
+          logger.error('Error in initial scheduled statuses check:', error);
+        }
+      }, 5000); // Wait 5 seconds after server start
+    }
 
     // Start Express server
     // Listen on all interfaces (0.0.0.0) to allow connections from frontend

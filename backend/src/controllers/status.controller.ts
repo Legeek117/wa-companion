@@ -3,7 +3,7 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import prisma from '../config/database';
 import { logger } from '../config/logger';
 import * as statusService from '../services/status.service';
-import { likeStatus, getAllContactsFromSocket, getSocket, getWhatsAppStatus, getAllAvailableStatuses, getContactStatuses } from '../services/whatsapp.service';
+import { likeStatus, getAllContactsFromSocket, getSocket, getWhatsAppStatus } from '../services/whatsapp.service';
 import { invalidateStatusConfigCache } from '../services/status.service';
 import { checkStatusReactionQuota } from '../services/quota.service';
 
@@ -718,93 +718,6 @@ export const getStatusStats = async (req: AuthRequest, res: Response): Promise<v
     });
   } catch (error) {
     logger.error('[Status] Error getting stats:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Internal server error', statusCode: 500 },
-    });
-  }
-};
-
-/**
- * Get available contacts from status likes (for premium users)
- * GET /api/status/contacts
- */
-/**
- * Get all available statuses (for StatusList page)
- * GET /api/status/available
- */
-export const getAvailableStatuses = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: { message: 'Unauthorized', statusCode: 401 },
-      });
-      return;
-    }
-
-    const statuses = await getAllAvailableStatuses(userId);
-
-    res.json({
-      success: true,
-      data: statuses,
-    });
-  } catch (error: any) {
-    logger.error('[Status] Error getting available statuses:', error);
-    if (error.message?.includes('not connected')) {
-      res.status(400).json({
-        success: false,
-        error: { message: 'WhatsApp not connected', statusCode: 400 },
-      });
-      return;
-    }
-    res.status(500).json({
-      success: false,
-      error: { message: 'Internal server error', statusCode: 500 },
-    });
-  }
-};
-
-/**
- * Get all statuses for a specific contact
- * GET /api/status/contact/:contactId
- */
-export const getContactStatusesController = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: { message: 'Unauthorized', statusCode: 401 },
-      });
-      return;
-    }
-
-    const { contactId } = req.params;
-    if (!contactId) {
-      res.status(400).json({
-        success: false,
-        error: { message: 'Contact ID is required', statusCode: 400 },
-      });
-      return;
-    }
-
-    const contactStatuses = await getContactStatuses(userId, contactId);
-
-    res.json({
-      success: true,
-      data: contactStatuses,
-    });
-  } catch (error: any) {
-    logger.error('[Status] Error getting contact statuses:', error);
-    if (error.message?.includes('not connected')) {
-      res.status(400).json({
-        success: false,
-        error: { message: 'WhatsApp not connected', statusCode: 400 },
-      });
-      return;
-    }
     res.status(500).json({
       success: false,
       error: { message: 'Internal server error', statusCode: 500 },

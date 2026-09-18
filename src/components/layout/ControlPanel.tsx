@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
-  List,
   Calendar,
   Sliders,
   MessageSquare,
@@ -18,7 +17,6 @@ import { cn } from "@/lib/utils";
 
 const panelItems = [
   { title: "Discussions", url: "/dashboard/discussions", icon: MessageCircle },
-  { title: "Liste Status", url: "/dashboard/status/list", icon: List },
   { title: "Programmer Status", url: "/dashboard/status/schedule", icon: Calendar },
   { title: "Config Status", url: "/dashboard/status/config", icon: Sliders },
   { title: "Répondeur Auto", url: "/dashboard/autoresponder", icon: MessageSquare },

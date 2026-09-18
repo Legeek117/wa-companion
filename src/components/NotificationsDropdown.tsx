@@ -91,8 +91,6 @@ export function NotificationsDropdown() {
       path = '/dashboard/discussions';
     } else if (notification.type === 'view_once') {
       path = '/dashboard/view-once';
-    } else if (notification.type === 'status_liked') {
-      path = '/dashboard/status/list';
     } else if (notification.type === 'deleted_message') {
       path = '/dashboard/deleted-messages';
     }
